@@ -1,4 +1,10 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
+Created on Mon Apr 15 16:05:09 2024
+
+@author: Alice Hodapp
+
 This gets all the necessary information and estimates a general linear model (GLM) that include
 surprise, confidence, predictability and predictions as parametric modulation of stimuli onsets in regressors.
 The output corresponds to the labels and estimates of the GLM.
@@ -19,8 +25,6 @@ from nilearn.glm.first_level import run_glm
 from nilearn.plotting import plot_design_matrix
 from nilearn.glm.contrasts import compute_contrast
 from scipy.stats import zscore
-#sys.path.append(os.path.abspath('.')) # append path of NeuralProb
-#import contrast_functions as fun
 from functions_design_matrices import *
 import fmri_funcs as fun
 import main_func as mf

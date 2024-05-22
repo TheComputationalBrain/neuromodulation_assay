@@ -12,15 +12,16 @@ import os.path as op
 # import random as rand
 # import scipy.io as sio
 # import pandas as pd
-from utilities.main_func import *
+from main_funcs import *
+from params_and_paths import *
 import nibabel as nib
 
 def get_masker(tr, smoothing_fwhm):
     
-    mask = os.path.join(f'{mask_dir[data_access]}/', mask)
+    mask_path = os.path.join(f'{mask_dir[data_access]}/', mask)
 
     masker = MultiNiftiMasker(
-        mask_img=mask,
+        mask_img=mask_path,
         detrend=True,  # Improves the SNR by removing linear trends
         high_pass=HPF,  # kept small to keep sensitivity,
         standardize=False,
