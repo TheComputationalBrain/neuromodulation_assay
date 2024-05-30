@@ -1,0 +1,3 @@
+[submodule "TransitionProbModel"]
+	path = TransitionProbModel
+	url = https://github.com/florentmeyniel/TransitionProbModel
