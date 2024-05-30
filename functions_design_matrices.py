@@ -16,7 +16,7 @@ import pandas as pd
 from nilearn.glm.first_level import make_first_level_design_matrix
 from parametric_modulation_functions import compute_cleaned_pmod_regs
 from scipy.stats import zscore
-import main_func as mf
+import main_funcs as mf
 from params_and_paths import *
 
 

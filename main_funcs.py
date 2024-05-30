@@ -15,35 +15,32 @@ import pandas as pd
 import os.path as op
 from scipy.io import loadmat
 from params_and_paths import *
-from nilearn.input_data import MultiNiftiMasker
-
-#from initializeSubject import initialize_subject
 
 def get_json_dir(db_name, root_dir=root_dir, data_dir=data_dir):
    
-    json_files_dir = {'NAConf': op.join(root_dir[data_access], data_dir['NAConf'], 'bids_dataset'),
-                    'EncodeProb': op.join(root_dir[data_access], data_dir['EncodeProb'], 'bids_dataset'),
+    json_files_dir = {'NAConf': op.join(root_dir[DATA_ACCESS], data_dir['NAConf'], 'bids_dataset'),
+                    'EncodeProb': op.join(root_dir[DATA_ACCESS], data_dir['EncodeProb'], 'bids_dataset'),
                     'Explore': '/home_local/EXPLORE/bids_dataset',
-                    'PNAS': op.join(root_dir[data_access], data_dir['PNAS'], 'MRI_data/analyzed_data')}
+                    'PNAS': op.join(root_dir[DATA_ACCESS], data_dir['PNAS'], 'MRI_data/analyzed_data')}
     
     return json_files_dir[db_name]
 
 
 def get_fmri_dir(db_name, root_dir=root_dir, data_dir=data_dir):
     
-    fmri_dir = {'NAConf': op.join(root_dir[data_access], data_dir['NAConf'], 'derivatives'),
-                'EncodeProb': op.join(root_dir[data_access], data_dir['EncodeProb'], 'derivatives'),
+    fmri_dir = {'NAConf': op.join(root_dir[DATA_ACCESS], data_dir['NAConf'], 'derivatives'),
+                'EncodeProb': op.join(root_dir[DATA_ACCESS], data_dir['EncodeProb'], 'derivatives'),
                 'Explore': '/home_local/EXPLORE/DATA/bids/derivatives/fmriprep-22.1.1',
-                'PNAS': op.join(root_dir[data_access], data_dir['PNAS'], 'MRI_data/analyzed_data')}
+                'PNAS': op.join(root_dir[DATA_ACCESS], data_dir['PNAS'], 'MRI_data/analyzed_data')}
 
     return fmri_dir[db_name]
 
 def get_beh_dir(db_name, root_dir=root_dir, data_dir=data_dir):
 
-    beh_dir = {'NAConf': op.join(root_dir[data_access], data_dir['NAConf']),
-               'EncodeProb': op.join(root_dir[data_access], data_dir['EncodeProb']),
+    beh_dir = {'NAConf': op.join(root_dir[DATA_ACCESS], data_dir['NAConf']),
+               'EncodeProb': op.join(root_dir[DATA_ACCESS], data_dir['EncodeProb']),
                'Explore': '/home_local/EXPLORE/github/explore/2021_Continous_2armed',
-               'PNAS': op.join(root_dir[data_access], data_dir['PNAS'])}
+               'PNAS': op.join(root_dir[DATA_ACCESS], data_dir['PNAS'])}
 
     return beh_dir[db_name]
 
@@ -57,15 +54,10 @@ def get_constants(data_dir, sub, sess):
     data = pickle.load(open(filepath, 'rb'))
     return data
 
-def convert_to_secs(data, var):
-    return (data[var].dropna().values - data['t_trigger'][0])/1000
-
-
 def get_subjects(db, data_dir): 
     subjects = []
     if db == 'EncodeProb':
         folders = os.path.join(data_dir,
-                                'behavior',
                                 f'sub-*')
         
     for folder in os.listdir(folders):
@@ -73,16 +65,19 @@ def get_subjects(db, data_dir):
         number = folder.split('sub_')[1]
         subjects.append(int(number))
 
-    # #keep this as a test for now 
-    # nsub_correct = {'PNAS': 21,
-    #         'EncodeProb': 30,
-    #         'NAConf': 60,
-    #         'Explore': 60}
+    #keep this as a test for now 
+    nsub_correct = {'PNAS': 21,
+            'EncodeProb': 30,
+            'NAConf': 60,
+            'Explore': 60}
     
-    # if len != nsub_correct[db]:
-    #     raise ValueError(f"Found {nsub} subjects but experiment only contains {nsub_correct}.")
+    if len != nsub_correct[db]:
+        raise ValueError(f"Found {len(subjects)} subjects but experiment has: {nsub_correct}.")
 
     return subjects
+
+def convert_to_secs(data, var):
+    return (data[var].dropna().values - data['t_trigger'][0])/1000
 
 def get_seq(db, sub, sess, beh_dir):
 
@@ -250,29 +245,11 @@ def get_events_explore(subnum, sess, nan_missed=True):
 
     return events
 
-def get_sessions(db, sub, data_dir):
-
-    #TODO: this probabaly needs to be adapted to the other experiments
-    sessions = []
-    filepath = os.path.join(data_dir,
-                                    'behavior',
-                                    f'sub-{sub:02d}/')
-    for filename in os.listdir(filepath):
-        if "sess_" in filename and filename.endswith(".csv"):
-            # Extract the number from the filename
-            number = filename.split("sess_")[1].split(".")[0]
-            sessions.append(int(number))
-        #TODO throw error if number appears more than once or if length over 4 (save 4 in the param file)
-            
-    # Check for duplicates
-    if len(sessions) != len(set(sessions)):
-        raise ValueError("Duplicate numbers found in the filenames.")
-
-    # Check if the list contains more than 4 numbers -> this is just temporary?
-    if len(sessions) > n_sessions:
-        raise ValueError("Found more sessions than expected.")
-       
-    return sessions
+def get_sessions(db, sub):
+    if sub in sessions[db]:
+        return sessions[db][sub]
+    else:
+        return [1, 2, 3, 4]
 
 def get_events(db, sub, sess, data_dir): 
 
@@ -382,7 +359,7 @@ def convert_to_secs(data, var):
     return (data[var].dropna().values - data['t_trigger'][0])/1000
 
 def get_mvt_reg(db_name, sub, sess, root_dir, data_dir):
-    root_dir = root_dir[data_access]
+    root_dir = root_dir[DATA_ACCESS]
     mov_dir = {'NAConf': op.join(root_dir, data_dir['NAConf'], "derivatives"),
                'EncodeProb': op.join(root_dir, data_dir['EncodeProb'], "derivatives"),
                'Explore': op.join(data_dir['Explore'], "mri_preproc"),

@@ -16,60 +16,54 @@ from nilearn import surface, datasets
 from netneurotools import plotting
 from params_and_paths import *
 
-#TODO adapt this for the server
-recptor_path = os.path.join(home_dir[data_access],'hansen_receptors/data/PET_nifti_images/') #path to the dowloaded repository from Hansen et al. (2020)
-outpath = os.path.join(home_dir[data_access],'/receptors')
+receptor_path = os.path.join(home_dir[DATA_ACCESS],'receptors','PET_nifti_images') #path to downloaded data from Hansen et al. (2020)
+output_dir = os.path.join(home_dir[DATA_ACCESS],'receptors')
 
-masker = NiftiMasker(mask_img=mask)
+masker = NiftiMasker(mask_img=MASK)
 masker.fit()
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                            "MOR", "NET", "NMDA", "VAChT"])
 
-output_dir  = os.path.join(f'{outpath}/', mask_name)
-
-if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
-
-receptors_nii = [recptor_path+'5HT1a_way_hc36_savli.nii',
-                 recptor_path+'5HT1a_cumi_hc8_beliveau.nii',
-                 recptor_path+'5HT1b_az_hc36_beliveau.nii',
-                 recptor_path+'5HT1b_p943_hc22_savli.nii',
-                 recptor_path+'5HT1b_p943_hc65_gallezot.nii.gz',
-                 recptor_path+'5HT2a_cimbi_hc29_beliveau.nii',
-                 recptor_path+'5HT2a_alt_hc19_savli.nii',
-                 recptor_path+'5HT2a_mdl_hc3_talbot.nii.gz',
-                 recptor_path+'5HT4_sb20_hc59_beliveau.nii',
-                 recptor_path+'5HT6_gsk_hc30_radhakrishnan.nii.gz',
-                 recptor_path+'5HTT_dasb_hc100_beliveau.nii',
-                 recptor_path+'5HTT_dasb_hc30_savli.nii',
-                 recptor_path+'A4B2_flubatine_hc30_hillmer.nii.gz',
-                 recptor_path+'CB1_omar_hc77_normandin.nii.gz',
-                 recptor_path+'CB1_FMPEPd2_hc22_laurikainen.nii',
-                 recptor_path+'D1_SCH23390_hc13_kaller.nii',
-                 recptor_path+'D2_fallypride_hc49_jaworska.nii',
-                 recptor_path+'D2_flb457_hc37_smith.nii.gz',
-                 recptor_path+'D2_flb457_hc55_sandiego.nii.gz',
-                 recptor_path+'D2_raclopride_hc7_alakurtti.nii',
-                 recptor_path+'DAT_fpcit_hc174_dukart_spect.nii',
-                 recptor_path+'DAT_fepe2i_hc6_sasaki.nii.gz',
-                 recptor_path+'GABAa-bz_flumazenil_hc16_norgaard.nii',
-                 recptor_path+'GABAa_flumazenil_hc6_dukart.nii',
-                 recptor_path+'H3_cban_hc8_gallezot.nii.gz',
-                 recptor_path+'M1_lsn_hc24_naganawa.nii.gz',
-                 recptor_path+'mGluR5_abp_hc22_rosaneto.nii',
-                 recptor_path+'mGluR5_abp_hc28_dubois.nii',
-                 recptor_path+'mGluR5_abp_hc73_smart.nii',
-                 recptor_path+'MU_carfentanil_hc204_kantonen.nii',
-                 recptor_path+'MU_carfentanil_hc39_turtonen.nii',
-                 recptor_path+'NAT_MRB_hc77_ding.nii.gz',
-                 recptor_path+'NAT_MRB_hc10_hesse.nii',
-                 recptor_path+'NMDA_ge179_hc29_galovic.nii.gz',
-                 #recptor_path+'VAChT_feobv_hc3_spreng.nii', #not availble in volumetric form yet
-                 recptor_path+'VAChT_feobv_hc4_tuominen.nii',
-                 recptor_path+'VAChT_feobv_hc5_bedard_sum.nii',
-                 recptor_path+'VAChT_feobv_hc18_aghourian_sum.nii']
+receptors_nii = [receptor_path+'5HT1a_way_hc36_savli.nii',
+                 receptor_path+'5HT1a_cumi_hc8_beliveau.nii',
+                 receptor_path+'5HT1b_az_hc36_beliveau.nii',
+                 receptor_path+'5HT1b_p943_hc22_savli.nii',
+                 receptor_path+'5HT1b_p943_hc65_gallezot.nii.gz',
+                 receptor_path+'5HT2a_cimbi_hc29_beliveau.nii',
+                 receptor_path+'5HT2a_alt_hc19_savli.nii',
+                 receptor_path+'5HT2a_mdl_hc3_talbot.nii.gz',
+                 receptor_path+'5HT4_sb20_hc59_beliveau.nii',
+                 receptor_path+'5HT6_gsk_hc30_radhakrishnan.nii.gz',
+                 receptor_path+'5HTT_dasb_hc100_beliveau.nii',
+                 receptor_path+'5HTT_dasb_hc30_savli.nii',
+                 receptor_path+'A4B2_flubatine_hc30_hillmer.nii.gz',
+                 receptor_path+'CB1_omar_hc77_normandin.nii.gz',
+                 receptor_path+'CB1_FMPEPd2_hc22_laurikainen.nii',
+                 receptor_path+'D1_SCH23390_hc13_kaller.nii',
+                 receptor_path+'D2_fallypride_hc49_jaworska.nii',
+                 receptor_path+'D2_flb457_hc37_smith.nii.gz',
+                 receptor_path+'D2_flb457_hc55_sandiego.nii.gz',
+                 receptor_path+'D2_raclopride_hc7_alakurtti.nii',
+                 receptor_path+'DAT_fpcit_hc174_dukart_spect.nii',
+                 receptor_path+'DAT_fepe2i_hc6_sasaki.nii.gz',
+                 receptor_path+'GABAa-bz_flumazenil_hc16_norgaard.nii',
+                 receptor_path+'GABAa_flumazenil_hc6_dukart.nii',
+                 receptor_path+'H3_cban_hc8_gallezot.nii.gz',
+                 receptor_path+'M1_lsn_hc24_naganawa.nii.gz',
+                 receptor_path+'mGluR5_abp_hc22_rosaneto.nii',
+                 receptor_path+'mGluR5_abp_hc28_dubois.nii',
+                 receptor_path+'mGluR5_abp_hc73_smart.nii',
+                 receptor_path+'MU_carfentanil_hc204_kantonen.nii',
+                 receptor_path+'MU_carfentanil_hc39_turtonen.nii',
+                 receptor_path+'NAT_MRB_hc77_ding.nii.gz',
+                 receptor_path+'NAT_MRB_hc10_hesse.nii',
+                 receptor_path+'NMDA_ge179_hc29_galovic.nii.gz',
+                 #receptor_path+'VAChT_feobv_hc3_spreng.nii', #not availble in volumetric form yet
+                 receptor_path+'VAChT_feobv_hc4_tuominen.nii',
+                 receptor_path+'VAChT_feobv_hc5_bedard_sum.nii',
+                 receptor_path+'VAChT_feobv_hc18_aghourian_sum.nii']
 
 masked = []
 for receptor in receptors_nii:
@@ -102,12 +96,15 @@ receptor_data[:, 18] = (zscore(r[:, 23])*4 + zscore(r[:, 24])*5 + zscore(r[:, 25
 
 #save receptor density maps 
 with open(os.path.join(output_dir, 
-                       f'receptor_density_{mask_name}.pickle'), 'wb') as f:
+                       f'receptor_density_{MASK_NAME}.pickle'), 'wb') as f:
         pickle.dump(receptor_data, f)
 
 
 #### plotting     
-plot_path = os.path.join(home_dir[data_access], mask_name, 'figures/') 
+plot_path = os.path.join(output_dir, 'figures', MASK_NAME) 
+if not os.path.exists(plot_path):
+        os.makedirs(plot_path)
+
 fsaverage = datasets.fetch_surf_fsaverage(mesh = 'fsaverage') #for best comparability with Hansen et al 2022
 
 for k in range(len(receptor_names)):
@@ -128,4 +125,4 @@ for k in range(len(receptor_names)):
                                     colorbar=True,
                                     data_kws={'representation': "wireframe"})
     
-    brain.save_image(plot_path+'surface_receptor_'+receptor_names[k]+'_medial.png')
+    brain.save_image(plot_path+'surface_receptor_'+receptor_names[k]+'.png')

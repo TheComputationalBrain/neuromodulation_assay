@@ -9,16 +9,14 @@ Created on Mon Apr 15 09:49:30 2024
 import glob
 import numpy as np
 import os.path as op
-# import random as rand
-# import scipy.io as sio
-# import pandas as pd
+import nibabel as nib
+from nilearn.input_data import MultiNiftiMasker 
 from main_funcs import *
 from params_and_paths import *
-import nibabel as nib
 
 def get_masker(tr, smoothing_fwhm):
     
-    mask_path = os.path.join(f'{mask_dir[data_access]}/', mask)
+    mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
 
     masker = MultiNiftiMasker(
         mask_img=mask_path,
@@ -36,7 +34,7 @@ def get_tr(db, sub, sess, data_dir):
     if db == 'PNAS':
         infofilepath = op.join(data_dir,
                                     f'subj{sub:02d}',
-                                    'preprocEPI/SliceTimingInfo.mat') 
+                                    'preprocEPI', 'SliceTimingInfo.mat') 
         data = loadmat(infofilepath)
         tr = int(data['TR'])
 
@@ -66,7 +64,7 @@ def demean(x):
 def get_fts(db, sub, sess, fmri_dir, json_dir):
         
     if db == 'PNAS':
-        epi_dir =  op.join(fmri_dir, f'subj{sub:02d}/preprocEPI')
+        epi_dir =  op.join(fmri_dir, f'subj{sub:02d}','preprocEPI')
         ppcessed_files = 'swtuaepi*.nii'
     
     else:
@@ -117,7 +115,7 @@ def get_ppssing(sub, db_name):
     elif db_name == 'PNAS':
         ppssing = 'wtraepi'
 
-    fmri_path = op.join(root_dir[data_access], data_dir[db_name],
+    fmri_path = op.join(root_dir[DATA_ACCESS], data_dir[db_name],
                         f'derivatives/sub-{sub:02d}')
     
     if db_name == 'Explore':

@@ -8,8 +8,6 @@ Created on Mon Apr 15 16:05:09 2024
 This gets all the necessary information and estimates a general linear model (GLM) that include
 surprise, confidence, predictability and predictions as parametric modulation of stimuli onsets in regressors.
 The output corresponds to the labels and estimates of the GLM.
-
-@author: Alice Hodapp
 """
 
 import glob
@@ -27,17 +25,12 @@ from nilearn.glm.contrasts import compute_contrast
 from scipy.stats import zscore
 from functions_design_matrices import *
 import fmri_funcs as fun
-import main_func as mf
+import main_funcs as mf
 import io_funcs as iof
 from params_and_paths import *
 # import sys
 # sys.path.append('/Users/alice/postdoc/NeuroModAssay')
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
-
-# Set Project Name
-DB_NAME = 'EncodeProb' #this will have to determine all the following parameters in a flexible script
-# other options: 'NAConf', 'Explore', 'PNAS'
-SAVE_DMTX_PLOT = True
 
 # Init paths
 beh_dir  = mf.get_beh_dir(DB_NAME)
@@ -45,28 +38,27 @@ json_file_dir = mf.get_json_dir(DB_NAME)
 fmri_dir = mf.get_fmri_dir(DB_NAME)
 
 #make output directories
-fmri_arr_dir  = os.path.join(f'{home_dir[data_access]}/{DB_NAME}/first_level/', f'data_arrays_whole_brain_{smoothing_fwhm}')
+fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}')
 if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
-output_dir = f'{home_dir[data_access]}/{DB_NAME}/first_level/{model}'
+output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,'first_level')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 design_dir = os.path.join(output_dir, 'designmatrix')
 if not os.path.exists(design_dir):
         os.makedirs(design_dir)
 
-# subjects = mf.get_subjects(DB_NAME, beh_dir)
-# subjects = [subj for subj in subjects if subj not in ignore[DB_NAME]]
-subjects = [2] #!just for testing uncomment code above for full dataset
+subjects = mf.get_subjects(DB_NAME, fmri_dir)
+subjects = [subj for subj in subjects if subj not in ignore[DB_NAME]]
 
 for sub in subjects:
     
     print(f"--- processing subject {sub} ----")
 
     #get global info that's not session specific
-    sessions = mf.get_sessions(DB_NAME,sub, beh_dir)
+    sessions = mf.get_sessions(DB_NAME,sub)
     tr = fun.get_tr(DB_NAME, sub, 1, json_file_dir) # in seconds
-    masker = fun.get_masker(tr, smoothing_fwhm)
+    masker = fun.get_masker(tr, SMOOTHING_FWHM)
     masker.fit()
 
     #fMRI data
@@ -93,7 +85,7 @@ for sub in subjects:
         ppssing, fmri_path = fun.get_ppssing(sub, DB_NAME)
         nii_files, fmri_data = fun.get_fmri_data( 
             masker,
-            mask_name,
+            MASK_NAME,
             sub,
             fmri_arr_dir,
             ppssing,
@@ -113,7 +105,7 @@ for sub in subjects:
         constants = mf.get_constants(data_dir=beh_dir, #TODO: currently adapted from EncodeProb
                                             sub=sub,
                                             sess=sess)
-        options = {'p_c': constants['pJump'], 'res': res} 
+        options = {'p_c': constants['pJump'], 'res': RES} 
         io_inference = iof.get_post_inference(seq=seq,
                                                 seq_type='bernoulli',
                                                 options=options)
@@ -150,7 +142,6 @@ for sub in subjects:
         # z-score the design matrix (over all session at once, rather than session-wise)
         design_matrix = zscore_regressors(dmtx2)
 
-
     # save design matrix
     design_matrix.to_pickle(
         os.path.join(
@@ -172,10 +163,10 @@ for sub in subjects:
     labels, estimates = run_glm(fmri_data, design_matrix.values)
 
     # save results
-    label_fname = f'sub-{sub:02d}_{DB_NAME}_labels_{mask_name}.pickle'
+    label_fname = f'sub-{sub:02d}_{DB_NAME}_labels_{MASK_NAME}.pickle'
     with open(os.path.join(output_dir, label_fname), 'wb') as f:
         pickle.dump(labels, f)
-    estimates_fname = f'sub-{sub:02d}_{DB_NAME}_estimates_{mask_name}.pickle'
+    estimates_fname = f'sub-{sub:02d}_{DB_NAME}_estimates_{MASK_NAME}.pickle'
     with open(os.path.join(output_dir, estimates_fname), 'wb') as f:
         pickle.dump(estimates, f)
 
@@ -196,17 +187,17 @@ for sub in subjects:
 
         # Save t-map
         t_val = masker.inverse_transform(contrast.stat())
-        fname = f'sub-{sub:02d}_{contrast_id}_{mask_name}_tmap.nii.gz'
+        fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_tmap.nii.gz'
         nib.save(t_val, os.path.join(output_dir, fname))
 
         #save effect size = beta map
         #save in a pickle format
         with open(os.path.join(output_dir, 
-                                    f'sub-{sub:02d}_{contrast_id}_{mask_name}_effect_size_map.pickle'), 'wb') as f:
+                                    f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.pickle'), 'wb') as f:
                     pickle.dump(contrast.effect_size(), f)
         #save in nii format
         effect_size = masker.inverse_transform(contrast.effect_size())
-        fname = f'sub-{sub:02d}_{contrast_id}_{mask_name}_effect_size_map.nii.gz'
+        fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
 
 

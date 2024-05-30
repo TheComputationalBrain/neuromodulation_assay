@@ -8,17 +8,18 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-    
-data_access = 'private' # 'private' for testing; 'server' or 'mounted' if using sshfs
-model = 'basic'
+DB_NAME = 'EncodeProb' #this will have to determine all the following parameters in a flexible script
+# other options: 'NAConf', 'Explore', 'PNAS'
+DATA_ACCESS = 'server' # 'private' for testing; otherwise: 'server' 
 #mask = './masks/spm12/tpm/mask_ICV.nii'
-mask = 'mask_GreyMatter_0_25_WithoutCereb.nii'
-mask_name = 'GrayMatter_noCereb'
+MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
+MASK_NAME = 'GrayMatter_noCereb'
 HPF    =  1/128
-smoothing_fwhm = None
+SMOOTHING_FWHM = None
 HRF = 'spm'
-res = 20 #resolution for the IO hmm
-n_sessions = 4 #! just for testing 
+RES = 20 #resolution for the IO hmm
+# Set Project Name
+SAVE_DMTX_PLOT = True
 #----------------------------------------------------
 
 data_dir = {'NAConf': 'MeynielMazancieux_NACONF_prob_2021',
@@ -27,8 +28,7 @@ data_dir = {'NAConf': 'MeynielMazancieux_NACONF_prob_2021',
             'PNAS': 'Meyniel_MarkovGuess_2014'} 
 
 mask_dir = {'private': '/Volumes/NEUROSPIN/SPM_masks',
-            'mounted': '',
-            'server': ''}
+            'server': '/neurospin/unicog/protocols/IRMf/Meyniel_Atlas_2022/SPM'}
 
 # subnums_explore = {4: 6,
 #                    6: 4,
@@ -40,12 +40,15 @@ ignore = {'NAConf': [3, 6, 9, 51, 54, 59],
           'Explore': [9, 17, 46],
           'PNAS': []}
 
+sessions = {'NAConf': [],
+          'EncodeProb': {6:[1,3,4,5], 21:[1,2,3,5]},
+          'Explore': [],
+          'PNAS': []}
+
 home_dir = {'private': '/Volumes/NEUROSPIN/Neuromod',
-            'mounted': '/home/expe/beluga',
             'server': '/neurospin/unicog/protocols/IRMf/NeuroModAssay_HodappMeyniel_2024'}
 
 root_dir = {'private': '/Volumes/NEUROSPIN',
-            'mounted': '/home/expe/neurospin_local/unicog/protocols/IRMf',
             'server': '/neurospin/unicog/protocols/IRMf'}
 
 
