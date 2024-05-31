@@ -27,9 +27,6 @@ data_dir = {'NAConf': 'MeynielMazancieux_NACONF_prob_2021',
             'Explore': '/home_local/EXPLORE/DATA',
             'PNAS': 'Meyniel_MarkovGuess_2014'} 
 
-mask_dir = {'private': '/Volumes/NEUROSPIN/SPM_masks',
-            'server': '/neurospin/unicog/protocols/IRMf/Meyniel_Atlas_2022/SPM'}
-
 # subnums_explore = {4: 6,
 #                    6: 4,
 #                    25: 28,
@@ -46,10 +43,12 @@ sessions = {'NAConf': [],
           'PNAS': []}
 
 home_dir = {'private': '/Volumes/NEUROSPIN/Neuromod',
-            'server': '/neurospin/unicog/protocols/IRMf/NeuroModAssay_HodappMeyniel_2024'}
+            'server': '/home_local/alice_hodapp/NeuroModAssay'} 
 
 root_dir = {'private': '/Volumes/NEUROSPIN',
             'server': '/neurospin/unicog/protocols/IRMf'}
 
+mask_dir = {'private': '/Volumes/NEUROSPIN/SPM_masks',
+            'server': '/neurospin/unicog/protocols/IRMf/Meyniel_Atlas_2022/SPM'}
 
 

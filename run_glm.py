@@ -26,13 +26,14 @@ from scipy.stats import zscore
 from functions_design_matrices import *
 import fmri_funcs as fun
 import main_funcs as mf
-import io_funcs as iof
+import io_funcs as iofls
+
 from params_and_paths import *
 # import sys
 # sys.path.append('/Users/alice/postdoc/NeuroModAssay')
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
-# Init paths
+# Init pathscd git_local
 beh_dir  = mf.get_beh_dir(DB_NAME)
 json_file_dir = mf.get_json_dir(DB_NAME)
 fmri_dir = mf.get_fmri_dir(DB_NAME)

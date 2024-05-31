@@ -16,8 +16,10 @@ from nilearn import surface, datasets
 from netneurotools import plotting
 from params_and_paths import *
 
-receptor_path = os.path.join(home_dir[DATA_ACCESS],'receptors','PET_nifti_images') #path to downloaded data from Hansen et al. (2020)
+receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images' #path to downloaded data from Hansen et al. (2020)
 output_dir = os.path.join(home_dir[DATA_ACCESS],'receptors')
+if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
 
 masker = NiftiMasker(mask_img=MASK)
 masker.fit()
