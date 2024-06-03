@@ -58,23 +58,23 @@ def get_subjects(db, data_dir):
     subjects = []
     if db == 'EncodeProb':
         folders = os.path.join(data_dir,
-                                f'sub-*')
+                            'sub-*')
         
-    for folder in os.listdir(folders):
+    for folder in glob.glob(folders):
         # Extract the number from the filename
-        number = folder.split('sub_')[1]
+        number = folder.split('sub-')[1]
         subjects.append(int(number))
-
+    
     #keep this as a test for now 
     nsub_correct = {'PNAS': 21,
             'EncodeProb': 30,
             'NAConf': 60,
             'Explore': 60}
     
-    if len != nsub_correct[db]:
-        raise ValueError(f"Found {len(subjects)} subjects but experiment has: {nsub_correct}.")
+    if len(subjects) != nsub_correct[db]:
+        raise ValueError(f"Found {len(subjects)} subjects but experiment has: {nsub_correct[db]}.")
 
-    return subjects
+    return sorted(subjects)
 
 def convert_to_secs(data, var):
     return (data[var].dropna().values - data['t_trigger'][0])/1000
@@ -94,13 +94,6 @@ def get_seq(db, sub, sess, beh_dir):
     else:
           
         if db == 'EncodeProb':
-            if sub == 6:
-                if sess > 1:
-                    sess += 1
-            if sub == 21:
-                if sess == 4:
-                    sess = 5
-
             filepath = glob.glob(os.path.join(beh_dir,
                                 f'behavior/sub-{sub:02d}*',
                                 f'*sess_{sess}.csv'))[0]
@@ -255,18 +248,6 @@ def get_events(db, sub, sess, data_dir):
 
     #TODO: the variables session and repsonse are currently only implemented for EncodeProb
 
-    # # Adjust the session index based on the database and subject to handle specific cases
-    # if db != 'EncodeProb':
-    #     index = sess 
-    # if db == 'EncodeProb':
-    #     index = sess 
-    #     if sub == 6:
-    #         if sess > 1:
-    #             index =  sess + 1
-    #     elif sub == 21:
-    #         if sess == 4:
-    #             index =  sess + 1
-
     if db == 'PNAS': 
 
         data = get_data_PNAS(sub, sess, data_dir)
@@ -286,7 +267,6 @@ def get_events(db, sub, sess, data_dir):
             return events
 
         else: 
-            
             if db == 'EncodeProb':
                 filepath = glob.glob(os.path.join(data_dir,
                                 'behavior',

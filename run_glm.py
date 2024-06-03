@@ -26,7 +26,7 @@ from scipy.stats import zscore
 from functions_design_matrices import *
 import fmri_funcs as fun
 import main_funcs as mf
-import io_funcs as iofls
+import io_funcs as iof
 
 from params_and_paths import *
 # import sys
@@ -39,10 +39,10 @@ json_file_dir = mf.get_json_dir(DB_NAME)
 fmri_dir = mf.get_fmri_dir(DB_NAME)
 
 #make output directories
-fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}')
+fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}')
 if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
-output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,'first_level')
+output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 design_dir = os.path.join(output_dir, 'designmatrix')
@@ -117,6 +117,7 @@ for sub in subjects:
         frame_times = fun.get_fts(DB_NAME, sub, sess, fmri_dir, json_file_dir) 
         #questions
         q_list = constants['StimQ'][0] 
+        q_list = [int(q) for q in q_list]
 
         #TODO: currently for EncodeProb and NaConf (?)
         dmtx = create_design_matrix(events,
@@ -130,7 +131,7 @@ for sub in subjects:
         
         # specify the session 
         dmtx['session1'], dmtx['session2'], dmtx['session3'], dmtx['session4'] = [0, 0, 0, 0]
-        dmtx[f'session{sess}'] = 1  
+        dmtx[f'session{s+1}'] = 1  
         dmtx = dmtx.drop(columns="constant") 
         # concatenate the sessions
         if s == 0:

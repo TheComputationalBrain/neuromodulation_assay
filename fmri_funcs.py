@@ -71,13 +71,6 @@ def get_fts(db, sub, sess, fmri_dir, json_dir):
         epi_dir =  op.join(fmri_dir, f'sub-{sub:02d}')
         ppcessed_files = 'wtrasub*.nii'
         if db == 'EncodeProb':
-            if sub == 6:
-                if sess > 1:
-                    sess += 1
-            if sub == 21:
-                if sess == 4:
-                    sess += 1
-
             if sub not in [2, 16]:
                 ppcessed_files = 'wrtrasub*.nii'
         

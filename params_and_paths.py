@@ -38,7 +38,7 @@ ignore = {'NAConf': [3, 6, 9, 51, 54, 59],
           'PNAS': []}
 
 sessions = {'NAConf': [],
-          'EncodeProb': {6:[1,3,4,5], 21:[1,2,3,5]},
+          'EncodeProb': {6:[1,3,4,5], 20:[1,2,3,5], 21:[1,2,3,5]},
           'Explore': [],
           'PNAS': []}
 

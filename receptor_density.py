@@ -16,12 +16,12 @@ from nilearn import surface, datasets
 from netneurotools import plotting
 from params_and_paths import *
 
-receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images' #path to downloaded data from Hansen et al. (2020)
+receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images/' #path to downloaded data from Hansen et al. (2020)
 output_dir = os.path.join(home_dir[DATA_ACCESS],'receptors')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-
-masker = NiftiMasker(mask_img=MASK)
+mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
+masker = NiftiMasker(mask_img=mask_path)
 masker.fit()
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",

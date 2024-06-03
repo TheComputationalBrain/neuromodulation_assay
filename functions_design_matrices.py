@@ -51,8 +51,9 @@ def create_design_matrix(events,
     - tr: tr in sec
     - frame_times
     - io_inference: list, containing a dict comprised of IO posterior inference
-    - mvt_files: dataframe of movement regressors for all sessions
     - db: data base name 
+    - subject
+    - sess: curent session 
     - add_physio_regs: bool, add physio regressors
     - add_question_regs: bool, add question regressors
 
