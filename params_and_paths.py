@@ -12,14 +12,16 @@ DB_NAME = 'EncodeProb' #this will have to determine all the following parameters
 # other options: 'NAConf', 'Explore', 'PNAS'
 DATA_ACCESS = 'server' # 'private' for testing; otherwise: 'server' 
 #mask = './masks/spm12/tpm/mask_ICV.nii'
-MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
-MASK_NAME = 'GrayMatter_noCereb'
+# MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
+# MASK_NAME = 'GrayMatter_noCereb'
 HPF    =  1/128
 SMOOTHING_FWHM = None
 HRF = 'spm'
 RES = 20 #resolution for the IO hmm
 # Set Project Name
 SAVE_DMTX_PLOT = True
+MASK = 'harvard_oxford'
+MASK_NAME = 'cortical'
 #----------------------------------------------------
 
 data_dir = {'NAConf': 'MeynielMazancieux_NACONF_prob_2021',
@@ -48,7 +50,7 @@ home_dir = {'private': '/Volumes/NEUROSPIN/Neuromod',
 root_dir = {'private': '/Volumes/NEUROSPIN',
             'server': '/neurospin/unicog/protocols/IRMf'}
 
-mask_dir = {'private': '/Volumes/NEUROSPIN/SPM_masks',
-            'server': '/neurospin/unicog/protocols/IRMf/Meyniel_Atlas_2022/SPM'}
+# mask_dir = {'private': '/Volumes/NEUROSPIN/SPM_masks',
+#             'server': '/neurospin/unicog/protocols/IRMf/Meyniel_Atlas_2022/SPM'}
 
 

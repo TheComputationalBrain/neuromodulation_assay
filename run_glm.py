@@ -63,26 +63,15 @@ for sub in subjects:
     masker.fit()
 
     #fMRI data
-
-    # Get fmri data data arrays
-    mask_img = os.path.join(fmri_arr_dir, f'*mask_img*{sub:02d}.nii')
     fmri_data = os.path.join(fmri_arr_dir, f'*{sub:02d}_data*.npy')
-    mask_f = glob.glob(mask_img)
+    fmri_f = glob.glob(fmri_data)
 
     # check existence of the arrays
-    if len(mask_f) == 1:
-        extracted_data = False
-        mask_img = mask_f[0]
+    if len(fmri_f) == 1:
         fmri_data = np.load(glob.glob(fmri_data)[0], allow_pickle=True)
-
-    elif len(mask_f) > 1:
-        raise ValueError('Multiple masks for a single subject')
-
     # otherwise extract the data with masker (npy array is concatenated and saved within function)
     else:
         print("--- extraction from masker ----")
-
-        extracted_data = True
         ppssing, fmri_path = fun.get_ppssing(sub, DB_NAME)
         nii_files, fmri_data = fun.get_fmri_data( 
             masker,
@@ -97,13 +86,13 @@ for sub in subjects:
 
     for s,sess in enumerate(sessions):
         
-        #IO inference #TODO: currently adapted from EncodeProb
+        #IO inference 
         seq = mf.get_seq(db=DB_NAME,
                         sub=sub,
                         sess=sess,
                         beh_dir=beh_dir)
         seq = sg.ConvertSequence(seq)['seq']
-        constants = mf.get_constants(data_dir=beh_dir, #TODO: currently adapted from EncodeProb
+        constants = mf.get_constants(data_dir=beh_dir,
                                             sub=sub,
                                             sess=sess)
         options = {'p_c': constants['pJump'], 'res': RES} 
@@ -119,7 +108,6 @@ for sub in subjects:
         q_list = constants['StimQ'][0] 
         q_list = [int(q) for q in q_list]
 
-        #TODO: currently for EncodeProb and NaConf (?)
         dmtx = create_design_matrix(events,
                                     q_list,
                                     tr, 
@@ -192,7 +180,7 @@ for sub in subjects:
         fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_tmap.nii.gz'
         nib.save(t_val, os.path.join(output_dir, fname))
 
-        #save effect size = beta map
+        #save effect size = beta 
         #save in a pickle format
         with open(os.path.join(output_dir, 
                                     f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.pickle'), 'wb') as f:

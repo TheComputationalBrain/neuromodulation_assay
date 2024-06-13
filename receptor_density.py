@@ -7,21 +7,35 @@ Created on Fri May 17 11:32:01 2024
 """
 
 import numpy as np
+import pandas as pd
 import nibabel as nib
 from scipy.stats import zscore
 import pickle 
 import os
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+import seaborn as sns
 from nilearn.input_data import NiftiMasker
-from nilearn import surface, datasets
-from netneurotools import plotting
+from nilearn.datasets import fetch_atlas_harvard_oxford
+from nilearn import image, surface, datasets, plotting
+#from netneurotools import plotting
 from params_and_paths import *
 
 receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images/' #path to downloaded data from Hansen et al. (2020)
 output_dir = os.path.join(home_dir[DATA_ACCESS],'receptors')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
-mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
-masker = NiftiMasker(mask_img=mask_path)
+
+if (MASK == 'harvard_oxford') & (MASK_NAME == 'cortical'):
+        maxprob_atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
+elif (MASK == 'harvard_oxford') & (MASK_NAME == 'subcortical'):
+    maxprob_atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
+else:
+    raise ValueError("Unknown atlas!")
+
+atlas_img = image.load_img(maxprob_atlas['maps'])
+mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
+masker = NiftiMasker(mask_img=mask_img)
 masker.fit()
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
@@ -102,29 +116,48 @@ with open(os.path.join(output_dir,
         pickle.dump(receptor_data, f)
 
 
-#### plotting     
-plot_path = os.path.join(output_dir, 'figures', MASK_NAME) 
-if not os.path.exists(plot_path):
-        os.makedirs(plot_path)
+#### plotting   
+# plot_path = os.path.join(output_dir, 'figures', MASK_NAME) 
+# if not os.path.exists(plot_path):
+#         os.makedirs(plot_path) 
 
-fsaverage = datasets.fetch_surf_fsaverage(mesh = 'fsaverage') #for best comparability with Hansen et al 2022
+# if MASK_NAME == 'cortical':
 
-for k in range(len(receptor_names)):
+#     for indx,receptor in enumerate(receptor_names):
 
-    data = masker.inverse_transform(receptor_data[:, k])
-    fsavg_lh = surface.vol_to_surf(data, fsaverage.pial_left)
-    fsavg_rh = surface.vol_to_surf(data, fsaverage.pial_right)
+#         data = masker.inverse_transform(receptor_data[:, indx])
+#         plotting.plot_img_on_surf(data, surf_mesh='fsaverage',  mask_img=mask_img,
+#                                         hemispheres=['left', 'right'], views=['lateral', 'medial'],
+#                                         title=receptor, colorbar=True, cmap = 'plasma')
+#         fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+#         plt.savefig(os.path.join(plot_path, fig_fname))
 
-    data_array = np.concatenate((fsavg_lh, fsavg_rh))
 
-    zeromask = data_array == 0 #quick implementation to ignore data that was masked (however voxels that are zero are also ignored)
+#### correlation matrix
+serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
+acetylcholine = ["A4B2", "M1", "VAChT"]
+noradrenaline = ["NET"]
+opioid = ["MOR"]
+glutamate = ["mGluR5"]
+histamine = ["H3"]
+gaba = ["GABAa"]
+dopamine = ["D1", "D2", "DAT"]
+cannabinnoid = ["CB1"]
+receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
 
-    #currently using the netneurotools wrapper for best comparibility to paper
-    brain = plotting.plot_fsvertex(data=data_array,
-                                    colormap='plasma',
-                                    views=['lat', 'med'],
-                                    mask=zeromask,
-                                    colorbar=True,
-                                    data_kws={'representation': "wireframe"})
-    
-    brain.save_image(plot_path+'surface_receptor_'+receptor_names[k]+'.png')
+receptor_data = np.load(os.path.join(home_dir[DATA_ACCESS],'receptors', f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True)
+ordered_receptors = [receptor for group in receptor_groups for receptor in group]
+df = pd.DataFrame(zscore(receptor_data), columns=receptor_names)
+df = df[ordered_receptors]
+corr_matrix = df.corr()
+plt.figure(figsize=(10, 8))
+sns.heatmap(corr_matrix, annot=False, cmap='coolwarm', fmt=".2f", linewidths=0.5, vmin=-1, vmax=1)
+plt.title(f'{MASK_NAME}: Correlation of Receptors')
+current_pos = 0
+for group in receptor_groups:
+    group_size = len(group)
+    plt.gca().add_patch(Rectangle((current_pos, current_pos), group_size, group_size, fill=False, edgecolor='black', lw=2))
+    current_pos += group_size
+fig_fname = f'receptor_corr_matrix_{MASK_NAME}.png'
+plt.savefig(os.path.join(plot_path, fig_fname))
+
