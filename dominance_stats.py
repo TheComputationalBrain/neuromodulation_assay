@@ -1,3 +1,9 @@
+import os
+os.environ["OMP_NUM_THREADS"] = "1" 
+os.environ["OPENBLAS_NUM_THREADS"] = "1"  
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 from itertools import combinations
 from sklearn.linear_model import LinearRegression
@@ -15,7 +21,6 @@ def dominance_stats(X, y):
     see also: https://github.com/dominance-analysis/dominance-analysis
 
     """
-
     # generate all predictor combinations in list 
     n_predictor = X.shape[-1]
     # n_comb_len_group = n_predictor - 1
@@ -27,8 +32,9 @@ def dominance_stats(X, y):
     for len_group in predictor_combs:
         for idx_tuple in len_group:
             lin_reg = LinearRegression()
-            lin_reg.fit(X[:, idx_tuple], y)
-            yhat = lin_reg.predict(X) 
+            X_indx = X[:, idx_tuple]
+            lin_reg.fit(X_indx, y)
+            yhat = lin_reg.predict(X_indx) 
             SS_Residual = sum((y - yhat) ** 2)
             SS_Total = sum((y - np.mean(y)) ** 2)
             r_squared = 1 - (float(SS_Residual)) / SS_Total
