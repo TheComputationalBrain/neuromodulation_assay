@@ -23,7 +23,7 @@ from nilearn.glm.first_level import run_glm
 from nilearn.plotting import plot_design_matrix
 from nilearn.glm.contrasts import compute_contrast
 from scipy.stats import zscore
-from functions_design_matrices import *
+from functions_design_matrices import * #TODO: don't import all
 import fmri_funcs as fun
 import main_funcs as mf
 import io_funcs as iof
@@ -33,7 +33,9 @@ from params_and_paths import *
 # sys.path.append('/Users/alice/postdoc/NeuroModAssay')
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
-# Init pathscd git_local
+RUN_OLS = True
+
+# Init paths
 beh_dir  = mf.get_beh_dir(DB_NAME)
 json_file_dir = mf.get_json_dir(DB_NAME)
 fmri_dir = mf.get_fmri_dir(DB_NAME)
@@ -42,7 +44,11 @@ fmri_dir = mf.get_fmri_dir(DB_NAME)
 fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}')
 if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
-output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
+if RUN_OLS:
+    output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level','OLS')
+else:
+    output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
+
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 design_dir = os.path.join(output_dir, 'designmatrix')
@@ -60,7 +66,7 @@ for sub in subjects:
     sessions = mf.get_sessions(DB_NAME,sub)
     tr = fun.get_tr(DB_NAME, sub, 1, json_file_dir) # in seconds
     masker = fun.get_masker(tr, SMOOTHING_FWHM)
-    masker.fit()
+    masker.fit() #TODO: restructure (maybe put in masking step)
 
     #fMRI data
     fmri_data = os.path.join(fmri_arr_dir, f'*{sub:02d}_data*.npy')
@@ -73,6 +79,7 @@ for sub in subjects:
     else:
         print("--- extraction from masker ----")
         ppssing, fmri_path = fun.get_ppssing(sub, DB_NAME)
+        #TODO: comments to make clear what's happening
         nii_files, fmri_data = fun.get_fmri_data( 
             masker,
             MASK_NAME,
@@ -85,7 +92,7 @@ for sub in subjects:
     fmri_data = zscore(fmri_data)
 
     for s,sess in enumerate(sessions):
-        
+        #TODO. list of design matrixes and then concat at end to avoid deep copy
         #IO inference 
         seq = mf.get_seq(db=DB_NAME,
                         sub=sub,
@@ -108,6 +115,7 @@ for sub in subjects:
         q_list = constants['StimQ'][0] 
         q_list = [int(q) for q in q_list]
 
+        #TODO: use standard nilearn function? -> this is just a wrapper, the standard is used within
         dmtx = create_design_matrix(events,
                                     q_list,
                                     tr, 
@@ -123,14 +131,14 @@ for sub in subjects:
         dmtx = dmtx.drop(columns="constant") 
         # concatenate the sessions
         if s == 0:
-            dmtx2 = dmtx
+            dmtx2 = dmtx #TODO: deep copy
         else:
             dmtx2 = pd.concat([dmtx2, dmtx])
 
         dmtx2.reset_index(drop=True, inplace=True)
 
-        # z-score the design matrix (over all session at once, rather than session-wise)
-        design_matrix = zscore_regressors(dmtx2)
+    # z-score the design matrix (over all session at once, rather than session-wise)
+    design_matrix = zscore_regressors(dmtx2)
 
     # save design matrix
     design_matrix.to_pickle(
@@ -147,10 +155,13 @@ for sub in subjects:
         fig.suptitle(f'Regressors: Subject {sub:02d}, {DB_NAME}', y=1.05, fontweight='bold')
         fig.savefig(fig_fpath, bbox_inches='tight', dpi=220)
 
-        
     # run GLM on all voxels
-    print("---- Running glm ----")
-    labels, estimates = run_glm(fmri_data, design_matrix.values)
+    if RUN_OLS:    
+        print("---- Running glm with OLS ----")
+        labels, estimates = run_glm(fmri_data, design_matrix.values, noise_model='ols', n_jobs = 10)
+    else: 
+        print("---- Running glm with autoregressive model  ----")
+        labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 10)
 
     # save results
     label_fname = f'sub-{sub:02d}_{DB_NAME}_labels_{MASK_NAME}.pickle'
@@ -190,4 +201,5 @@ for sub in subjects:
         fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
 
+        #TODO: work with nifti file also for glm data to make it less error prone
 

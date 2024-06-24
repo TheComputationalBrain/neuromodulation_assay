@@ -7,7 +7,9 @@ from scipy.stats import ttest_1samp
 from statsmodels.stats.multitest import multipletests
 from params_and_paths import *
 
-n_reg = 'core' #all or core
+n_reg = 'all' #all or core
+DENSITY_BY_TRACER = True
+FROM_OLS = True
 
 y_names = np.array(['surprise','confidence', 'predictability', 'predictions'])
 
@@ -44,7 +46,21 @@ else:
     inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
     receptor_class = [exc,inh]
 
-output_dir = os.path.join(home_dir[DATA_ACCESS], DB_NAME, MASK_NAME,'first_level','regressions')
+if FROM_OLS:
+    beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level', 'OLS')
+else: 
+    beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
+                                    
+if DENSITY_BY_TRACER:
+    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', 'bytracers')
+    output_dir = os.path.join(beta_dir, 'regressions', 'bytracers')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir) 
+else:
+    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors')
+    output_dir = os.path.join(beta_dir,'regressions')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir) 
 
 #by functional activity meassure 
 for y_name in y_names:

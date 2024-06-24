@@ -90,25 +90,26 @@ r = np.zeros([masked[0].shape[1], len(masked)])
 for i in range(len(masked)):
     r[:, i] = masked[i] 
 
-# make final voxel x receptor matrix  
 receptor_data = np.zeros([r.shape[0], len(receptor_names)])
-receptor_data[:, 0] = zscore(r[:, 0])
-receptor_data[:, 2:9] = zscore(r[:, 3:10])
-receptor_data[:, 10:14] = zscore(r[:, 12:16])
-receptor_data[:, 15:18] = zscore(r[:, 19:22])
-
-# weighted average of 5HT1B p943
-receptor_data[:, 1] = (zscore(r[:, 1])*22 + zscore(r[:, 2])*65) / (22+65)
-
-# weighted average of D2 flb457
-receptor_data[:, 9] = (zscore(r[:, 10])*37 + zscore(r[:, 11])*55) / (37+55)
-
-# weighted average of mGluR5 ABP688
-receptor_data[:, 14] = (zscore(r[:, 16])*22 + zscore(r[:, 17])*28 + zscore(r[:, 18])*73) / (22+28+73)
-
-# weighted average of VAChT FEOBV
-#receptor_data[:, 18] = (zscore(r[:, 22])*3 + zscore(r[:, 23])*4 + zscore(r[:, 24])*5 + zscore(r[:, 25])*18) / (3+4+5+18) #Schmitz & Spreng dataset not available in volumetric form yet
-receptor_data[:, 18] = (zscore(r[:, 23])*4 + zscore(r[:, 24])*5 + zscore(r[:, 25])*18) / (4+5+18) 
+receptor_data[:, 0] = (zscore(r[:, 0])*35 + zscore(r[:, 1])*8) / (8+35) #5HT1a
+receptor_data[:, 1] = (zscore(r[:, 2])*36 + zscore(r[:, 3])*22 + zscore(r[:, 4])*65) / (36+23+65) #5HT1b
+receptor_data[:, 2] = (zscore(r[:, 5])*29 + zscore(r[:, 6])*19 + zscore(r[:, 7])*3) / (29+19+3) #5HT1b
+receptor_data[:, 3] = r[:, 8] #5HT4
+receptor_data[:, 4] = r[:, 9] #5HT6
+receptor_data[:, 5] = (zscore(r[:, 10])*100 + zscore(r[:, 11])*8) / (100+8) #5HTT
+receptor_data[:, 6] = r[:, 12] #A1B2
+receptor_data[:, 7] = (zscore(r[:, 13])*77 + zscore(r[:, 14])*22) / (77+22) #CB1
+receptor_data[:, 8] = r[:, 15] #D1
+receptor_data[:, 9] = (zscore(r[:, 16])*49 + zscore(r[:, 17])*37 + zscore(r[:, 18])*55 + zscore(r[:, 19])*7) / (49+37+55+7) #D2
+receptor_data[:, 10] = (zscore(r[:, 20])*174 + zscore(r[:, 21])*6) / (174+6) #DAT
+receptor_data[:, 11] = (zscore(r[:, 22])*16 + zscore(r[:, 23])*6) / (16+6) #GABA
+receptor_data[:, 12] = r[:, 24] #H3
+receptor_data[:, 13] = r[:, 25] #M1
+receptor_data[:, 14] = (zscore(r[:, 26])*22 + zscore(r[:, 27])*28 + zscore(r[:, 28])*73) / (22+28+73) #mGluR5
+receptor_data[:, 15] = (zscore(r[:, 29])*204 + zscore(r[:, 30])*39) / (204+39) #MOR
+receptor_data[:, 16] = (zscore(r[:, 31])*77 + zscore(r[:, 32])*10) / (77+10) #NET
+receptor_data[:, 17] = r[:, 33] #NMDA
+receptor_data[:, 18] = (zscore(r[:, 34])*4 + zscore(r[:, 35])*5 + zscore(r[:, 36])*18)/ (4+5+18) #VAChT
 
 #save receptor density maps 
 with open(os.path.join(output_dir, 
@@ -117,20 +118,20 @@ with open(os.path.join(output_dir,
 
 
 #### plotting   
-# plot_path = os.path.join(output_dir, 'figures', MASK_NAME) 
-# if not os.path.exists(plot_path):
-#         os.makedirs(plot_path) 
+plot_path = os.path.join(output_dir, 'figures', MASK_NAME) 
+if not os.path.exists(plot_path):
+        os.makedirs(plot_path) 
 
-# if MASK_NAME == 'cortical':
+if MASK_NAME == 'cortical':
 
-#     for indx,receptor in enumerate(receptor_names):
+    for indx,receptor in enumerate(receptor_names):
 
-#         data = masker.inverse_transform(receptor_data[:, indx])
-#         plotting.plot_img_on_surf(data, surf_mesh='fsaverage',  mask_img=mask_img,
-#                                         hemispheres=['left', 'right'], views=['lateral', 'medial'],
-#                                         title=receptor, colorbar=True, cmap = 'plasma')
-#         fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
-#         plt.savefig(os.path.join(plot_path, fig_fname))
+        data = masker.inverse_transform(receptor_data[:, indx])
+        plotting.plot_img_on_surf(data, surf_mesh='fsaverage',  mask_img=mask_img,
+                                        hemispheres=['left', 'right'], views=['lateral', 'medial'],
+                                        title=receptor, colorbar=True, cmap = 'plasma')
+        fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+        plt.savefig(os.path.join(plot_path, fig_fname))
 
 
 #### correlation matrix

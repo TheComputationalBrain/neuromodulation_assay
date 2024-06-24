@@ -7,12 +7,22 @@ from scipy.stats import ttest_1samp, zscore, pearsonr
 import main_funcs as mf
 from params_and_paths import *
 
+
+DENSITY_BY_TRACER = True
+
 fmri_dir = mf.get_fmri_dir(DB_NAME)
 subjects = mf.get_subjects(DB_NAME, fmri_dir)
 subjects = [subj for subj in subjects if subj not in ignore[DB_NAME]]
 
-output_dir = os.path.join(home_dir[DATA_ACCESS], DB_NAME, MASK_NAME,'first_level','regressions')
-if not os.path.exists(output_dir):
+if DENSITY_BY_TRACER:
+    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', 'bytracers')
+    output_dir = os.path.join(home_dir[DATA_ACCESS], DB_NAME, MASK_NAME,'first_level','regressions', 'bytracers')
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir) 
+else:
+    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors')
+    output_dir = os.path.join(home_dir[DATA_ACCESS], DB_NAME, MASK_NAME,'first_level','regressions')
+    if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
@@ -44,10 +54,6 @@ for y_name in y_names:
     results_df.to_csv(os.path.join(output_dir, fname), index=False)  
 
 # plot correlation results in Boxplot
-y_names = np.array(['surprise','confidence', 'predictability', 'predictions'])
-receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                           "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                           "MOR", "NET", "NMDA", "VAChT"])
 serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
 acetylcholine = ["A4B2", "M1", "VAChT"]
 noradrenaline = ["NET"]
