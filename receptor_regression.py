@@ -18,7 +18,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 import pandas as pd
-import picklde
+import pickle
 from math import log
 from concurrent.futures import ProcessPoolExecutor
 from sklearn.linear_model import LinearRegression
@@ -32,7 +32,7 @@ RUN_REGRESSION = True
 RUN_DOMINANCE = True
 FROM_OLS = False
 PARCELATED = True
-NUM_WORKERS = 26  # Set an appropriate number of workers to run code in parallel
+NUM_WORKERS = 13  # Set an appropriate number of workers to run code in parallel
 
 
 fmri_dir = mf.get_fmri_dir(DB_NAME)
@@ -50,10 +50,9 @@ if PARCELATED:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
     mask_comb = MASK_NAME + '_' + mask_details[MASK_NAME] 
-    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True)) 
+    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
 
 else:
-
     receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
     output_dir = os.path.join(beta_dir, 'regressions', 'PET')
     if not os.path.exists(output_dir):
@@ -61,11 +60,22 @@ else:
     X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True))
     mask_comb = MASK_NAME 
 
+#TODO load in receptor names 
+if RECEPTOR_SOURCE == 'PET':
+    receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
+                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
+                            "MOR", "NET", "NMDA", "VAChT"])
+elif RECEPTOR_SOURCE == 'autorad_zilles44':
+    receptor_names = np.array(['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa/BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
+                            'a1', 'a2', '5-HT1a', '5-HT2', 'D1'])
+    #autoradiography dataset is only one hemisphere 
+    X_data = np.concatenate((X_data, X_data))
+else:
+    raise ValueError("Specify a known receptor dataset!")
 
-receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                           "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                           "MOR", "NET", "NMDA", "VAChT"])
 y_names = np.array(['surprise', 'confidence', 'predictability', 'predictions'])
+
+print(f'------- running regressions with {RECEPTOR_SOURCE} as recptor density -------')
 
 if RUN_REGRESSION:
     #sklearn regression
@@ -81,9 +91,16 @@ if RUN_REGRESSION:
         for sub in subjects: 
             
             y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
-            non_nan_indices = ~np.isnan(y_data)
-            X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
-            y = y_data[non_nan_indices]
+
+            if PARCELATED:
+                non_nan_region = ~np.isnan(X_data).any(axis=1)
+                non_nan_indices = np.where(non_nan_region)[0]
+                X = X_data[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+                y = y_data[non_nan_indices]
+            else:
+                non_nan_indices = ~np.isnan(y_data)
+                X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+                y = y_data[non_nan_indices]
 
             lin_reg = LinearRegression()
             lin_reg.fit(X, y)
@@ -114,9 +131,15 @@ if RUN_DOMINANCE:
     def process_subject(sub, y_name):
         print(f"--- dominance analysis for subject {sub} ----")
         y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
-        non_nan_indices = ~np.isnan(y_data)
-        X = X_data[non_nan_indices, :]
-        y = y_data[non_nan_indices]
+        if PARCELATED:
+            non_nan_region = ~np.isnan(X_data).any(axis=1)
+            non_nan_indices = np.where(non_nan_region)[0]
+            X = X_data[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+            y = y_data[non_nan_indices]
+        else:
+            non_nan_indices = ~np.isnan(y_data)
+            X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+            y = y_data[non_nan_indices]
         m = dominance_stats(X, y)
         with open(os.path.join(output_dir, f'{y_name}_{MASK_NAME}_dominance_sub-{sub:02d}.pickle'), 'wb') as f:
             pickle.dump(m, f)
