@@ -10,7 +10,7 @@ import glob
 import numpy as np
 import os.path as op
 import nibabel as nib
-from nilearn.datasets import fetch_atlas_harvard_oxford
+from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_2018
 from nilearn import image
 from nilearn.input_data import MultiNiftiMasker 
 from main_funcs import *
@@ -20,14 +20,17 @@ def get_masker(tr, smoothing_fwhm):
     
     #mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
 
-    #mask cortical or subcortical #TODO: turn into seperate function?
-    if (MASK == 'harvard_oxford') & (MASK_NAME == 'cortical'):
-        maxprob_atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
-    elif (MASK == 'harvard_oxford') & (MASK_NAME == 'subcortical'):
-        maxprob_atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
+    if MASK_NAME == 'harvard_oxford_cortical':
+            atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
+    elif MASK_NAME == 'harvard_oxford_subcortical':
+        atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
+    elif (MASK_NAME == 'schaefer'):
+        atlas = fetch_atlas_schaefer_2018(n_rois=int(mask_details[MASK_NAME]), resolution_mm=2)
+        atlas.labels = np.insert(atlas.labels, 0, "Background")
     else:
         raise ValueError("Unknown atlas!")
-    atlas_img = image.load_img(maxprob_atlas['maps'])
+    
+    atlas_img = image.load_img(atlas.maps)
     mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
 
     masker = MultiNiftiMasker(

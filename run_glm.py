@@ -22,18 +22,21 @@ import nibabel as nib
 from nilearn.glm.first_level import run_glm
 from nilearn.plotting import plot_design_matrix
 from nilearn.glm.contrasts import compute_contrast
+from nilearn.datasets import fetch_atlas_schaefer_2018
+from nilearn.input_data import NiftiLabelsMasker
 from scipy.stats import zscore
-from functions_design_matrices import * #TODO: don't import all
+from functions_design_matrices import create_design_matrix, zscore_regressors
 import fmri_funcs as fun
 import main_funcs as mf
 import io_funcs as iof
 
-from params_and_paths import *
+from params_and_paths import * #TODO: don't import all
 # import sys
 # sys.path.append('/Users/alice/postdoc/NeuroModAssay')
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
-RUN_OLS = True
+RUN_OLS = False
+SAVE_DMTX_PLOT = False
 
 # Init paths
 beh_dir  = mf.get_beh_dir(DB_NAME)
@@ -41,7 +44,7 @@ json_file_dir = mf.get_json_dir(DB_NAME)
 fmri_dir = mf.get_fmri_dir(DB_NAME)
 
 #make output directories
-fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}')
+fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}') 
 if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
 if RUN_OLS:
@@ -115,7 +118,7 @@ for sub in subjects:
         q_list = constants['StimQ'][0] 
         q_list = [int(q) for q in q_list]
 
-        #TODO: use standard nilearn function? -> this is just a wrapper, the standard is used within
+        #wrapper for design matrix, uses the nilearn function within
         dmtx = create_design_matrix(events,
                                     q_list,
                                     tr, 
@@ -194,12 +197,20 @@ for sub in subjects:
         #save effect size = beta 
         #save in a pickle format
         with open(os.path.join(output_dir, 
-                                    f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.pickle'), 'wb') as f:
+                                    f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size.pickle'), 'wb') as f:
                     pickle.dump(contrast.effect_size(), f)
         #save in nii format
         effect_size = masker.inverse_transform(contrast.effect_size())
         fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
 
-        #TODO: work with nifti file also for glm data to make it less error prone
+        #TODO: work with nifti file also for glm data to make it less error prone?
+
+        if MASK_NAME == 'schaefer':
+            atlas = fetch_atlas_schaefer_2018(n_rois=int(mask_details[MASK_NAME]), resolution_mm=2) 
+            atlas.labels = np.insert(atlas.labels, 0, "Background")
+            masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
+            effects_parcel = masker.fit_transform(effect_size)
+            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_{mask_details[MASK_NAME]}_effect_size.pickle'), 'wb') as f:
+                pickle.dump(effects_parcel, f)
 

@@ -3,7 +3,7 @@
 """
 Created on Mon Apr 15 09:59:22 2024
 
-@author: Alice Hodapp, Maëva L'Hôtellier
+@author: Alice Hodapp
 """
 
 #----------------------------------------------------
@@ -19,10 +19,13 @@ SMOOTHING_FWHM = None
 HRF = 'spm'
 RES = 20 #resolution for the IO hmm
 # Set Project Name
-SAVE_DMTX_PLOT = True
-MASK = 'harvard_oxford'
-MASK_NAME = 'cortical'
+#MASK = 'harvard_oxford'
+MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical
+RECEPTOR_SOURCE = 'PET'
 #----------------------------------------------------
+
+mask_details = {'schaefer': '100' #number of regions: from 100 to 1000 in steps of 100
+                }
 
 data_dir = {'NAConf': 'MeynielMazancieux_NACONF_prob_2021',
             'EncodeProb': 'EncodeProb_BounmyMeyniel_2020',

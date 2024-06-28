@@ -18,7 +18,7 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 import pandas as pd
-import pickle
+import picklde
 from math import log
 from concurrent.futures import ProcessPoolExecutor
 from sklearn.linear_model import LinearRegression
@@ -30,8 +30,8 @@ from dominance_stats import dominance_stats
 
 RUN_REGRESSION = True
 RUN_DOMINANCE = True
-DENSITY_BY_TRACER = True
 FROM_OLS = False
+PARCELATED = True
 NUM_WORKERS = 26  # Set an appropriate number of workers to run code in parallel
 
 
@@ -44,22 +44,28 @@ if FROM_OLS:
 else: 
     beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
                                     
-if DENSITY_BY_TRACER:
-    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', 'bytracers')
-    output_dir = os.path.join(beta_dir, 'regressions', 'bytracers')
+if PARCELATED:
+    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', RECEPTOR_SOURCE)  
+    output_dir = os.path.join(beta_dir, 'regressions', RECEPTOR_SOURCE)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
+    mask_comb = MASK_NAME + '_' + mask_details[MASK_NAME] 
+    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True)) 
+
 else:
-    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors')
-    output_dir = os.path.join(beta_dir,'regressions')
+
+    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
+    output_dir = os.path.join(beta_dir, 'regressions', 'PET')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
+    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True))
+    mask_comb = MASK_NAME 
+
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                            "MOR", "NET", "NMDA", "VAChT"])
 y_names = np.array(['surprise', 'confidence', 'predictability', 'predictions'])
-X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True))
 
 if RUN_REGRESSION:
     #sklearn regression
@@ -73,10 +79,10 @@ if RUN_REGRESSION:
         results_df = pd.DataFrame(columns=columns)
 
         for sub in subjects: 
-
-            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{MASK_NAME}_effect_size_map.pickle'), allow_pickle=True).flatten()
+            
+            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
             non_nan_indices = ~np.isnan(y_data)
-            X = X_data[non_nan_indices,:]
+            X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
             y = y_data[non_nan_indices]
 
             lin_reg = LinearRegression()
@@ -100,14 +106,14 @@ if RUN_REGRESSION:
             results = pd.DataFrame([np.append(coefs, [r_squared, adjusted_r_squared, bic])], columns = results_df.columns)
             results_df = pd.concat([results_df,results], ignore_index=True)
 
-        fname = f'{y_name}_{MASK_NAME}_regression_results_bysubject_all.csv'
+        fname = f'{y_name}_{mask_comb}_regression_results_bysubject_all.csv'
         results_df.to_csv(os.path.join(output_dir, fname), index=False)  
 
 
 if RUN_DOMINANCE:
     def process_subject(sub, y_name):
         print(f"--- dominance analysis for subject {sub} ----")
-        y_data = np.load(os.path.join(beta_dir, f'sub-{sub:02d}_{y_name}_{MASK_NAME}_effect_size_map.pickle'), allow_pickle=True).flatten()
+        y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
         non_nan_indices = ~np.isnan(y_data)
         X = X_data[non_nan_indices, :]
         y = y_data[non_nan_indices]
@@ -128,4 +134,4 @@ if RUN_DOMINANCE:
                 results_df = pd.concat([results_df, results], ignore_index=True)
 
         # Save data
-        results_df.to_pickle(os.path.join(output_dir, f'{y_name}_{MASK_NAME}_dominance_allsubj.pickle'))
+        results_df.to_pickle(os.path.join(output_dir, f'{y_name}_{mask_comb}_dominance_allsubj.pickle'))
