@@ -60,18 +60,11 @@ else:
     X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True))
     mask_comb = MASK_NAME 
 
-#TODO load in receptor names 
-if RECEPTOR_SOURCE == 'PET':
-    receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                            "MOR", "NET", "NMDA", "VAChT"])
-elif RECEPTOR_SOURCE == 'autorad_zilles44':
-    receptor_names = np.array(['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa/BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
-                            'a1', 'a2', '5-HT1a', '5-HT2', 'D1'])
+receptor_names = receptors[RECEPTOR_SOURCE]['receptor_names']
+
+if RECEPTOR_SOURCE == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
     X_data = np.concatenate((X_data, X_data))
-else:
-    raise ValueError("Specify a known receptor dataset!")
 
 y_names = np.array(['surprise', 'confidence', 'predictability', 'predictions'])
 

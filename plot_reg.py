@@ -7,78 +7,41 @@ from scipy.stats import ttest_1samp
 from statsmodels.stats.multitest import multipletests
 from params_and_paths import *
 
-n_reg = 'all' #all or core
 FROM_OLS = False
-RECEPTOR_SOURCE = 'autorad_zilles44' #,'PET'
-PARCELATED = True
 
 y_names = np.array(['surprise','confidence', 'predictability', 'predictions'])
 
-if RECEPTOR_SOURCE == 'PET':
-    if n_reg == 'core':
-        receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                                    "D1", "D2", "DAT", "GABAa", "M1", "mGluR5",
-                                    "NET", "NMDA", "VAChT"])
-        serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
-        acetylcholine = ["A4B2", "M1", "VAChT"]
-        noradrenaline = ["NET"]
-        glutamate = ["mGluR5"]
-        gaba = ["GABAa"]
-        dopamine = ["D1", "D2", "DAT"]
-        receptor_groups = [serotonin, acetylcholine, noradrenaline, glutamate, gaba, dopamine]
-        exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
-        inh = ['5HT1a', '5HT1b', 'D2', 'GABAa', 'H3']
-        receptor_class = [exc,inh]
-    else:
-        y_names = np.array(['surprise','confidence', 'predictability', 'predictions'])
-        receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                                "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                                "MOR", "NET", "NMDA", "VAChT"])
-        serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
-        acetylcholine = ["A4B2", "M1", "VAChT"]
-        noradrenaline = ["NET"]
-        opioid = ["MOR"]
-        glutamate = ["mGluR5"]
-        histamine = ["H3"]
-        gaba = ["GABAa"]
-        dopamine = ["D1", "D2", "DAT"]
-        cannabinnoid = ["CB1"]
-        receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
-        exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
-        inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
-        receptor_class = [exc,inh]
+#get all info on receptors 
+if RECEPTOR_SOURCE in receptors:
+    data = receptors[RECEPTOR_SOURCE]
+    for key, value in data.items():
+        globals()[key] = value
+else:
+    raise ValueError("Invalid receptor type.")
 
+if RECEPTOR_SOURCE == 'PET':
+        receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
 elif RECEPTOR_SOURCE  == 'autorad_zilles44':
-    receptor_names = np.array(['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa/BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
-                        'a1', 'a2', '5-HT1a', '5-HT2', 'D1'])
-    serotonin = ['5-HT1a', '5-HT2']
-    acetylcholine = ['m1', 'm2', 'm3', 'a4b2']
-    noradrenaline = ['a1', 'a2']
-    glutamate = ['AMPA', 'NMDA', 'kainate']
-    gaba = ['GABAa', 'GABAa/BZ', 'GABAb']
-    dopamine = ['D1']
     receptor_groups = [serotonin, acetylcholine, noradrenaline, glutamate, gaba, dopamine]
-    exc = ['AMPA', 'NMDA', 'kainate','m1','m3','a4b2','a1','5-HT2','D1']
-    inh = ['GABAa', 'GABAa/BZ', 'GABAb', 'm2', 'a2','5-HT1a']
-    receptor_class = [exc,inh]
+receptor_class = [exc,inh]
 
 if FROM_OLS:
     beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level', 'OLS')
 else: 
     beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
-                                    
-output_dir = os.path.join(beta_dir, 'regressions', RECEPTOR_SOURCE)
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir) 
 
 if PARCELATED:
     mask_comb = MASK_NAME + '_' + mask_details[MASK_NAME] 
 else:
     mask_comb = MASK_NAME 
 
+output_dir = os.path.join(beta_dir, 'regressions', RECEPTOR_SOURCE)
+if not os.path.exists(output_dir):
+    os.makedirs(output_dir) 
+
 #plot regression coefficients
 for y_name in y_names:
-    fname = f'{y_name}_{mask_comb}_regression_results_bysubject_{n_reg}.csv'
+    fname = f'{y_name}_{mask_comb}_regression_results_bysubject_all.csv'
     results_df = pd.read_csv(os.path.join(output_dir, fname))
 
     #t-test
@@ -160,7 +123,7 @@ for y_name in y_names:
     plt.tight_layout()
     plt.show()
     
-    fname = f'{y_name}_{mask_comb}_{n_reg}_reg_coef.png'
+    fname = f'{y_name}_{mask_comb}_all_reg_coef.png'
     fig_dir = os.path.join(output_dir, 'plots')
     if not os.path.exists(fig_dir):
         os.makedirs(fig_dir)
