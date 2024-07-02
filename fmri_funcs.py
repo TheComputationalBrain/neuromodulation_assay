@@ -14,7 +14,10 @@ from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_20
 from nilearn import image
 from nilearn.input_data import MultiNiftiMasker 
 from main_funcs import *
-from params_and_paths import *
+from params_and_paths import Params, Paths
+
+params = Params()
+paths = Paths()
 
 def get_masker(tr, smoothing_fwhm):
     
@@ -25,7 +28,7 @@ def get_masker(tr, smoothing_fwhm):
     elif MASK_NAME == 'harvard_oxford_subcortical':
         atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
     elif (MASK_NAME == 'schaefer'):
-        atlas = fetch_atlas_schaefer_2018(n_rois=int(mask_details[MASK_NAME]), resolution_mm=2)
+        atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2)
         atlas.labels = np.insert(atlas.labels, 0, "Background")
     else:
         raise ValueError("Unknown atlas!")
@@ -36,7 +39,7 @@ def get_masker(tr, smoothing_fwhm):
     masker = MultiNiftiMasker(
         mask_img=mask_img,
         detrend=True,  # Improves the SNR by removing linear trends
-        high_pass=HPF,  # kept small to keep sensitivity,
+        high_pass=params.hpf,  # kept small to keep sensitivity,
         standardize=False,
         smoothing_fwhm=smoothing_fwhm,
         t_r=tr,
@@ -123,7 +126,7 @@ def get_ppssing(sub, db_name):
     elif db_name == 'PNAS':
         ppssing = 'wtraepi'
 
-    fmri_path = op.join(root_dir[DATA_ACCESS], data_dir[db_name],
+    fmri_path = op.join(paths.root_dir, paths.data_dir,
                         f'derivatives/sub-{sub:02d}')
     
     if db_name == 'Explore':
@@ -132,7 +135,7 @@ def get_ppssing(sub, db_name):
         fmri_path = op.join(fmri_path, f"sub-{sub:02d}")
     
     if db_name == 'PNAS':
-        fmri_path = op.join(root_dir, data_dir[db_name],
+        fmri_path = op.join(paths.root_dir, paths.data_dir,
                             f'MRI_data/raw_data/subj{sub:02d}/fMRI')
 
     return ppssing, fmri_path

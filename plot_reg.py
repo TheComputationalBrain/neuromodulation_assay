@@ -5,56 +5,51 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy.stats import ttest_1samp
 from statsmodels.stats.multitest import multipletests
-from params_and_paths import *
+from params_and_paths import Paths, Params, Receptors
 
 FROM_OLS = False
+PARCELATED = True
 
-y_names = np.array(['surprise','confidence', 'predictability', 'predictions'])
+paths = Paths()
+params = Params()
+rec = Receptors()
 
-#get all info on receptors 
-if RECEPTOR_SOURCE in receptors:
-    data = receptors[RECEPTOR_SOURCE]
-    for key, value in data.items():
-        globals()[key] = value
-else:
-    raise ValueError("Invalid receptor type.")
-
-if RECEPTOR_SOURCE == 'PET':
-        receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
-elif RECEPTOR_SOURCE  == 'autorad_zilles44':
-    receptor_groups = [serotonin, acetylcholine, noradrenaline, glutamate, gaba, dopamine]
-receptor_class = [exc,inh]
+if rec.source == 'PET':
+        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
+elif rec.source  == 'autorad_zilles44':
+    receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]
+receptor_class = [rec.exc,rec.inh]
 
 if FROM_OLS:
-    beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level', 'OLS')
+    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
 else: 
-    beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
+    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if PARCELATED:
-    mask_comb = MASK_NAME + '_' + mask_details[MASK_NAME] 
+    mask_comb = params.mask + '_' + params.mask_details
 else:
-    mask_comb = MASK_NAME 
+    mask_comb = params.mask 
 
-output_dir = os.path.join(beta_dir, 'regressions', RECEPTOR_SOURCE)
+output_dir = os.path.join(beta_dir, 'regressions', rec.source)
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
 
 #plot regression coefficients
-for y_name in y_names:
+for y_name in params.io_regs:
     fname = f'{y_name}_{mask_comb}_regression_results_bysubject_all.csv'
     results_df = pd.read_csv(os.path.join(output_dir, fname))
 
     #t-test
     t_test_results = []
     p_values = []
-    for receptor in receptor_names:
+    for receptor in rec.receptor_names:
         t_stat, p_value = ttest_1samp(results_df[receptor], 0)
         t_test_results.append({'receptor': receptor, 't_stat': t_stat, 'p_value': p_value})
         p_values.append(p_value)
 
     _, p_values_corrected, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
     significant_receptors = []
-    for receptor, p_value_corrected in zip(receptor_names, p_values_corrected):
+    for receptor, p_value_corrected in zip(rec.receptor_names, p_values_corrected):
         if p_value_corrected < 0.05:
             significant_receptors.append(receptor)
 
@@ -132,7 +127,7 @@ for y_name in y_names:
 
 #plot dominance analysis 
 
-for y_name in y_names:
+for y_name in params.io_regs:
 
     try:
         results_df = pd.read_pickle(os.path.join(output_dir, f'{y_name}_{mask_comb}_dominance_allsubj.pickle'))

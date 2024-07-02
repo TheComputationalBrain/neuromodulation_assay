@@ -14,73 +14,94 @@ DATA_ACCESS = 'server' # 'private' for testing; otherwise: 'server'
 #mask = './masks/spm12/tpm/mask_ICV.nii'
 # MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
 # MASK_NAME = 'GrayMatter_noCereb'
-HPF    =  1/128
-SMOOTHING_FWHM = None
-HRF = 'spm'
-RES = 20 #resolution for the IO hmm
 MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical
 RECEPTOR_SOURCE = 'autorad_zilles44' #,'PET'
 PARCELATED = True
-
 #----------------------------------------------------
 
-mask_details = {'schaefer': '100' #number of regions: from 100 to 1000 in steps of 100
-                }
+class Params:
+    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcelated = PARCELATED):
+        self.db = db
+        self.mask = mask
+        self.parcelated = parcelated
 
-data_dir = {'NAConf': 'MeynielMazancieux_NACONF_prob_2021',
-            'EncodeProb': 'EncodeProb_BounmyMeyniel_2020',
-            'Explore': '/home_local/EXPLORE/DATA',
-            'PNAS': 'Meyniel_MarkovGuess_2014'} 
+        self.hpf = 1/128
+        self.smoothing_fwhm = None
+        self.hrf = 'spm'
+        self.res = 20 #resolution for the IO hmm  
 
-# subnums_explore = {4: 6,
+        self.io_regs = ['surprise', 'confidence', 'predictability', 'predictions']
+
+        #participants to ignore and session deviations
+        if db == 'NAConf':
+            self.ignore = [3, 6, 9, 51, 54, 59]
+            self.session = []
+        elif db == 'EncodeProb':
+            self.ignore = [1, 4, 12, 20]
+            self.session = {6:[1,3,4,5], 20:[1,2,3,5], 21:[1,2,3,5]}
+        elif db == 'Explore':
+            self.ignore = [9, 17, 46]
+            self.session = []
+        elif db == 'PNAS':
+            self.ignore = []
+            self.session = []
+
+        # subnums_explore = {4: 6,
 #                    6: 4,
 #                    25: 28,
 #                    28: 25}
 
-ignore = {'NAConf': [3, 6, 9, 51, 54, 59],
-          'EncodeProb': [1, 4, 12, 20],
-          'Explore': [9, 17, 46],
-          'PNAS': []}
+        #mask details
+        if mask == 'schaefer':
+            self.mask_details = '100' 'number of regions'
 
-sessions = {'NAConf': [],
-          'EncodeProb': {6:[1,3,4,5], 20:[1,2,3,5], 21:[1,2,3,5]},
-          'Explore': [],
-          'PNAS': []}
 
-home_dir = {'private': '/Volumes/NEUROSPIN/Neuromod',
-            'server': '/home_local/alice_hodapp/NeuroModAssay'} 
+class Paths:
+    def __init__(self, db=DB_NAME):
 
-root_dir = {'private': '/Volumes/NEUROSPIN',
-            'server': '/neurospin/unicog/protocols/IRMf'}
+        if db == 'NAConf':
+            self.data_dir = 'MeynielMazancieux_NACONF_prob_2021'
+        elif db == 'EncodeProb':
+            self.data_dir = 'EncodeProb_BounmyMeyniel_2020'
+        elif db == 'Explore':
+            self.data_dir = '/home_local/EXPLORE/DATA'
+        elif db == 'PNAS':
+            self.data_dir = 'Meyniel_MarkovGuess_2014'
 
-pet = {
-    'receptor_names': ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                       "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                       "MOR", "NET", "NMDA", "VAChT"], 
-    'serotonin': ['5-HT1a', '5-HT2'],
-    'acetylcholine': ['m1', 'm2', 'm3', 'a4b2'],
-    'noradrenaline': ['a1', 'a2'],
-    'glutamate': ['AMPA', 'NMDA', 'kainate'],
-    'gaba': ['GABAa', 'GABAa/BZ', 'GABAb'],
-    'dopamine': ['D1'],
-    'exc': ['AMPA', 'NMDA', 'kainate', 'm1', 'm3', 'a4b2', 'a1', '5-HT2', 'D1'],
-    'inh': ['GABAa', 'GABAa/BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
-}
+        self.home_dir = '/home_local/alice_hodapp/NeuroModAssay'
+        self.root_dir = '/neurospin/unicog/protocols/IRMf'
 
-autorad_zilles44 = {
-    'receptor_names': ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa/BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
-                       'a1', 'a2', '5-HT1a', '5-HT2', 'D1'],
-    'serotonin': ['5-HT1a', '5-HT2'],
-    'acetylcholine': ['m1', 'm2', 'm3', 'a4b2'],
-    'noradrenaline': ['a1', 'a2'],
-    'glutamate': ['AMPA', 'NMDA', 'kainate'],
-    'gaba': ['GABAa', 'GABAa/BZ', 'GABAb'],
-    'dopamine': ['D1'],
-    'exc': ['AMPA', 'NMDA', 'kainate', 'm1', 'm3', 'a4b2', 'a1', '5-HT2', 'D1'],
-    'inh': ['GABAa', 'GABAa/BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
-}
 
-receptors = {
-    'PET': pet,
-    'autorad_zilles44': autorad_zilles44
-}
+class Receptors:
+    def __init__(self, source=RECEPTOR_SOURCE):
+        self.source = RECEPTOR_SOURCE
+
+        if source == 'autorad_zilles44':
+            self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
+                                "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
+                                "MOR", "NET", "NMDA", "VAChT"]
+            self.serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
+            self.acetylcholine = ["A4B2", "M1", "VAChT"]
+            self.noradrenaline = ["NET"]
+            self.opioid = ["MOR"]
+            self.glutamate = ["mGluR5"]
+            self.histamine = ["H3"]
+            self.gaba = ["GABAa"]
+            self.dopamine = ["D1", "D2", "DAT"]
+            self.cannabinnoid = ["CB1"]
+            self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
+            self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
+
+        if source == 'PET':
+            self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
+                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
+                            "MOR", "NET", "NMDA", "VAChT"] 
+            self.serotonin = ['5-HT1a', '5-HT2']
+            self.acetylcholine = ['m1', 'm2', 'm3', 'a4b2']
+            self.noradrenaline = ['a1', 'a2']
+            self.glutamate = ['AMPA', 'NMDA', 'kainate']
+            self.gaba = ['GABAa', 'GABAa/BZ', 'GABAb']
+            self.dopamine = ['D1']
+            self.exc = ['AMPA', 'NMDA', 'kainate', 'm1', 'm3', 'a4b2', 'a1', '5-HT2', 'D1']
+            self.inh = ['GABAa', 'GABAa/BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
+

@@ -25,67 +25,65 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 from scipy.stats import zscore
 import main_funcs as mf
-from params_and_paths import *
+from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
 RUN_REGRESSION = True
 RUN_DOMINANCE = True
 FROM_OLS = False
-PARCELATED = True
 NUM_WORKERS = 13  # Set an appropriate number of workers to run code in parallel
 
+paths = Paths()
+params = Params()
+rec = Receptors()
 
-fmri_dir = mf.get_fmri_dir(DB_NAME)
-subjects = mf.get_subjects(DB_NAME, fmri_dir)
-subjects = [subj for subj in subjects if subj not in ignore[DB_NAME]]
+fmri_dir = mf.get_fmri_dir(params.db)
+subjects = mf.get_subjects(params.db, fmri_dir)
+subjects = [subj for subj in subjects if subj not in params.ignore]
 
 if FROM_OLS:
-    beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level', 'OLS')
+    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
 else: 
-    beta_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
+    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
                                     
-if PARCELATED:
-    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', RECEPTOR_SOURCE)  
-    output_dir = os.path.join(beta_dir, 'regressions', RECEPTOR_SOURCE)
+if params.parcelated:
+    receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
+    output_dir = os.path.join(beta_dir, 'regressions', rec.source)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
-    mask_comb = MASK_NAME + '_' + mask_details[MASK_NAME] 
+    mask_comb = params.mask + '_' + params.mask_details 
     X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
 
 else:
-    receptor_dir = os.path.join(home_dir[DATA_ACCESS], 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
+    receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
     output_dir = os.path.join(beta_dir, 'regressions', 'PET')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
-    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True))
-    mask_comb = MASK_NAME 
+    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
+    mask_comb = params.mask 
 
-receptor_names = receptors[RECEPTOR_SOURCE]['receptor_names']
-
-if RECEPTOR_SOURCE == 'autorad_zilles44':
+if rec.source == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
     X_data = np.concatenate((X_data, X_data))
 
-y_names = np.array(['surprise', 'confidence', 'predictability', 'predictions'])
-
-print(f'------- running regressions with {RECEPTOR_SOURCE} as recptor density -------')
+print(f'------- running regressions with {rec.source} as recptor density -------')
 
 if RUN_REGRESSION:
     #sklearn regression
-    columns = np.concatenate((receptor_names, np.array(["R2", "adjusted_R2", "BIC"])))
+    columns = np.concatenate((rec.receptor_names, np.array(["R2", "adjusted_R2", "BIC"])))
 
     def calculate_bic(n, mse, num_params):
         bic = n * log(mse) + num_params * log(n)
         return bic
 
-    for y_name in y_names:
+    for y_name in params.io_regs:
         results_df = pd.DataFrame(columns=columns)
 
         for sub in subjects: 
             
             y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
 
-            if PARCELATED:
+            if params.parcelated:
                 non_nan_region = ~np.isnan(X_data).any(axis=1)
                 non_nan_indices = np.where(non_nan_region)[0]
                 X = X_data[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
@@ -124,7 +122,7 @@ if RUN_DOMINANCE:
     def process_subject(sub, y_name):
         print(f"--- dominance analysis for subject {sub} ----")
         y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
-        if PARCELATED:
+        if params.parcelated:
             non_nan_region = ~np.isnan(X_data).any(axis=1)
             non_nan_indices = np.where(non_nan_region)[0]
             X = X_data[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
@@ -134,15 +132,15 @@ if RUN_DOMINANCE:
             X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
             y = y_data[non_nan_indices]
         m = dominance_stats(X, y)
-        with open(os.path.join(output_dir, f'{y_name}_{MASK_NAME}_dominance_sub-{sub:02d}.pickle'), 'wb') as f:
+        with open(os.path.join(output_dir, f'{y_name}_{params.mask}_dominance_sub-{sub:02d}.pickle'), 'wb') as f:
             pickle.dump(m, f)
         total_dominance_array = m["total_dominance"]
-        results = pd.DataFrame([total_dominance_array], columns=receptor_names)
+        results = pd.DataFrame([total_dominance_array], columns=rec.receptor_names)
         return results
 
-    for y_name in y_names:
+    for y_name in params.io_regs:
         print(f"--- dominance analysis for {y_name} ----")
-        results_df = pd.DataFrame(columns=receptor_names)
+        results_df = pd.DataFrame(columns=rec.receptor_names)
         with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
             futures = [executor.submit(process_subject, sub, y_name) for sub in subjects]
             for future in futures:

@@ -17,8 +17,6 @@ from nilearn.glm.first_level import make_first_level_design_matrix
 from parametric_modulation_functions import compute_cleaned_pmod_regs
 from scipy.stats import zscore
 import main_funcs as mf
-from params_and_paths import *
-
 
 # Define functions
 
@@ -87,7 +85,7 @@ def create_design_matrix(events,
     
     if add_mvt_regs: 
         # Get the motion regressors and events for the current session
-        mvts = mf.get_mvt_reg(db_name, subject, sess, root_dir, data_dir)
+        mvts = mf.get_mvt_reg(db_name, subject, sess)
         reg_list.append(mvts)
     
     if add_question_regs:

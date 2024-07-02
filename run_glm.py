@@ -30,7 +30,7 @@ import fmri_funcs as fun
 import main_funcs as mf
 import io_funcs as iof
 
-from params_and_paths import * #TODO: don't import all
+from params_and_paths import Params, Paths
 # import sys
 # sys.path.append('/Users/alice/postdoc/NeuroModAssay')
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
@@ -38,19 +38,22 @@ from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 RUN_OLS = False
 SAVE_DMTX_PLOT = False
 
+paths = Paths()
+params = Params()
+
 # Init paths
-beh_dir  = mf.get_beh_dir(DB_NAME)
-json_file_dir = mf.get_json_dir(DB_NAME)
-fmri_dir = mf.get_fmri_dir(DB_NAME)
+beh_dir  = mf.get_beh_dir(params.db)
+json_file_dir = mf.get_json_dir(params.db)
+fmri_dir = mf.get_fmri_dir(params.db)
 
 #make output directories
-fmri_arr_dir  = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level',f'data_arrays_whole_brain_{SMOOTHING_FWHM}') 
+fmri_arr_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level',f'data_arrays_whole_brain_{params.smoothing_fwhm}') 
 if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
 if RUN_OLS:
-    output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level','OLS')
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
 else:
-    output_dir = os.path.join(home_dir[DATA_ACCESS],DB_NAME,MASK_NAME,'first_level')
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
@@ -58,17 +61,17 @@ design_dir = os.path.join(output_dir, 'designmatrix')
 if not os.path.exists(design_dir):
         os.makedirs(design_dir)
 
-subjects = mf.get_subjects(DB_NAME, fmri_dir)
-subjects = [subj for subj in subjects if subj not in ignore[DB_NAME]]
+subjects = mf.get_subjects(params.db, fmri_dir)
+subjects = [subj for subj in subjects if subj not in params.ignore]
 
 for sub in subjects:
     
     print(f"--- processing subject {sub} ----")
 
     #get global info that's not session specific
-    sessions = mf.get_sessions(DB_NAME,sub)
-    tr = fun.get_tr(DB_NAME, sub, 1, json_file_dir) # in seconds
-    masker = fun.get_masker(tr, SMOOTHING_FWHM)
+    sessions = mf.get_sessions(sub)
+    tr = fun.get_tr(params.db, sub, 1, json_file_dir) # in seconds
+    masker = fun.get_masker(tr, params.smoothing_fwhm)
     masker.fit() #TODO: restructure (maybe put in masking step)
 
     #fMRI data
@@ -81,23 +84,23 @@ for sub in subjects:
     # otherwise extract the data with masker (npy array is concatenated and saved within function)
     else:
         print("--- extraction from masker ----")
-        ppssing, fmri_path = fun.get_ppssing(sub, DB_NAME)
+        ppssing, fmri_path = fun.get_ppssing(sub, params.db)
         #TODO: comments to make clear what's happening
         nii_files, fmri_data = fun.get_fmri_data( 
             masker,
-            MASK_NAME,
+            params.mask,
             sub,
             fmri_arr_dir,
             ppssing,
             fmri_path, 
-            DB_NAME)
+            params.db)
         
     fmri_data = zscore(fmri_data)
 
     for s,sess in enumerate(sessions):
         #TODO. list of design matrixes and then concat at end to avoid deep copy
         #IO inference 
-        seq = mf.get_seq(db=DB_NAME,
+        seq = mf.get_seq(db=params.db,
                         sub=sub,
                         sess=sess,
                         beh_dir=beh_dir)
@@ -105,15 +108,15 @@ for sub in subjects:
         constants = mf.get_constants(data_dir=beh_dir,
                                             sub=sub,
                                             sess=sess)
-        options = {'p_c': constants['pJump'], 'res': RES} 
+        options = {'p_c': constants['pJump'], 'res': params.res} 
         io_inference = iof.get_post_inference(seq=seq,
-                                                seq_type='bernoulli',
+                                                seq_type='bernoulli', #TODO add this to params
                                                 options=options)
         
         #get events -> this should already work on all data bases
-        events = mf.get_events(DB_NAME, sub, sess, beh_dir) 
+        events = mf.get_events(params.db, sub, sess, beh_dir) 
         #frame time 
-        frame_times = fun.get_fts(DB_NAME, sub, sess, fmri_dir, json_file_dir) 
+        frame_times = fun.get_fts(params.db, sub, sess, fmri_dir, json_file_dir) 
         #questions
         q_list = constants['StimQ'][0] 
         q_list = [int(q) for q in q_list]
@@ -124,7 +127,7 @@ for sub in subjects:
                                     tr, 
                                     frame_times,
                                     io_inference,
-                                    DB_NAME,
+                                    params.db,
                                     sub,
                                     sess)
         
@@ -147,15 +150,15 @@ for sub in subjects:
     design_matrix.to_pickle(
         os.path.join(
             design_dir,
-            f'sub-{sub:02d}_design_matrix_' + DB_NAME + '.pickle')) 
+            f'sub-{sub:02d}_design_matrix_' + params.db + '.pickle')) 
 
     # plot and save the design matrix
     if SAVE_DMTX_PLOT:
-        fig_fname = f'sub-{sub:02d}_design_matrix_' + DB_NAME + '.png'
+        fig_fname = f'sub-{sub:02d}_design_matrix_' + params.db + '.png'
         fig_fpath = os.path.join(design_dir, fig_fname)
         fig, ax = plt.subplots(figsize=[8, 6])
         plot_design_matrix(design_matrix, rescale = False, ax=ax)
-        fig.suptitle(f'Regressors: Subject {sub:02d}, {DB_NAME}', y=1.05, fontweight='bold')
+        fig.suptitle(f'Regressors: Subject {sub:02d}, {params.db}', y=1.05, fontweight='bold')
         fig.savefig(fig_fpath, bbox_inches='tight', dpi=220)
 
     # run GLM on all voxels
@@ -167,10 +170,10 @@ for sub in subjects:
         labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 10)
 
     # save results
-    label_fname = f'sub-{sub:02d}_{DB_NAME}_labels_{MASK_NAME}.pickle'
+    label_fname = f'sub-{sub:02d}_{params.db}_labels_{params.mask}.pickle'
     with open(os.path.join(output_dir, label_fname), 'wb') as f:
         pickle.dump(labels, f)
-    estimates_fname = f'sub-{sub:02d}_{DB_NAME}_estimates_{MASK_NAME}.pickle'
+    estimates_fname = f'sub-{sub:02d}_{params.db}_estimates_{params.mask}.pickle'
     with open(os.path.join(output_dir, estimates_fname), 'wb') as f:
         pickle.dump(estimates, f)
 
@@ -191,26 +194,26 @@ for sub in subjects:
 
         # Save t-map
         t_val = masker.inverse_transform(contrast.stat())
-        fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_tmap.nii.gz'
+        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_tmap.nii.gz'
         nib.save(t_val, os.path.join(output_dir, fname))
 
         #save effect size = beta 
         #save in a pickle format
         with open(os.path.join(output_dir, 
-                                    f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size.pickle'), 'wb') as f:
+                                    f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size.pickle'), 'wb') as f:
                     pickle.dump(contrast.effect_size(), f)
         #save in nii format
         effect_size = masker.inverse_transform(contrast.effect_size())
-        fname = f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_effect_size_map.nii.gz'
+        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size_map.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
 
         #TODO: work with nifti file also for glm data to make it less error prone?
 
-        if MASK_NAME == 'schaefer':
-            atlas = fetch_atlas_schaefer_2018(n_rois=int(mask_details[MASK_NAME]), resolution_mm=2) 
+        if params.mask == 'schaefer':
+            atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
             atlas.labels = np.insert(atlas.labels, 0, "Background")
             masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
             effects_parcel = masker.fit_transform(effect_size)
-            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{MASK_NAME}_{mask_details[MASK_NAME]}_effect_size.pickle'), 'wb') as f:
+            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size.pickle'), 'wb') as f:
                 pickle.dump(effects_parcel, f)
 

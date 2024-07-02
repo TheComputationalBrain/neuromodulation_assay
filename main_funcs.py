@@ -14,33 +14,36 @@ import numpy as np
 import pandas as pd
 import os.path as op
 from scipy.io import loadmat
-from params_and_paths import *
+from params_and_paths import Params, Paths
 
-def get_json_dir(db_name, root_dir=root_dir, data_dir=data_dir):
+params = Params()
+paths = Paths()
+
+def get_json_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
    
-    json_files_dir = {'NAConf': op.join(root_dir[DATA_ACCESS], data_dir['NAConf'], 'bids_dataset'),
-                    'EncodeProb': op.join(root_dir[DATA_ACCESS], data_dir['EncodeProb'], 'bids_dataset'),
+    json_files_dir = {'NAConf': op.join(root_dir, data_dir, 'bids_dataset'),
+                    'EncodeProb': op.join(root_dir, data_dir, 'bids_dataset'),
                     'Explore': '/home_local/EXPLORE/bids_dataset',
-                    'PNAS': op.join(root_dir[DATA_ACCESS], data_dir['PNAS'], 'MRI_data/analyzed_data')}
+                    'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
     
     return json_files_dir[db_name]
 
 
-def get_fmri_dir(db_name, root_dir=root_dir, data_dir=data_dir):
+def get_fmri_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
     
-    fmri_dir = {'NAConf': op.join(root_dir[DATA_ACCESS], data_dir['NAConf'], 'derivatives'),
-                'EncodeProb': op.join(root_dir[DATA_ACCESS], data_dir['EncodeProb'], 'derivatives'),
+    fmri_dir = {'NAConf': op.join(root_dir, data_dir, 'derivatives'),
+                'EncodeProb': op.join(root_dir, data_dir, 'derivatives'),
                 'Explore': '/home_local/EXPLORE/DATA/bids/derivatives/fmriprep-22.1.1',
-                'PNAS': op.join(root_dir[DATA_ACCESS], data_dir['PNAS'], 'MRI_data/analyzed_data')}
+                'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
 
     return fmri_dir[db_name]
 
-def get_beh_dir(db_name, root_dir=root_dir, data_dir=data_dir):
+def get_beh_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
 
-    beh_dir = {'NAConf': op.join(root_dir[DATA_ACCESS], data_dir['NAConf']),
-               'EncodeProb': op.join(root_dir[DATA_ACCESS], data_dir['EncodeProb']),
+    beh_dir = {'NAConf': op.join(root_dir, data_dir),
+               'EncodeProb': op.join(root_dir, data_dir),
                'Explore': '/home_local/EXPLORE/github/explore/2021_Continous_2armed',
-               'PNAS': op.join(root_dir[DATA_ACCESS], data_dir['PNAS'])}
+               'PNAS': op.join(root_dir, data_dir)}
 
     return beh_dir[db_name]
 
@@ -238,9 +241,9 @@ def get_events_explore(subnum, sess, nan_missed=True):
 
     return events
 
-def get_sessions(db, sub):
-    if sub in sessions[db]:
-        return sessions[db][sub]
+def get_sessions(sub):
+    if sub in params.session:
+        return params.session[sub]
     else:
         return [1, 2, 3, 4]
 
@@ -338,12 +341,11 @@ def get_events(db, sub, sess, data_dir):
 def convert_to_secs(data, var):
     return (data[var].dropna().values - data['t_trigger'][0])/1000
 
-def get_mvt_reg(db_name, sub, sess, root_dir, data_dir):
-    root_dir = root_dir[DATA_ACCESS]
-    mov_dir = {'NAConf': op.join(root_dir, data_dir['NAConf'], "derivatives"),
-               'EncodeProb': op.join(root_dir, data_dir['EncodeProb'], "derivatives"),
-               'Explore': op.join(data_dir['Explore'], "mri_preproc"),
-               'PNAS': op.join(root_dir, data_dir['PNAS'],
+def get_mvt_reg(db_name, sub, sess):
+    mov_dir = {'NAConf': op.join(paths.root_dir, paths.data_dir, "derivatives"),
+               'EncodeProb': op.join(paths.root_dir, paths.data_dir, "derivatives"),
+               'Explore': op.join(paths.data_dir, "mri_preproc"),
+               'PNAS': op.join(paths.root_dir, paths.data_dir,
                                "MRI_data/analyzed_data")}
 
     # concatenate mvt_data across sessions

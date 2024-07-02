@@ -21,33 +21,36 @@ import seaborn as sns
 from nilearn.input_data import NiftiMasker, NiftiLabelsMasker
 from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_2018
 from nilearn import image, plotting
-from params_and_paths import *
+from params_and_paths import Paths, Params
 
 
 PLOT_RECEPTORS=True
-MASK_NAME = 'schaefer'
 
+paths = Paths()
+params = Params()
+
+#TODO: move path to paths class 
 receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images/' #path to downloaded data from Hansen et al. (2022)
-output_dir = os.path.join(home_dir[DATA_ACCESS],'receptors', 'PET')
+output_dir = os.path.join(paths.home_dir,'receptors', 'PET')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
 #TODO: no need for masking if data will be averaged within region anyway?
-if MASK_NAME == 'harvard_oxford_cortical':
+if params.mask == 'harvard_oxford_cortical':
     atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
     parcelated = False
     atlas_img = image.load_img(atlas.maps)
     mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #all cortical areas
     masker = NiftiMasker(mask_img=mask_img)
-elif MASK_NAME == 'harvard_oxford_subcortical':
+elif params.mask == 'harvard_oxford_subcortical':
     atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
     parcelated = False
     atlas_img = image.load_img(atlas.maps)
     mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #all subcortical areas
     masker = NiftiMasker(mask_img=mask_img)
-elif MASK_NAME == 'schaefer':
+elif params.mask == 'schaefer':
     parcelated = True
-    atlas = fetch_atlas_schaefer_2018(n_rois=int(mask_details[MASK_NAME]), resolution_mm=2) 
+    atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_detail), resolution_mm=2) 
     atlas.labels = np.insert(atlas.labels, 0, "Background")
     masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
     atlas_img = image.load_img(atlas.maps)
@@ -118,17 +121,17 @@ receptor_data[:, 18] = (zscore(r[:, 22])*4 + zscore(r[:, 23])*5 + zscore(r[:, 24
 #save receptor density maps 
 if parcelated:
      with open(os.path.join(output_dir, 
-                       f'receptor_density_{MASK_NAME}_{mask_details[MASK_NAME]}.pickle'), 'wb') as f:
+                       f'receptor_density_{params.mask}_{params.mask_details}.pickle'), 'wb') as f:
             pickle.dump(receptor_data, f)
 else:
     with open(os.path.join(output_dir, 
-                        f'receptor_density_{MASK_NAME}.pickle'), 'wb') as f:
+                        f'receptor_density_{params.mask}.pickle'), 'wb') as f:
             pickle.dump(receptor_data, f)
 
 
 #### plotting   
 if parcelated:
-    plot_path = os.path.join(output_dir, mask_details[MASK_NAME],'figures') 
+    plot_path = os.path.join(output_dir, params.mask_details,'figures') 
     if not os.path.exists(plot_path):
             os.makedirs(plot_path) 
 else:
@@ -180,7 +183,7 @@ df = df[ordered_receptors]
 corr_matrix = df.corr()
 plt.figure(figsize=(10, 8))
 sns.heatmap(corr_matrix, annot=False, cmap=cmap_div, vmin=-1, vmax=1, linewidths=0.6, square=True)
-plt.title(f'{MASK_NAME}: Correlation of Receptors')
+plt.title(f'{params.mask}: Correlation of Receptors')
 current_pos = 0
 for group in receptor_groups:
     group_size = len(group)
@@ -188,9 +191,9 @@ for group in receptor_groups:
     current_pos += group_size
 
 if parcelated:
-    fig_fname = f'receptor_corr_matrix_{MASK_NAME}_{mask_details[MASK_NAME]}.png'
+    fig_fname = f'receptor_corr_matrix_{params.mask}_{params.mask_details}.png'
     plt.savefig(os.path.join(plot_path, fig_fname))
 else:
-    fig_fname = f'receptor_corr_matrix_{MASK_NAME}.png'
+    fig_fname = f'receptor_corr_matrix_{params.mask}.png'
     plt.savefig(os.path.join(plot_path, fig_fname))
 

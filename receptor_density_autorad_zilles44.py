@@ -17,11 +17,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.patches import Rectangle
 from matplotlib.colors import ListedColormap
-from params_and_paths import * 
+from params_and_paths import Paths 
+
+paths = Paths()
 
 
 receptor_path = '/home/ah278717/hansen_receptors/data/autoradiography/' #path to downloaded data from Hansen et al. (2022)
-output_dir = os.path.join(home_dir[DATA_ACCESS],'receptors', 'autorad_zilles44')
+output_dir = os.path.join(paths.home_dir,'receptors', 'autorad_zilles44')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
