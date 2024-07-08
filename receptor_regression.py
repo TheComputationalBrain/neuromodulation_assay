@@ -29,7 +29,7 @@ from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
 RUN_REGRESSION = True
-RUN_DOMINANCE = True
+RUN_DOMINANCE = False
 FROM_OLS = False
 NUM_WORKERS = 13  # Set an appropriate number of workers to run code in parallel
 
@@ -62,11 +62,12 @@ else:
     X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
     mask_comb = params.mask 
 
+#TDODO: run on just one hemisphere instead
 if rec.source == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
     X_data = np.concatenate((X_data, X_data))
 
-print(f'------- running regressions with {rec.source} as recptor density -------')
+print(f'------- running regressions with {rec.source} as receptor density -------')
 
 if RUN_REGRESSION:
     #sklearn regression

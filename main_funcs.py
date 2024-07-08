@@ -19,7 +19,7 @@ from params_and_paths import Params, Paths
 params = Params()
 paths = Paths()
 
-def get_json_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
+def get_json_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
    
     json_files_dir = {'NAConf': op.join(root_dir, data_dir, 'bids_dataset'),
                     'EncodeProb': op.join(root_dir, data_dir, 'bids_dataset'),
@@ -29,7 +29,7 @@ def get_json_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
     return json_files_dir[db_name]
 
 
-def get_fmri_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
+def get_fmri_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
     
     fmri_dir = {'NAConf': op.join(root_dir, data_dir, 'derivatives'),
                 'EncodeProb': op.join(root_dir, data_dir, 'derivatives'),
@@ -38,7 +38,8 @@ def get_fmri_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
 
     return fmri_dir[db_name]
 
-def get_beh_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
+
+def get_beh_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
 
     beh_dir = {'NAConf': op.join(root_dir, data_dir),
                'EncodeProb': op.join(root_dir, data_dir),
@@ -47,27 +48,26 @@ def get_beh_dir(db_name, root_dir=paths.root_dir, data_dir=params.db):
 
     return beh_dir[db_name]
 
-def get_constants(data_dir, sub, sess):
-    """This function looks for and imports constants data saved during an
-    experiment for a given subject and session."""
-    filepath = glob.glob(os.path.join(data_dir,
-                                    'behavior',
-                                    f'sub-{sub:02d}*',
-                                    f'*session_{sess}.pickle'))[0]
-    data = pickle.load(open(filepath, 'rb'))
-    return data
-
 def get_subjects(db, data_dir): 
     subjects = []
     if db == 'EncodeProb':
         folders = os.path.join(data_dir,
                             'sub-*')
         
-    for folder in glob.glob(folders):
-        # Extract the number from the filename
-        number = folder.split('sub-')[1]
-        subjects.append(int(number))
+        for folder in glob.glob(folders):
+            # Extract the number from the filename
+            number = folder.split('sub-')[1]
+            subjects.append(int(number))
     
+    if db == 'PNAS':
+        folders = os.path.join(data_dir,
+                            'subj*')
+        
+        for folder in glob.glob(folders):
+            # Extract the number from the filename
+            number = folder.split('subj')[1]
+            subjects.append(int(number))
+
     #keep this as a test for now 
     nsub_correct = {'PNAS': 21,
             'EncodeProb': 30,
@@ -129,16 +129,10 @@ def get_data_PNAS(sub, sess, data_dir):
     if len(beh_file) > 1:
         raise('check behavioral files PNAS')
 
-    filespath = os.path.join(data_dir,'Behavioral_data')
-    beh_file = glob.glob(os.path.join(filespath,
-                                      f'*SUBJECT_{sub}_Sess_{sess+1}_*'))
-    if len(beh_file) > 1:
-        raise('check behavioral files PNAS')
-
-
     beh_data = loadmat(beh_file[0])
     T0 = beh_data['save_T0'][0]
-    indices_question = beh_data['StimQ'][0].astype(np.int)-1
+
+    indices_question = beh_data['StimQ'][0].astype(int)-1
     task_data = {
         'sequence': beh_data['s'][0],
         'stim_onset': beh_data['save_tOnStimV'][:, 0] - T0,
@@ -245,23 +239,23 @@ def get_sessions(sub):
     if sub in params.session:
         return params.session[sub]
     else:
-        return [1, 2, 3, 4]
+        return [1,2,3,4]
 
 def get_events(db, sub, sess, data_dir): 
 
-    #TODO: the variables session and repsonse are currently only implemented for EncodeProb
+    #TODO: the event modulation is currently only implemented for EncodeProb and PNAS
 
     if db == 'PNAS': 
 
         data = get_data_PNAS(sub, sess, data_dir)
-        onsets = np.hstack((data['stim_onset'], data['question_onset'],
-                            data['response_onset']))
+        onsets = np.hstack((data['stim_onset'], data['question_onset']))
         duration = np.hstack(([0] * data['stim_onset'],
-                            data['reaction_times'],
-                            [0] * data['response_onset']))
+                            data['reaction_times']))
         trial_type = np.hstack((['stim']*len(data['stim_onset']),
-                                ['q']*len(data['question_onset']),
-                                ['resp']*len(data['response_onset'])))
+                                ['q_conf']*len(data['question_onset'])))
+        modulation = np.hstack(([0] * data['stim_onset'], 
+                            data['subj_confidence']))  
+        
 
     if db != 'PNAS':
 
@@ -284,8 +278,8 @@ def get_events(db, sub, sess, data_dir):
                 rt = np.append(data['estim_rt'].dropna().values/1000,
                             data['conf_rt'].dropna().values/1000)
 
-                on_resp_prob = convert_to_secs(data,'t_rating_prob')
-                on_resp_conf = convert_to_secs(data,'t_rating_conf')
+                # on_resp_prob = convert_to_secs(data,'t_rating_prob')
+                # on_resp_conf = convert_to_secs(data,'t_rating_conf')
 
                 # off_q_prob = convert_to_secs(data, 't_question_prob_off')
                 # off_q_conf = convert_to_secs(data, 't_question_conf_off')
@@ -295,16 +289,13 @@ def get_events(db, sub, sess, data_dir):
                 sub_conf = convert_to_secs(data, 'conf_position')
                 sub_conf = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
 
-                onsets = np.hstack((on_stim, on_q_prob, on_q_conf, on_resp_prob, on_resp_conf))
+                onsets = np.hstack((on_stim, on_q_prob, on_q_conf))
                 trial_type = np.hstack((['stim'] * len(on_stim),
                                         ['q_prob'] * len(on_q_prob),
-                                        ['q_conf'] * len(on_q_conf),
-                                        ['resp_conf'] * len(on_resp_prob),
-                                        ['resp_prob'] * len(on_resp_conf)))
+                                        ['q_conf'] * len(on_q_conf)))
                 duration = np.hstack((np.zeros_like(on_stim),
-                                    rt, np.zeros_like(on_resp_prob), np.zeros_like(on_resp_conf)))
-                response = np.hstack((np.zeros_like(on_stim), sub_prob, sub_conf, 
-                                      np.zeros_like(on_resp_prob), np.zeros_like(on_resp_conf))) 
+                                    rt))
+                modulation = np.hstack((np.zeros_like(on_stim), sub_prob, sub_conf)) 
                 
             if db == 'NAConf':
                 filespath = os.path.join(data_dir,
@@ -333,7 +324,7 @@ def get_events(db, sub, sess, data_dir):
     events = pd.DataFrame({'onset': onsets,
                         'duration': duration,
                         'trial_type': trial_type,
-                        'response': response
+                        'modulation': modulation
                         })
 
     return events

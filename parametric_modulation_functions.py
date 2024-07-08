@@ -13,8 +13,9 @@ import numpy as np
 import nilearn.signal
 from nilearn.glm.first_level.hemodynamic_models import _hrf_kernel as hrf
 from scipy.interpolate import interp1d
-from params_and_paths import *
+from params_and_paths import Params
 
+params = Params()
 
 def compute_cleaned_pmod_regs(onsets, durations, modulation_values, frame_times, tr):
     """
@@ -85,7 +86,7 @@ def compute_regressor_fast(onsets, durations, values, frame_times):
     dt = 0.125  # micro time resolution for fMRI modelling
     tr = frame_times[1] - frame_times[0]
     oversampling = int(tr/dt)
-    hkernel = hrf(HRF, tr, oversampling=oversampling, fir_delays=None)
+    hkernel = hrf(params.hrf, tr, oversampling=oversampling, fir_delays=None)
 
     # CREATE THE HIGH TEMPORAL RESOLUTION REGRESSORS
     # (inspired from _sample_condition)
@@ -143,6 +144,6 @@ def clean_regs(regs, tr):
     """    
     return nilearn.signal.clean(regs,
         detrend=True,
-        high_pass=HPF, t_r=tr,
+        high_pass=params.hpf, t_r=tr,
         standardize=True
    )

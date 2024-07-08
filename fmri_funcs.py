@@ -23,11 +23,11 @@ def get_masker(tr, smoothing_fwhm):
     
     #mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
 
-    if MASK_NAME == 'harvard_oxford_cortical':
+    if params.mask == 'harvard_oxford_cortical':
             atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
-    elif MASK_NAME == 'harvard_oxford_subcortical':
+    elif params.mask == 'harvard_oxford_subcortical':
         atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
-    elif (MASK_NAME == 'schaefer'):
+    elif params.mask == 'schaefer':
         atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2)
         atlas.labels = np.insert(atlas.labels, 0, "Background")
     else:
@@ -100,7 +100,7 @@ def get_fts(db, sub, sess, fmri_dir, json_dir):
 
     if db == 'PNAS':
         sessfiles = [f for f in fmri_files if f"sess{sess}" in f]
-    else :
+    else:
         sessfiles = [f for f in fmri_files if f"run-0{sess}" in f]
 
     n_scans = fetch_n_scans(sessfiles[0]) 

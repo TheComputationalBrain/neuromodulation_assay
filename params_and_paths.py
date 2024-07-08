@@ -8,14 +8,13 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'EncodeProb' #this will have to determine all the following parameters in a flexible script
-# other options: 'NAConf', 'Explore', 'PNAS'
-DATA_ACCESS = 'server' # 'private' for testing; otherwise: 'server' 
+DB_NAME = 'PNAS' #this will have to determine all the following parameters in a flexible script
+# other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 #mask = './masks/spm12/tpm/mask_ICV.nii'
 # MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
 # MASK_NAME = 'GrayMatter_noCereb'
-MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical
-RECEPTOR_SOURCE = 'autorad_zilles44' #,'PET'
+MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical; Schaefer
+RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44'
 PARCELATED = True
 #----------------------------------------------------
 
@@ -28,7 +27,14 @@ class Params:
         self.hpf = 1/128
         self.smoothing_fwhm = None
         self.hrf = 'spm'
-        self.res = 20 #resolution for the IO hmm  
+
+        if db != 'Explore':
+            self.io_options = {'p_c': 1/75, 'resol': 20} 
+        
+        if db not in ['Explore', 'PNAS']:
+            self.seq_type = 'bernoulli'
+        elif db == 'PNAS':
+            self.seq_type = 'transition'
 
         self.io_regs = ['surprise', 'confidence', 'predictability', 'predictions']
 
@@ -53,7 +59,7 @@ class Params:
 
         #mask details
         if mask == 'schaefer':
-            self.mask_details = '100' 'number of regions'
+            self.mask_details = '100' #number of regions
 
 
 class Paths:
@@ -76,7 +82,7 @@ class Receptors:
     def __init__(self, source=RECEPTOR_SOURCE):
         self.source = RECEPTOR_SOURCE
 
-        if source == 'autorad_zilles44':
+        if source == 'PET':
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                                 "MOR", "NET", "NMDA", "VAChT"]
@@ -92,10 +98,9 @@ class Receptors:
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
 
-        if source == 'PET':
-            self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                            "MOR", "NET", "NMDA", "VAChT"] 
+        if source == 'autorad_zilles44':
+            self.receptor_names = ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa/BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
+                                'a1', 'a2', '5-HT1a', '5-HT2', 'D1'] 
             self.serotonin = ['5-HT1a', '5-HT2']
             self.acetylcholine = ['m1', 'm2', 'm3', 'a4b2']
             self.noradrenaline = ['a1', 'a2']

@@ -13,15 +13,18 @@ learning tasks
 import copy
 import numpy as np
 import pandas as pd
+import nilearn.signal
 from nilearn.glm.first_level import make_first_level_design_matrix
-from parametric_modulation_functions import compute_cleaned_pmod_regs
 from scipy.stats import zscore
+from params_and_paths import Params
 import main_funcs as mf
+
+params = Params()
 
 # Define functions
 
 def zscore_regressors(dmtx):
-    """This function applies z-scoring to regressors"""
+    """Apply z-scoring to regressors"""
     cols = list(dmtx.columns)
     dmtx_z = copy.deepcopy(dmtx)  # initialise the design matrix with z-scored features
     for col in cols:
@@ -29,16 +32,41 @@ def zscore_regressors(dmtx):
             dmtx_z[col] = zscore(dmtx_z[col])
     return dmtx_z
 
+def demean(x):
+    """center regressors"""
+    return x - np.mean(x)
+
+def clean_regs(regs, tr):
+    """
+    Apply the same cleaning process to the given regressors as applied to the
+    BOLD signal, i.e. first detrending and then high-pass filtering.
+    """    
+    return nilearn.signal.clean(regs,
+        detrend=True,
+        high_pass=params.hpf, t_r=tr,
+        standardize=False
+   )
+
+def get_IO_question_estimates(events):
+    events_sorted = events.sort_values(by='onset').reset_index(drop=True)
+    stim_count = 0
+    stim_before_q_prob = []
+    for indx, row in events_sorted.iterrows():
+        if row['trial_type'] == 'stim':
+            stim_count += 1
+            last_stim_n = stim_count
+        elif row['trial_type'] == 'q_conf':
+            stim_before_q_prob.append(last_stim_n-1)
+    
+    return stim_before_q_prob
+
+
 def create_design_matrix(events,
-                        stim_q,
                         tr,
                         frame_times,
                         io_inference,
-                        db_name,
                         subject,
-                        sess,
-                        add_mvt_regs=True,
-                        add_question_regs=True):
+                        sess):
     '''
     This function creates a design matrix from the IO estimates.
     
@@ -61,7 +89,7 @@ def create_design_matrix(events,
     The rows correspond to different time frames. The columns correspond to different regressors.
     '''    
 
-    events_stim  = events[events['trial_type'] == 'stim']
+    events_stim  = events[events['trial_type'] == 'stim'].copy()
     events_stim = events_stim.sort_values('onset') 
 
     # IO regressors
@@ -70,94 +98,86 @@ def create_design_matrix(events,
                             'confidence': io_inference['confidence_pre'],
                             'predictions': io_inference['p1_mean_array'],
                             'predictability': io_inference['entropy']})
-    
+
     for io_regressor in io_regs.keys():
 
-        reg = pd.DataFrame(
-            compute_cleaned_pmod_regs(np.array(events_stim['onset']), 
-                                        np.array(events_stim['duration']),
-                                        np.array(io_regs[io_regressor]), 
-                                        frame_times,
-                                        tr),
-            columns=[io_regressor])
-        
+        events_stim['modulation'] = demean(io_regs[io_regressor])
+        reg = make_first_level_design_matrix(frame_times=frame_times, 
+                                            events=events_stim, 
+                                            drift_model = None)   
+        reg.drop(columns=['constant'], inplace=True) #we will add a stim regressor in the final design matrix 
+        reg.rename(columns={'stim': io_regressor}, inplace=True)
+        reg[io_regressor] = clean_regs(reg[io_regressor].values.reshape(-1,1), tr)
+        reg.reset_index(drop=True, inplace=True)
+
         reg_list.append(reg)
-    
-    if add_mvt_regs: 
-        # Get the motion regressors and events for the current session
-        mvts = mf.get_mvt_reg(db_name, subject, sess)
-        reg_list.append(mvts)
-    
-    if add_question_regs:
 
-        events_qprob = events[events['trial_type'] == 'q_prob']
-        events_qconf = events[events['trial_type'] == 'q_conf']
+    # Get the motion regressors and events for the current session
+    mvts = mf.get_mvt_reg(params.db, subject, sess)
+    reg_list.append(mvts)
 
-        qprob_onsets = np.array(events_qprob['onset'])
-        qprob_durations = np.array(events_qprob['duration'])
-        qconf_onsets = np.array(events_qconf['onset'])
-        qconf_durations = np.array(events_qconf['duration'])
-        
-        # add the question regressors: subject's and ideal observer's confidence and p1 estimates
-        reg_sub_prob = pd.DataFrame(
-            compute_cleaned_pmod_regs(qprob_onsets, qprob_durations,
-                np.array(events_qprob['response']), frame_times, tr),
-            columns=['sub_prob'])
+    ### question regressors 
 
-        reg_sub_conf = pd.DataFrame(
-            compute_cleaned_pmod_regs(qconf_onsets, qconf_durations,
-                np.array(events_qconf['response']), frame_times, tr),
-            columns=['sub_conf'])
-        
-        if stim_q[-1] >= 420: #if the last element is 420, leave it out
-            stim_q = stim_q[:-1]
+    # add the question regressors: subject's and ideal observer's confidence and p1 estimates
 
-        # compute the probability confidence ratings of the IO
+    if params.db == 'EncodeProb':
+        events_qprob = events[events['trial_type'] == 'q_prob'].copy() #events contains the subject responses as modulation
+        events_qprob['modulation'] = demean(events_qprob['modulation'])
+        reg_sub_prob = make_first_level_design_matrix(frame_times=frame_times, 
+                                                events=events_qprob, 
+                                                drift_model = None)   
+        reg_sub_prob.drop(columns=['constant'], inplace=True)
+        reg_sub_prob.rename(columns={'q_prob': 'sub_prob'}, inplace=True)
+        reg_sub_prob['sub_prob'] = clean_regs(reg_sub_prob['sub_prob'].values.reshape(-1,1), tr)
+        reg_sub_prob.reset_index(drop=True, inplace=True)
+
+        reg_list.append(reg_sub_prob)
+
+    events_qconf = events[events['trial_type'] == 'q_conf'].copy()
+    events_qconf['modulation'] = demean(events_qconf['modulation'])
+    reg_sub_conf = make_first_level_design_matrix(frame_times=frame_times, 
+                                            events=events_qconf, 
+                                            drift_model = None)  
+    reg_sub_conf.drop(columns=['constant'], inplace=True)
+    reg_sub_conf.rename(columns={'q_conf': 'sub_conf'}, inplace=True)
+    reg_sub_conf['sub_conf'] = clean_regs(reg_sub_conf['sub_conf'].values.reshape(-1,1), tr)
+    reg_sub_conf.reset_index(drop=True, inplace=True)
+
+    reg_list.append(reg_sub_conf)
+
+    # compute the probability confidence ratings of the IO
+    stim_q = get_IO_question_estimates(events)
+
+    stim_count = events[events['trial_type'] == 'stim'].shape[0]
+    if stim_q[-1] >= stim_count: 
+        stim_q = stim_q[:-1]
+
+    if params.db == 'EncodeProb':
         io_prob_q = np.array([io_inference['p1_mean_array'][q]
                         for q in stim_q])
-        io_conf_q = np.array([-np.log(io_inference['p1_sd_array'])[q]
-                        for q in stim_q])
+        events_qprob['modulation'] = demean(io_prob_q)
+        reg_io_prob = make_first_level_design_matrix(frame_times=frame_times, 
+                                                events=events_qprob, 
+                                                drift_model = None)   
+        reg_io_prob.drop(columns=['constant'], inplace=True) 
+        reg_io_prob.rename(columns={'q_prob': 'IO_prob'}, inplace=True)
+        reg_io_prob['IO_prob'] = clean_regs(reg_io_prob['IO_prob'].values.reshape(-1,1), tr)
+        reg_io_prob.reset_index(drop=True, inplace=True)
 
-        reg_io_prob = pd.DataFrame(
-                compute_cleaned_pmod_regs(qprob_onsets, qprob_durations,
-                    io_prob_q, frame_times, tr),
-                columns=['IO_prob'])
+        reg_list.append(reg_io_prob)
 
-        reg_io_conf = pd.DataFrame(
-                compute_cleaned_pmod_regs(qconf_onsets, qconf_durations,
-                    io_conf_q, frame_times, tr),
-                columns=['IO_conf'])
+    io_conf_q = np.array([-np.log(io_inference['p1_sd_array'])[q]
+                for q in stim_q])
+    events_qconf['modulation'] = demean(io_conf_q)
+    reg_io_conf = make_first_level_design_matrix(frame_times=frame_times, 
+                                            events=events_qconf, 
+                                            drift_model = None)   
+    reg_io_conf.drop(columns=['constant'], inplace=True) 
+    reg_io_conf.rename(columns={'q_conf': 'IO_conf'}, inplace=True)
+    reg_io_conf['IO_conf'] = clean_regs(reg_io_conf['IO_conf'].values.reshape(-1,1), tr)
+    reg_io_conf.reset_index(drop=True, inplace=True)
 
-        #TODO: this has to be adapted for the different exp since not all of them contain both question
-
-        #seperate regressors for EncodeProb
-        qregs_prob = pd.concat(
-            [reg_sub_prob, reg_io_prob], axis=1)
-        
-        qregs_conf = pd.concat(
-            [reg_sub_conf, reg_io_conf], axis=1)
-
-        dmtx_tmp_qp =  make_first_level_design_matrix(
-            frame_times=frame_times,
-            events=events_qprob.drop(columns="response"), #column ist dropped just to surpress warning
-            drift_model = None,
-            add_regs=qregs_prob,
-            add_reg_names=[name for name in qregs_prob.columns])
-        dmtx_tmp_qp = dmtx_tmp_qp.drop(columns="constant") 
-        dmtx_tmp_qp.reset_index(drop=True, inplace=True)
-
-        reg_list.append(dmtx_tmp_qp)
-
-        dmtx_tmp_qc =  make_first_level_design_matrix(
-            frame_times=frame_times,
-            events=events_qconf.drop(columns="response"), #column ist dropped just to surpress warning
-            drift_model = None,
-            add_regs=qregs_conf,
-            add_reg_names=[name for name in qregs_conf.columns])
-        dmtx_tmp_qc = dmtx_tmp_qc.drop(columns="constant") 
-        dmtx_tmp_qc.reset_index(drop=True, inplace=True)
-
-        reg_list.append(dmtx_tmp_qc)
+    reg_list.append(reg_io_conf)
 
     # concat all regressors        
     all_regs = pd.concat(reg_list, axis=1)
@@ -165,7 +185,7 @@ def create_design_matrix(events,
 
     # make matrix
     dmtx = make_first_level_design_matrix(frame_times=frame_times, 
-                                            events=events_stim.drop(columns="response"), #column ist dropped just to surpress warning 
+                                            events=events.drop(columns="modulation"), #set all event regressors to 1
                                             drift_model = None,
                                             add_regs=all_regs,          
                                             add_reg_names=reg_names)

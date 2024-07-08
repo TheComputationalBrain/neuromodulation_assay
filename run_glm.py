@@ -57,7 +57,7 @@ else:
 
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
-design_dir = os.path.join(output_dir, 'designmatrix')
+design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
 if not os.path.exists(design_dir):
         os.makedirs(design_dir)
 
@@ -97,6 +97,8 @@ for sub in subjects:
         
     fmri_data = zscore(fmri_data)
 
+    design_matrix = []
+
     for s,sess in enumerate(sessions):
         #TODO. list of design matrixes and then concat at end to avoid deep copy
         #IO inference 
@@ -105,46 +107,36 @@ for sub in subjects:
                         sess=sess,
                         beh_dir=beh_dir)
         seq = sg.ConvertSequence(seq)['seq']
-        constants = mf.get_constants(data_dir=beh_dir,
-                                            sub=sub,
-                                            sess=sess)
-        options = {'p_c': constants['pJump'], 'res': params.res} 
         io_inference = iof.get_post_inference(seq=seq,
-                                                seq_type='bernoulli', #TODO add this to params
-                                                options=options)
+                                                seq_type= params.seq_type, 
+                                                options=params.io_options)
         
         #get events -> this should already work on all data bases
         events = mf.get_events(params.db, sub, sess, beh_dir) 
         #frame time 
         frame_times = fun.get_fts(params.db, sub, sess, fmri_dir, json_file_dir) 
-        #questions
-        q_list = constants['StimQ'][0] 
-        q_list = [int(q) for q in q_list]
 
         #wrapper for design matrix, uses the nilearn function within
         dmtx = create_design_matrix(events,
-                                    q_list,
                                     tr, 
                                     frame_times,
                                     io_inference,
-                                    params.db,
                                     sub,
                                     sess)
         
         # specify the session 
-        dmtx['session1'], dmtx['session2'], dmtx['session3'], dmtx['session4'] = [0, 0, 0, 0]
-        dmtx[f'session{s+1}'] = 1  
-        dmtx = dmtx.drop(columns="constant") 
-        # concatenate the sessions
-        if s == 0:
-            dmtx2 = dmtx #TODO: deep copy
-        else:
-            dmtx2 = pd.concat([dmtx2, dmtx])
+        for i in range(1, len(sessions) + 1):
+            dmtx[f'session{i}'] = 0
+        dmtx[f'session{s+1}'] = 1
+        dmtx = dmtx.drop(columns="constant")
 
-        dmtx2.reset_index(drop=True, inplace=True)
+        design_matrix.append(dmtx)
+
+    # concatenate the sessions
+    design_matrix = pd.concat(design_matrix)
 
     # z-score the design matrix (over all session at once, rather than session-wise)
-    design_matrix = zscore_regressors(dmtx2)
+    design_matrix = zscore_regressors(design_matrix)
 
     # save design matrix
     design_matrix.to_pickle(
@@ -160,14 +152,15 @@ for sub in subjects:
         plot_design_matrix(design_matrix, rescale = False, ax=ax)
         fig.suptitle(f'Regressors: Subject {sub:02d}, {params.db}', y=1.05, fontweight='bold')
         fig.savefig(fig_fpath, bbox_inches='tight', dpi=220)
+        plt.close()
 
-    # run GLM on all voxels
+    #run GLM on all voxels
     if RUN_OLS:    
         print("---- Running glm with OLS ----")
-        labels, estimates = run_glm(fmri_data, design_matrix.values, noise_model='ols', n_jobs = 10)
+        labels, estimates = run_glm(fmri_data, design_matrix.values, noise_model='ols', n_jobs = 4)
     else: 
         print("---- Running glm with autoregressive model  ----")
-        labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 10)
+        labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 4)
 
     # save results
     label_fname = f'sub-{sub:02d}_{params.db}_labels_{params.mask}.pickle'
@@ -209,6 +202,7 @@ for sub in subjects:
 
         #TODO: work with nifti file also for glm data to make it less error prone?
 
+        #if mask is schaefer compute the mean by region, as we only use this atlas for the autoradiography data that's only available in the Schaefer 100 parcelation
         if params.mask == 'schaefer':
             atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
             atlas.labels = np.insert(atlas.labels, 0, "Background")
@@ -217,3 +211,4 @@ for sub in subjects:
             with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size.pickle'), 'wb') as f:
                 pickle.dump(effects_parcel, f)
 
+s
