@@ -13,9 +13,9 @@ DB_NAME = 'PNAS' #this will have to determine all the following parameters in a 
 #mask = './masks/spm12/tpm/mask_ICV.nii'
 # MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
 # MASK_NAME = 'GrayMatter_noCereb'
-MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical; Schaefer
+MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; Schaefer
 RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44'
-PARCELATED = True
+PARCELATED = False
 #----------------------------------------------------
 
 class Params:

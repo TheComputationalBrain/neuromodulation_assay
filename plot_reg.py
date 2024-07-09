@@ -10,7 +10,6 @@ from params_and_paths import Paths, Params, Receptors
 PLOT_COEFS = True
 PLOT_DOMINANCE = False
 FROM_OLS = False
-PARCELATED = True
 
 paths = Paths()
 params = Params()
@@ -27,7 +26,7 @@ if FROM_OLS:
 else: 
     beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
-if PARCELATED:
+if params.parcelated:
     mask_comb = params.mask + '_' + params.mask_details
 else:
     mask_comb = params.mask 
@@ -35,6 +34,8 @@ else:
 output_dir = os.path.join(beta_dir, 'regressions', rec.source)
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
+
+plt.rcParams.update({'font.size': 16})
 
 if PLOT_COEFS:
     #plot regression coefficients
@@ -62,7 +63,6 @@ if PLOT_COEFS:
         #std_R2 = results_df['R2'].std()
         mean_R2_adj = results_df['adjusted_R2'].mean()
         mean_BIC = results_df['BIC'].mean()
-
 
         ##### group boxplot by neuromodulator and ex/inhb #####
         receptor_to_group = {}
@@ -111,12 +111,12 @@ if PLOT_COEFS:
             label.set_color(base_colors[group_idx])
         ax.set_xlabel('Receptor')
         ax.set_ylabel('Coef Values')
-        ax.set_title(f'{mask_comb}: regression coefficients for {y_name} (FDR corrected)')
+        ax.set_title(f'{mask_comb}: regression coefficients for {y_name} (FDR corrected) with {rec.source}', fontsize=12)
 
         # Add mean and standard deviation of R² to the plot
         textstr = f'Mean R²: {mean_R2:.2f}\nAdjusted mean R²: {mean_R2_adj:.2f}\nmean BIC: {mean_BIC:.2f}'
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=12,
+        ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=14,
                 verticalalignment='top', horizontalalignment='right', bbox=props)
         plt.tight_layout()
         plt.show()
@@ -194,7 +194,7 @@ if PLOT_DOMINANCE:
             label.set_color(base_colors[group_idx])
         ax.set_xlabel('Receptor/Transporter')
         ax.set_ylabel('contribution (%)')
-        #ax.set_title(f'{MASK_NAME}: dominance analysis for {y_name}')
+        ax.set_title(f'{mask_comb}: dominance analysis for {y_name} with {rec.source}', fontsize=12)
         plt.tight_layout()
         
         fname = f'{y_name}_{mask_comb}_dominance.png'

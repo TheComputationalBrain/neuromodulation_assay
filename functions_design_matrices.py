@@ -44,10 +44,10 @@ def clean_regs(regs, tr):
     return nilearn.signal.clean(regs,
         detrend=True,
         high_pass=params.hpf, t_r=tr,
-        standardize=False
+        standardize=True
    )
 
-def get_IO_question_estimates(events):
+def get_stimq(events):
     events_sorted = events.sort_values(by='onset').reset_index(drop=True)
     stim_count = 0
     stim_before_q_prob = []
@@ -146,7 +146,7 @@ def create_design_matrix(events,
     reg_list.append(reg_sub_conf)
 
     # compute the probability confidence ratings of the IO
-    stim_q = get_IO_question_estimates(events)
+    stim_q = get_stimq(events)
 
     stim_count = events[events['trial_type'] == 'stim'].shape[0]
     if stim_q[-1] >= stim_count: 
