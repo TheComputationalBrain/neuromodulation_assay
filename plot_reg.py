@@ -8,7 +8,7 @@ from statsmodels.stats.multitest import multipletests
 from params_and_paths import Paths, Params, Receptors
 
 PLOT_COEFS = True
-PLOT_DOMINANCE = False
+PLOT_DOMINANCE = True
 FROM_OLS = False
 
 paths = Paths()
@@ -39,8 +39,8 @@ plt.rcParams.update({'font.size': 16})
 
 if PLOT_COEFS:
     #plot regression coefficients
-    for y_name in params.io_regs:
-        fname = f'{y_name}_{mask_comb}_regression_results_bysubject_all.csv'
+    for latent_var in params.latent_vars:
+        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
         results_df = pd.read_csv(os.path.join(output_dir, fname))
 
         #t-test
@@ -111,7 +111,7 @@ if PLOT_COEFS:
             label.set_color(base_colors[group_idx])
         ax.set_xlabel('Receptor')
         ax.set_ylabel('Coef Values')
-        ax.set_title(f'{mask_comb}: regression coefficients for {y_name} (FDR corrected) with {rec.source}', fontsize=12)
+        ax.set_title(f'{mask_comb}: regression coefficients for {latent_var} (FDR corrected) with {rec.source}', fontsize=12)
 
         # Add mean and standard deviation of R² to the plot
         textstr = f'Mean R²: {mean_R2:.2f}\nAdjusted mean R²: {mean_R2_adj:.2f}\nmean BIC: {mean_BIC:.2f}'
@@ -121,7 +121,7 @@ if PLOT_COEFS:
         plt.tight_layout()
         plt.show()
         
-        fname = f'{y_name}_{mask_comb}_all_reg_coef.png'
+        fname = f'{latent_var}_{mask_comb}_all_reg_coef.png'
         fig_dir = os.path.join(output_dir, 'plots')
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)
@@ -131,12 +131,12 @@ if PLOT_COEFS:
 #plot dominance analysis 
 
 if PLOT_DOMINANCE:
-    for y_name in params.io_regs:
+    for latent_var in params.latent_vars:
 
         try:
-            results_df = pd.read_pickle(os.path.join(output_dir, f'{y_name}_{mask_comb}_dominance_allsubj.pickle'))
+            results_df = pd.read_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj.pickle'))
         except FileNotFoundError:
-            print(f"File not found for {y_name}, skipping...") #for now I only have the dominance data (computationally intensive) for surprise and confidence 
+            print(f"File not found for {latent_var}, skipping...") #for now I only have the dominance data (computationally intensive) for surprise and confidence 
             continue
 
         receptor_to_group = {}
@@ -194,10 +194,10 @@ if PLOT_DOMINANCE:
             label.set_color(base_colors[group_idx])
         ax.set_xlabel('Receptor/Transporter')
         ax.set_ylabel('contribution (%)')
-        ax.set_title(f'{mask_comb}: dominance analysis for {y_name} with {rec.source}', fontsize=12)
+        ax.set_title(f'{mask_comb}: dominance analysis for {latent_var} with {rec.source}', fontsize=12)
         plt.tight_layout()
         
-        fname = f'{y_name}_{mask_comb}_dominance.png'
+        fname = f'{latent_var}_{mask_comb}_dominance.png'
         fig_dir = os.path.join(output_dir, 'plots')
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)

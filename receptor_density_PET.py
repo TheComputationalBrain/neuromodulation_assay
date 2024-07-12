@@ -24,7 +24,9 @@ from nilearn import image, plotting
 from params_and_paths import Paths, Params
 
 
-PLOT_RECEPTORS=True
+PLOT_RECEPTORS=False
+PLOT_RECEPTORS_INFLATED=True
+
 
 paths = Paths()
 params = Params()
@@ -130,18 +132,12 @@ else:
 
 
 #### plotting   
-if parcelated:
-    plot_path = os.path.join(output_dir, params.mask_details,'figures') 
-    if not os.path.exists(plot_path):
-            os.makedirs(plot_path) 
-else:
-    plot_path = os.path.join(output_dir,'figures') 
-    if not os.path.exists(plot_path):
-            os.makedirs(plot_path)
-
 #plot surface maps 
 if PLOT_RECEPTORS:
     if parcelated:
+        plot_path = os.path.join(output_dir, params.mask_details,'figures') 
+        if not os.path.exists(plot_path):
+                os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
 
             data = masker.inverse_transform(receptor_data[:, indx])
@@ -151,7 +147,10 @@ if PLOT_RECEPTORS:
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
     else:
-         for indx,receptor in enumerate(receptor_names):
+        plot_path = os.path.join(output_dir,'figures') 
+        if not os.path.exists(plot_path):
+                os.makedirs(plot_path)
+        for indx,receptor in enumerate(receptor_names):
 
             data = masker.inverse_transform(receptor_data[:, indx])
             plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img,
@@ -160,6 +159,30 @@ if PLOT_RECEPTORS:
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
 
+if PLOT_RECEPTORS_INFLATED:
+    if parcelated:
+        plot_path = os.path.join(output_dir, params.mask_details,'figures_inflated') 
+        if not os.path.exists(plot_path):
+                os.makedirs(plot_path) 
+        for indx,receptor in enumerate(receptor_names):
+
+            data = masker.inverse_transform(receptor_data[:, indx])
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img, bg_on_data=True,
+                                            hemispheres=['left', 'right'], views=['lateral', 'medial'],
+                                            title=receptor, colorbar=True, cmap = 'plasma',inflate=False)
+            fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+            plt.savefig(os.path.join(plot_path, fig_fname))
+    else:
+        plot_path = os.path.join(output_dir,'figures_inflated') 
+        if not os.path.exists(plot_path):
+                os.makedirs(plot_path) 
+        for indx,receptor in enumerate(receptor_names):
+            data = masker.inverse_transform(receptor_data[:, indx])
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img,
+                                            hemispheres=['left', 'right'], views=['lateral', 'medial'],
+                                            title=receptor, colorbar=True, cmap = 'plasma',inflate=False)
+            fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+            plt.savefig(os.path.join(plot_path, fig_fname))
 
 #### correlation matrix
 serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]

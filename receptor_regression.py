@@ -29,9 +29,9 @@ from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
 RUN_REGRESSION = True
-RUN_DOMINANCE = False
+RUN_DOMINANCE = True
 FROM_OLS = False
-NUM_WORKERS = 10  # Set an appropriate number of workers to run dominance code in parallel
+NUM_WORKERS = 13  # Set an appropriate number of workers to run dominance code in parallel
 
 paths = Paths()
 params = Params()
@@ -52,20 +52,20 @@ if params.parcelated:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
     mask_comb = params.mask + '_' + params.mask_details 
-    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
+    receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
 
 else:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
     output_dir = os.path.join(beta_dir, 'regressions', 'PET')
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
-    X_data = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
+    receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
     mask_comb = params.mask 
 
 #TDODO: run on just one hemisphere instead
 if rec.source == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
-    X_data = np.concatenate((X_data, X_data))
+    receptor_density = np.concatenate((receptor_density, receptor_density))
 
 print(f'------- running regressions with {rec.source} as receptor density -------')
 
@@ -77,21 +77,21 @@ if RUN_REGRESSION:
         bic = n * log(mse) + num_params * log(n)
         return bic
 
-    for y_name in params.io_regs:
+    for latent_var in params.latent_vars:
         results_df = pd.DataFrame(columns=columns)
 
         for sub in subjects: 
             
-            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
+            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
 
             if params.parcelated:
-                non_nan_region = ~np.isnan(X_data).any(axis=1)
+                non_nan_region = ~np.isnan(receptor_density).any(axis=1)
                 non_nan_indices = np.where(non_nan_region)[0]
-                X = X_data[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+                X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
                 y = y_data[non_nan_indices]
             else:
                 non_nan_indices = ~np.isnan(y_data)
-                X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+                X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
                 y = y_data[non_nan_indices]
 
             lin_reg = LinearRegression()
@@ -115,38 +115,38 @@ if RUN_REGRESSION:
             results = pd.DataFrame([np.append(coefs, [r_squared, adjusted_r_squared, bic])], columns = results_df.columns)
             results_df = pd.concat([results_df,results], ignore_index=True)
 
-        fname = f'{y_name}_{mask_comb}_regression_results_bysubject_all.csv'
+        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
         results_df.to_csv(os.path.join(output_dir, fname), index=False)  
 
 
 if RUN_DOMINANCE:
-    def process_subject(sub, y_name):
+    def process_subject(sub, latent_var):
         print(f"--- dominance analysis for subject {sub} ----")
-        y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{y_name}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
+        y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
         if params.parcelated:
-            non_nan_region = ~np.isnan(X_data).any(axis=1)
+            non_nan_region = ~np.isnan(receptor_density).any(axis=1)
             non_nan_indices = np.where(non_nan_region)[0]
-            X = X_data[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+            X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
             y = y_data[non_nan_indices]
         else:
             non_nan_indices = ~np.isnan(y_data)
-            X = X_data[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+            X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
             y = y_data[non_nan_indices]
         m = dominance_stats(X, y)
-        with open(os.path.join(output_dir, f'{y_name}_{params.mask}_dominance_sub-{sub:02d}.pickle'), 'wb') as f:
+        with open(os.path.join(output_dir, f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}.pickle'), 'wb') as f:
             pickle.dump(m, f)
         total_dominance_array = m["total_dominance"]
         results = pd.DataFrame([total_dominance_array], columns=rec.receptor_names)
         return results
 
-    for y_name in params.io_regs:
-        print(f"--- dominance analysis for {y_name} ----")
+    for latent_var in params.latent_vars:
+        print(f"--- dominance analysis for {latent_var} ----")
         results_df = pd.DataFrame(columns=rec.receptor_names)
         with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-            futures = [executor.submit(process_subject, sub, y_name) for sub in subjects]
+            futures = [executor.submit(process_subject, sub, latent_var) for sub in subjects]
             for future in futures:
                 results = future.result()
                 results_df = pd.concat([results_df, results], ignore_index=True)
 
         # Save data
-        results_df.to_pickle(os.path.join(output_dir, f'{y_name}_{mask_comb}_dominance_allsubj.pickle'))
+        results_df.to_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj.pickle'))

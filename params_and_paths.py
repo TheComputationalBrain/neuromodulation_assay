@@ -8,35 +8,37 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'PNAS' #this will have to determine all the following parameters in a flexible script
+DB_NAME = 'EncodeProb' #this will have to determine all the following parameters in a flexible script
 # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
-#mask = './masks/spm12/tpm/mask_ICV.nii'
 # MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
 # MASK_NAME = 'GrayMatter_noCereb'
-MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; Schaefer
+MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer
 RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44'
-PARCELATED = False
-#----------------------------------------------------
+#---------------------------------------------------
 
 class Params:
-    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcelated = PARCELATED):
+    def __init__(self, db=DB_NAME, mask = MASK_NAME):
         self.db = db
         self.mask = mask
-        self.parcelated = parcelated
+
+        if mask == 'schaefer':
+            self.parcelated = True
+        else:
+            self.parcelated = False
 
         self.hpf = 1/128
-        self.smoothing_fwhm = None
         self.hrf = 'spm'
 
         if db != 'Explore':
             self.io_options = {'p_c': 1/75, 'resol': 20} 
-        
         if db not in ['Explore', 'PNAS']:
             self.seq_type = 'bernoulli'
+            self.smoothing_fwhm = None #no smoothing necessary because of 7T fMRI
         elif db == 'PNAS':
             self.seq_type = 'transition'
+            self.smoothing_fwhm = 5
 
-        self.io_regs = ['surprise', 'confidence', 'predictability', 'predictions']
+        self.latent_vars = ['surprise', 'confidence', 'predictability', 'predictions']
 
         #participants to ignore and session deviations
         if db == 'NAConf':

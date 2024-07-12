@@ -44,6 +44,7 @@ def get_masker(tr, smoothing_fwhm):
         smoothing_fwhm=smoothing_fwhm,
         t_r=tr,
     )
+    
     return masker
 
 def get_tr(db, sub, sess, data_dir):
@@ -105,7 +106,7 @@ def get_fts(db, sub, sess, fmri_dir, json_dir):
 
     n_scans = fetch_n_scans(sessfiles[0]) 
     tr = get_tr(db, sub, sess, json_dir)
-    frame_times = (np.arange(n_scans)*tr).flatten() #?n starts with 0 - could be tr instead: np.cumsum([tr]* n_scans)
+    frame_times = (np.arange(n_scans)*tr).flatten() #?n starts with 0 because of slice time correction to first slide- could be tr instead: np.cumsum([tr]* n_scans)
 
     if db == 'EncodeProb':
         frame_times = frame_times + tr/2 #sllice timing correction was to middle slice 

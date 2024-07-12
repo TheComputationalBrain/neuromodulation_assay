@@ -19,6 +19,10 @@ from params_and_paths import Params, Paths
 params = Params()
 paths = Paths()
 
+def demean(x):
+    """center regressors"""
+    return x - np.mean(x)
+
 def get_json_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
    
     json_files_dir = {'NAConf': op.join(root_dir, data_dir, 'bids_dataset'),
@@ -248,13 +252,17 @@ def get_events(db, sub, sess, data_dir):
     if db == 'PNAS': 
 
         data = get_data_PNAS(sub, sess, data_dir)
-        onsets = np.hstack((data['stim_onset'], data['question_onset']))
+        onsets = np.hstack((data['stim_onset'], data['question_onset'], data['question_onset'],data['question_onset']))
         duration = np.hstack(([0] * data['stim_onset'],
-                            data['reaction_times']))
+                            data['reaction_times'], data['reaction_times'], data['reaction_times']))
         trial_type = np.hstack((['stim']*len(data['stim_onset']),
-                                ['q_conf']*len(data['question_onset'])))
-        modulation = np.hstack(([0] * data['stim_onset'], 
-                            data['subj_confidence']))  
+                                ['q_conf']*len(data['question_onset']),
+                                ['sub_conf']*len(data['question_onset']),
+                                ['io_conf']*len(data['question_onset'])))
+        modulation = np.hstack(([1] * data['stim_onset'],
+                                [1] * data['question_onset'], 
+                                demean(data['subj_confidence']),
+                                [0] * data['question_onset'])) #IO modulation will be added in design matrix function
         
 
     if db != 'PNAS':
@@ -274,9 +282,8 @@ def get_events(db, sub, sess, data_dir):
 
                 on_q_prob = convert_to_secs(data,'t_question_prob_on')
                 on_q_conf = convert_to_secs(data,'t_question_conf_on')
-
-                rt = np.append(data['estim_rt'].dropna().values/1000,
-                            data['conf_rt'].dropna().values/1000)
+                rt_prob = data['estim_rt'].dropna().values/1000
+                rt_conf = data['conf_rt'].dropna().values/1000
 
                 # on_resp_prob = convert_to_secs(data,'t_rating_prob')
                 # on_resp_conf = convert_to_secs(data,'t_rating_conf')
@@ -289,13 +296,23 @@ def get_events(db, sub, sess, data_dir):
                 sub_conf = convert_to_secs(data, 'conf_position')
                 sub_conf = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
 
-                onsets = np.hstack((on_stim, on_q_prob, on_q_conf))
+                onsets = np.hstack((on_stim, on_q_prob, on_q_prob, on_q_prob, on_q_conf, on_q_conf, on_q_conf))
                 trial_type = np.hstack((['stim'] * len(on_stim),
                                         ['q_prob'] * len(on_q_prob),
-                                        ['q_conf'] * len(on_q_conf)))
-                duration = np.hstack((np.zeros_like(on_stim),
-                                    rt))
-                modulation = np.hstack((np.zeros_like(on_stim), sub_prob, sub_conf)) 
+                                        ['sub_prob'] * len(on_q_prob),
+                                        ['io_prob'] * len(on_q_prob),
+                                        ['q_conf'] * len(on_q_conf),
+                                        ['sub_conf'] * len(on_q_conf),
+                                        ['io_conf'] * len(on_q_conf)))
+                duration = np.hstack(([0] * on_stim,
+                                    rt_prob, rt_prob, rt_prob, rt_conf, rt_conf, rt_conf))
+                modulation = np.hstack(([1] * on_stim, 
+                                        [1] * on_q_prob,
+                                        demean(sub_prob), 
+                                        [0] * on_q_prob, #IO modulation will be added in design matrix function
+                                        [1] * on_q_conf,
+                                        demean(sub_conf),
+                                        [0] * on_q_conf)) 
                 
             if db == 'NAConf':
                 filespath = os.path.join(data_dir,
