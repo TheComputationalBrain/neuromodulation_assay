@@ -10,6 +10,7 @@ import glob
 import numpy as np
 import os.path as op
 import nibabel as nib
+import abagen
 from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_2018
 from nilearn import image
 from nilearn.input_data import MultiNiftiMasker 
@@ -30,11 +31,18 @@ def get_masker(tr, smoothing_fwhm):
     elif params.mask == 'schaefer':
         atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2)
         atlas.labels = np.insert(atlas.labels, 0, "Background")
+    elif params.mask == 'desikan':
+        atlas = abagen.fetch_desikan_killiany() 
     else:
         raise ValueError("Unknown atlas!")
     
-    atlas_img = image.load_img(atlas.maps)
-    mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
+    if params.mask != 'desikan':
+        atlas_img = image.load_img(atlas.maps)
+        mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
+    else:
+        atlas_img = image.load_img(atlas['image'])
+        mask = ~np.isin(image.get_data(atlas_img), [0,35,36,37,38,39,40,41,76,77,78,79,80,81,82,83])
+        mask_img = image.new_img_like(atlas_img, mask) #only cortical structures 
 
     masker = MultiNiftiMasker(
         mask_img=mask_img,

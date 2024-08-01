@@ -74,7 +74,7 @@ if FROM_BETA:
             expl_variance = np.mean(all_rsquared)
             outfile.write(f'{latent_var}: {expl_variance}\n')
 
-        outfile.write('\n\n\n\n')
+        outfile.write('\n\n')
 
 
 if FROM_RECEPTOR:
@@ -133,7 +133,7 @@ if FROM_RECEPTOR:
             average_r2 = np.mean(r2_scores)
             outfile.write(f'{latent_var}: {average_r2}\n')
 
-        outfile.write('\n\n\n\n')
+        outfile.write('\n\n')
 
     
 

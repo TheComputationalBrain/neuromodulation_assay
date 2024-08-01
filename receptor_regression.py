@@ -52,8 +52,11 @@ if params.parcelated:
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
     mask_comb = params.mask + '_' + params.mask_details 
-    receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
-
+    if rec.source !='AHBA':
+        receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
+    else:
+        gene_expression = pd.load(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
+        receptor_density = zscore(gene_expression.to_numpy(), nan_policy='omit')
 else:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
     output_dir = os.path.join(beta_dir, 'regressions', 'PET')
@@ -71,7 +74,7 @@ print(f'------- running regressions with {rec.source} as receptor density ------
 
 if RUN_REGRESSION:
     #sklearn regression
-    columns = np.concatenate((rec.receptor_names, np.array(["R2", "adjusted_R2", "BIC"])))
+    columns = rec.receptor_names +["R2", "adjusted_R2", "BIC"]
 
     def calculate_bic(n, mse, num_params):
         bic = n * log(mse) + num_params * log(n)
@@ -117,7 +120,6 @@ if RUN_REGRESSION:
 
         fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
         results_df.to_csv(os.path.join(output_dir, fname), index=False)  
-
 
 if RUN_DOMINANCE:
     def process_subject(sub, latent_var):

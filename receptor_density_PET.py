@@ -37,26 +37,28 @@ output_dir = os.path.join(paths.home_dir,'receptors', 'PET')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
-#TODO: no need for masking if data will be averaged within region anyway?
 if params.mask == 'harvard_oxford_cortical':
     atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
-    parcelated = False
     atlas_img = image.load_img(atlas.maps)
     mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #all cortical areas
     masker = NiftiMasker(mask_img=mask_img)
 elif params.mask == 'harvard_oxford_subcortical':
     atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
-    parcelated = False
     atlas_img = image.load_img(atlas.maps)
     mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #all subcortical areas
     masker = NiftiMasker(mask_img=mask_img)
-elif params.mask == 'schaefer':
-    parcelated = True
-    atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_detail), resolution_mm=2) 
+elif (params.mask == 'schaefer') & params.parcelated:
+    atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
     atlas.labels = np.insert(atlas.labels, 0, "Background")
     masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
     atlas_img = image.load_img(atlas.maps)
-    mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #remove evrything labeled as background
+    mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #remove everything labeled as background
+elif (params.mask == 'schaefer'):
+    atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
+    atlas.labels = np.insert(atlas.labels, 0, "Background")
+    atlas_img = image.load_img(atlas.maps)
+    mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #remove everything labeled as background
+    masker = NiftiMasker(mask_img=mask_img)
 else:
     raise ValueError("Unknown atlas!")
 
@@ -121,7 +123,7 @@ receptor_data[:, 14] = (zscore(r[:, 16])*22 + zscore(r[:, 17])*28 + zscore(r[:, 
 receptor_data[:, 18] = (zscore(r[:, 22])*4 + zscore(r[:, 23])*5 + zscore(r[:, 24])*18) / (4+5+18)
 
 #save receptor density maps 
-if parcelated:
+if params.parcelated:
      with open(os.path.join(output_dir, 
                        f'receptor_density_{params.mask}_{params.mask_details}.pickle'), 'wb') as f:
             pickle.dump(receptor_data, f)
@@ -134,16 +136,17 @@ else:
 #### plotting   
 #plot surface maps 
 if PLOT_RECEPTORS:
-    if parcelated:
+    if params.parcelated:
         plot_path = os.path.join(output_dir, params.mask_details,'figures') 
         if not os.path.exists(plot_path):
                 os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
 
             data = masker.inverse_transform(receptor_data[:, indx])
-            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img, bg_on_data=True,
+            mask_img = image.new_img_like(data, image.get_data(data) != 0) 
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', mask_img=mask_img, bg_on_data=True,
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'],
-                                            title=receptor, colorbar=True, cmap = 'plasma')
+                                            title=receptor, colorbar=True, cmap = 'plasma', )
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
     else:
@@ -151,25 +154,25 @@ if PLOT_RECEPTORS:
         if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
         for indx,receptor in enumerate(receptor_names):
-
-            data = masker.inverse_transform(receptor_data[:, indx])
-            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img,
+            data = masker.inverse_transform(receptor_data[:, indx])#remove everything that's 
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', threshold=1e-50,
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'],
-                                            title=receptor, colorbar=True, cmap = 'plasma')
+                                            title=receptor, colorbar=True, cmap = 'plasma', symmetric_cbar=False)
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
 
 if PLOT_RECEPTORS_INFLATED:
-    if parcelated:
+    if params.parcelated:
         plot_path = os.path.join(output_dir, params.mask_details,'figures_inflated') 
         if not os.path.exists(plot_path):
                 os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
 
             data = masker.inverse_transform(receptor_data[:, indx])
-            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img, bg_on_data=True,
-                                            hemispheres=['left', 'right'], views=['lateral', 'medial'],
-                                            title=receptor, colorbar=True, cmap = 'plasma',inflate=False)
+            mask_img = image.new_img_like(data, image.get_data(data) != 0) 
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', mask_img=mask_img, 
+                                            hemispheres=['left'], views=['lateral', 'medial'],
+                                            title=receptor, colorbar=True, cmap = 'plasma',inflate=True, symmetric_cbar=False)
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
     else:
@@ -178,9 +181,9 @@ if PLOT_RECEPTORS_INFLATED:
                 os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
             data = masker.inverse_transform(receptor_data[:, indx])
-            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img,
-                                            hemispheres=['left', 'right'], views=['lateral', 'medial'],
-                                            title=receptor, colorbar=True, cmap = 'plasma',inflate=False)
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', 
+                                            hemispheres=['left'], views=['lateral', 'medial'], threshold=1e-50,
+                                            title=receptor, colorbar=True, cmap = 'plasma',inflate=True, symmetric_cbar=False)
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
 
@@ -189,7 +192,7 @@ serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
 acetylcholine = ["A4B2", "M1", "VAChT"]
 noradrenaline = ["NET"]
 opioid = ["MOR"]
-glutamate = ["mGluR5"]
+glutamate = ["mGluR5", "NMDA"]
 histamine = ["H3"]
 gaba = ["GABAa"]
 dopamine = ["D1", "D2", "DAT"]
@@ -213,7 +216,7 @@ for group in receptor_groups:
     plt.gca().add_patch(Rectangle((current_pos, current_pos), group_size, group_size, fill=False, edgecolor='black', lw=2))
     current_pos += group_size
 
-if parcelated:
+if params.parcelated:
     fig_fname = f'receptor_corr_matrix_{params.mask}_{params.mask_details}.png'
     plt.savefig(os.path.join(plot_path, fig_fname))
 else:

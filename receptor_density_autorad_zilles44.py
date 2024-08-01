@@ -17,19 +17,28 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from matplotlib.patches import Rectangle
 from matplotlib.colors import ListedColormap
-from params_and_paths import Paths 
+from params_and_paths import Paths, Params, Receptors
+from nilearn.datasets import fetch_atlas_schaefer_2018
+from nilearn.input_data import NiftiLabelsMasker
+from nilearn import image, plotting
 
 paths = Paths()
+params = Params()
+rec = Receptors()
 
+PLOT_RECEPTORS = True
+PLOT_RECEPTORS_INFLATED = False
 
 receptor_path = '/home/ah278717/hansen_receptors/data/autoradiography/' #path to downloaded data from Hansen et al. (2022)
 output_dir = os.path.join(paths.home_dir,'receptors', 'autorad_zilles44')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
+atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
+atlas.labels = np.insert(atlas.labels, 0, "Background")
+masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
+masker.fit()
 
 autorad_zilles44 = np.load(os.path.join(receptor_path, 'ReceptData.npy'))
-receptor_names = np.load(os.path.join(receptor_path, 'ReceptorNames.npy'))
-
 
 autorad_schaefer100 = np.zeros((50, autorad_zilles44.shape[1]))
 # mapping between zilles and schaefer (done manually)
@@ -106,7 +115,7 @@ serotonin = ['5-HT1a', '5-HT2']
 acetylcholine = ['m1', 'm2', 'm3', 'a4b2']
 noradrenaline = ['a1', 'a2']
 glutamate = ['AMPA', 'NMDA', 'kainate']
-gaba = ['GABAa', 'GABAa/BZ', 'GABAb']
+gaba = ['GABAa', 'GABAa-BZ', 'GABAb']
 dopamine = ['D1']
 receptor_groups = [serotonin, acetylcholine, noradrenaline, glutamate, gaba, dopamine]
 
@@ -115,7 +124,7 @@ cmap_div = ListedColormap(cmap)
 
 #receptor_data = np.load(os.path.join(output_dir, f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True)
 ordered_receptors = [receptor for group in receptor_groups for receptor in group]
-df = pd.DataFrame(zscore(autorad_schaefer100, nan_policy='omit'), columns=receptor_names)
+df = pd.DataFrame(zscore(autorad_schaefer100, nan_policy='omit'), columns=rec.receptor_names)
 df = df[ordered_receptors]
 corr_matrix = df.corr()
 plt.figure(figsize=(10, 8))
@@ -129,6 +138,34 @@ for group in receptor_groups:
 
 fig_fname = f'receptor_corr_matrix_schaefer_100.png'
 plt.savefig(os.path.join(plot_path, fig_fname))
+
+#plot maps left hemisphere only 
+autorad_schaefer100 = np.concatenate((autorad_schaefer100,autorad_schaefer100))
+if PLOT_RECEPTORS:
+    plot_path = os.path.join(output_dir, params.mask_details,'figures') 
+    if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+    for indx,receptor in enumerate(rec.receptor_names):
+        data = masker.inverse_transform(autorad_schaefer100[:, indx])
+        # mask_img = image.new_img_like(data, (image.get_data(data) != 0) & (~np.isnan(image.get_data(data)))) #remove everything that's zero or nan
+        plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', threshold=1e-50, 
+                                        hemispheres=['left'], views=['lateral', 'medial'],
+                                        title=receptor, colorbar=True, cmap = 'plasma', symmetric_cbar=False)
+        fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+        plt.savefig(os.path.join(plot_path, fig_fname))
+
+if PLOT_RECEPTORS_INFLATED:
+    plot_path = os.path.join(output_dir, params.mask_details,'figures_inflated') 
+    if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+    for indx,receptor in enumerate(rec.receptor_names):
+        data = masker.inverse_transform(autorad_schaefer100[:, indx])
+        # mask_img = image.new_img_like(data, (image.get_data(data) != 0) & (~np.isnan(image.get_data(data)))) #remove everything that's zero or nan
+        plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', threshold=1e-50, 
+                                        hemispheres=['left'], views=['lateral', 'medial'],
+                                        title=receptor, colorbar=True, cmap = 'plasma', inflate=True, symmetric_cbar=False)
+        fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+        plt.savefig(os.path.join(plot_path, fig_fname))
 
 
 

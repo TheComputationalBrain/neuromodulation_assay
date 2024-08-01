@@ -19,6 +19,8 @@ if rec.source == 'PET':
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
 elif rec.source  == 'autorad_zilles44':
     receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]
+elif rec.source == 'AHBA':
+    receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.dopamine]
 receptor_class = [rec.exc,rec.inh]
 
 if FROM_OLS:

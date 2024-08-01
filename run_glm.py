@@ -24,6 +24,7 @@ from nilearn.plotting import plot_design_matrix
 from nilearn.glm.contrasts import compute_contrast
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from nilearn.input_data import NiftiLabelsMasker
+from abagen import fetch_desikan_killiany
 from scipy.stats import zscore
 from functions_design_matrices import create_design_matrix, zscore_regressors
 import fmri_funcs as fun
@@ -203,12 +204,16 @@ for sub in subjects:
         #TODO: work with nifti file also for glm data to make it less error prone?
 
         #if mask is schaefer compute the mean by region, as we only use this atlas for the autoradiography data that's only available in the Schaefer 100 parcelation
-        if params.mask == 'schaefer':
+        if (params.mask == 'schaefer') & params.parcelated:
             atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
             atlas.labels = np.insert(atlas.labels, 0, "Background")
             masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
             effects_parcel = masker.fit_transform(effect_size)
             with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size.pickle'), 'wb') as f:
                 pickle.dump(effects_parcel, f)
-
-s
+        elif (params.mask == 'desikan') & params.parcelated:
+            atlas = fetch_desikan_killiany() 
+            masker = NiftiLabelsMasker(labels_img=atlas['image']) #parcelate
+            effects_parcel = masker.fit_transform(effect_size)
+            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size.pickle'), 'wb') as f:
+                pickle.dump(effects_parcel, f)

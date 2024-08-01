@@ -1,4 +1,5 @@
 import os
+#set threads to 1 before importing numpy to prevent unwanted behavior when running on the server
 os.environ["OMP_NUM_THREADS"] = "1" 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"  
 os.environ["MKL_NUM_THREADS"] = "1" 
@@ -7,6 +8,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 from itertools import combinations
 from sklearn.linear_model import LinearRegression
+
 
 # this helps to remove one element from a tuple
 def remove_ret(tpl, elem):
@@ -20,6 +22,14 @@ def dominance_stats(X, y):
 
     see also: https://github.com/dominance-analysis/dominance-analysis
 
+    Parameters
+    ----------
+     -X: ((N, M) array_like) – Input data
+     -y ((N,) array_like) – Target values
+
+    Returns
+    -------
+    -model_metrics (dict) – The dominance metrics, containing individual_dominance, partial_dominance, total_dominance, and full_r_sq
     """
     # generate all predictor combinations in list 
     n_predictor = X.shape[-1]

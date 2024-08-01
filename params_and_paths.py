@@ -12,19 +12,17 @@ DB_NAME = 'EncodeProb' #this will have to determine all the following parameters
 # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 # MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
 # MASK_NAME = 'GrayMatter_noCereb'
-MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer
-RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44'
+MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
+PARCELATED = False
+RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44', 'AHBA'
 #---------------------------------------------------
 
 class Params:
-    def __init__(self, db=DB_NAME, mask = MASK_NAME):
+    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcel = PARCELATED):
         self.db = db
         self.mask = mask
 
-        if mask == 'schaefer':
-            self.parcelated = True
-        else:
-            self.parcelated = False
+        self.parcelated = PARCELATED
 
         self.hpf = 1/128
         self.hrf = 'spm'
@@ -62,6 +60,8 @@ class Params:
         #mask details
         if mask == 'schaefer':
             self.mask_details = '100' #number of regions
+        elif mask == 'desikan':
+            self.mask_details = '68'
 
 
 class Paths:
@@ -92,7 +92,7 @@ class Receptors:
             self.acetylcholine = ["A4B2", "M1", "VAChT"]
             self.noradrenaline = ["NET"]
             self.opioid = ["MOR"]
-            self.glutamate = ["mGluR5"]
+            self.glutamate = ["mGluR5", 'NMDA']
             self.histamine = ["H3"]
             self.gaba = ["GABAa"]
             self.dopamine = ["D1", "D2", "DAT"]
@@ -101,14 +101,27 @@ class Receptors:
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
 
         if source == 'autorad_zilles44':
-            self.receptor_names = ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa/BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
+            self.receptor_names = ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa-BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
                                 'a1', 'a2', '5-HT1a', '5-HT2', 'D1'] 
             self.serotonin = ['5-HT1a', '5-HT2']
             self.acetylcholine = ['m1', 'm2', 'm3', 'a4b2']
             self.noradrenaline = ['a1', 'a2']
             self.glutamate = ['AMPA', 'NMDA', 'kainate']
-            self.gaba = ['GABAa', 'GABAa/BZ', 'GABAb']
+            self.gaba = ['GABAa', 'GABAa-BZ', 'GABAb']
             self.dopamine = ['D1']
             self.exc = ['AMPA', 'NMDA', 'kainate', 'm1', 'm3', 'a4b2', 'a1', '5-HT2', 'D1']
-            self.inh = ['GABAa', 'GABAa/BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
+            self.inh = ['GABAa', 'GABAa-BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
+
+        if source == 'desikan':
+            self.receptor_names = ['ADRA1A', 'ADRA1B', 'ADRA1D', 'ADRA2A', 'ADRA2C', 'ADRB1', 'ADRB2',
+                                   'HTR1A', 'HTR1E', 'HTR2A', 'HTR3', 'HTR4','HTR7',
+                                   'CHRM1', 'CHRM2', 'CHRM4', 'CHRNB2',
+                                   'DRD1', 'DRD2', 'DRD4']
+            self.noradrenaline = ['ADRA1A', 'ADRA1B', 'ADRA1D', 'ADRA2A', 'ADRA2C', 'ADRB1', 'ADRB2']
+            self.serotonin = ['HTR1A', 'HTR1E', 'HTR2A', 'HTR3', 'HTR4','HTR7'] 
+            self.acetylcholine = ['CHRM1', 'CHRM2', 'CHRM4', 'CHRNB2']
+            self.dopamine = ['DRD1', 'DRD2', 'DRD4']
+            self.exc = ['ADRA1A', 'ADRA1B', 'ADRA1D','ADRB1', 'ADRB2','HTR2A','HTR3','HTR4','HTR7','CHRM1','CHRNB2','DRD1']
+            self.inh = ['ADRA2A', 'ADRA2C','HTR1A', 'HTR1E','CHRM2', 'CHRM4','DRD2', 'DRD4']
+
 
