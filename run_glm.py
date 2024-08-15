@@ -37,7 +37,7 @@ from params_and_paths import Params, Paths
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
 RUN_OLS = False
-SAVE_DMTX_PLOT = False
+SAVE_DMTX_PLOT = True
 
 paths = Paths()
 params = Params()
@@ -51,19 +51,24 @@ fmri_dir = mf.get_fmri_dir(params.db)
 fmri_arr_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level',f'data_arrays_whole_brain_{params.smoothing_fwhm}') 
 if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
-if RUN_OLS:
-    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
-else:
-    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
+if params.update:
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+    design_dir = os.path.join(output_dir, 'designmatrix_update')
+else:
+    if RUN_OLS:
+        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
+    else:
+        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+    design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
+    
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
-design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
 if not os.path.exists(design_dir):
         os.makedirs(design_dir)
 
 subjects = mf.get_subjects(params.db, fmri_dir)
-subjects = [subj for subj in subjects if subj not in params.ignore]
+subjects = [subj for subj in subjects if subj not in params.ignore] #for Explore the sibjects are already removed in the fMRI data folder
 
 for sub in subjects:
     
@@ -101,19 +106,22 @@ for sub in subjects:
     design_matrix = []
 
     for s,sess in enumerate(sessions):
-        #TODO. list of design matrixes and then concat at end to avoid deep copy
+        #TODO: list of design matrixes and then concat at end to avoid deep copy
         #IO inference 
         seq = mf.get_seq(db=params.db,
                         sub=sub,
                         sess=sess,
                         beh_dir=beh_dir)
         seq = sg.ConvertSequence(seq)['seq']
-        io_inference = iof.get_post_inference(seq=seq,
-                                                seq_type= params.seq_type, 
-                                                options=params.io_options)
-        
-        #get events -> this should already work on all data bases
-        events = mf.get_events(params.db, sub, sess, beh_dir) 
+
+        if params.db == 'Explore':
+            events = mf.get_events(params.db, sub, sess)
+        else:
+            io_inference = iof.get_post_inference(seq=seq,
+                                                    seq_type= params.seq_type, 
+                                                    options=params.io_options)
+            events = mf.get_events(params.db, sub, sess, beh_dir, io_inference, seq) 
+                  
         #frame time 
         frame_times = fun.get_fts(params.db, sub, sess, fmri_dir, json_file_dir) 
 
@@ -121,7 +129,6 @@ for sub in subjects:
         dmtx = create_design_matrix(events,
                                     tr, 
                                     frame_times,
-                                    io_inference,
                                     sub,
                                     sess)
         
@@ -149,7 +156,10 @@ for sub in subjects:
     if SAVE_DMTX_PLOT:
         fig_fname = f'sub-{sub:02d}_design_matrix_' + params.db + '.png'
         fig_fpath = os.path.join(design_dir, fig_fname)
-        fig, ax = plt.subplots(figsize=[8, 6])
+        if params.db == 'Explore':
+            fig, ax = plt.subplots(figsize=[8, 12])
+        else:
+            fig, ax = plt.subplots(figsize=[8, 6])
         plot_design_matrix(design_matrix, rescale = False, ax=ax)
         fig.suptitle(f'Regressors: Subject {sub:02d}, {params.db}', y=1.05, fontweight='bold')
         fig.savefig(fig_fpath, bbox_inches='tight', dpi=220)
@@ -175,7 +185,12 @@ for sub in subjects:
     contrast_matrix = np.eye(design_matrix.shape[1])
     contrasts = dict([(column, contrast_matrix[i])
                             for i, column in enumerate(design_matrix.columns)])
-    contrasts = {'surprise': contrasts['surprise'],
+    if params.update:
+        contrasts = {'update': contrasts['update'],
+                    'predictions': contrasts['predictions'],
+                    'predictability': contrasts['predictability']}
+    else:
+        contrasts = {'surprise': contrasts['surprise'],
                     'confidence': contrasts['confidence'],
                     'predictions': contrasts['predictions'],
                     'predictability': contrasts['predictability']}

@@ -8,35 +8,40 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'EncodeProb' #this will have to determine all the following parameters in a flexible script
-# other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
-# MASK = 'mask_GreyMatter_0_25_WithoutCereb.nii'
-# MASK_NAME = 'GrayMatter_noCereb'
+DB_NAME = 'PNAS' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44', 'AHBA'
+UPDATE_REG = False #update or suprise + confidence as regressor
 #---------------------------------------------------
 
 class Params:
-    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcel = PARCELATED):
+    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcel = PARCELATED, update =UPDATE_REG):
         self.db = db
         self.mask = mask
 
-        self.parcelated = PARCELATED
+        self.parcelated = parcel
+        self.update = update
 
         self.hpf = 1/128
         self.hrf = 'spm'
 
         if db != 'Explore':
             self.io_options = {'p_c': 1/75, 'resol': 20} 
-        if db not in ['Explore', 'PNAS']:
+        if db in ['EncodeProb', 'NAConf']:
             self.seq_type = 'bernoulli'
             self.smoothing_fwhm = None #no smoothing necessary because of 7T fMRI
         elif db == 'PNAS':
             self.seq_type = 'transition'
             self.smoothing_fwhm = 5
+        elif db == 'Explore':
+            self.smoothing_fwhm = 5
 
-        self.latent_vars = ['surprise', 'confidence', 'predictability', 'predictions']
+
+        if UPDATE_REG:
+            self.latent_vars = ['update', 'predictability', 'predictions']
+        else:
+            self.latent_vars = ['surprise', 'confidence', 'predictability', 'predictions']
 
         #participants to ignore and session deviations
         if db == 'NAConf':
@@ -48,21 +53,23 @@ class Params:
         elif db == 'Explore':
             self.ignore = [9, 17, 46]
             self.session = []
+
+            self.subnums_explore = {4: 6,
+                                    6: 4,
+                                    25: 28,
+                                    28: 25}
+            
+            self.io_variables = ['ER_A', 'EU_A', 'UU_A', 'PE_A', 'ER_B', 'EU_B', 'UU_B', 'PE_B']
+
         elif db == 'PNAS':
             self.ignore = []
             self.session = []
-
-        # subnums_explore = {4: 6,
-#                    6: 4,
-#                    25: 28,
-#                    28: 25}
 
         #mask details
         if mask == 'schaefer':
             self.mask_details = '100' #number of regions
         elif mask == 'desikan':
             self.mask_details = '68'
-
 
 class Paths:
     def __init__(self, db=DB_NAME):
@@ -72,7 +79,7 @@ class Paths:
         elif db == 'EncodeProb':
             self.data_dir = 'EncodeProb_BounmyMeyniel_2020'
         elif db == 'Explore':
-            self.data_dir = '/home_local/EXPLORE/DATA'
+            self.data_dir = 'Explore_Meyniel_Paunov_2021'
         elif db == 'PNAS':
             self.data_dir = 'Meyniel_MarkovGuess_2014'
 
@@ -112,7 +119,7 @@ class Receptors:
             self.exc = ['AMPA', 'NMDA', 'kainate', 'm1', 'm3', 'a4b2', 'a1', '5-HT2', 'D1']
             self.inh = ['GABAa', 'GABAa-BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
 
-        if source == 'desikan':
+        if source == 'AHBA':
             self.receptor_names = ['ADRA1A', 'ADRA1B', 'ADRA1D', 'ADRA2A', 'ADRA2C', 'ADRB1', 'ADRB2',
                                    'HTR1A', 'HTR1E', 'HTR2A', 'HTR3', 'HTR4','HTR7',
                                    'CHRM1', 'CHRM2', 'CHRM4', 'CHRNB2',

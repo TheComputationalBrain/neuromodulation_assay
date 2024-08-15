@@ -18,16 +18,22 @@ fmri_dir = mf.get_fmri_dir(params.db)
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
 
-beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
-                                    
+if params.update:
+    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+else:
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+
 if params.parcelated:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
     output_dir = os.path.join(beta_dir, 'regressions', rec.source)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
     mask_comb = params.mask + '_' + params.mask_details 
-    receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
-
+    if rec.source !='AHBA':
+        receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
+    else:
+        gene_expression = pd.read_csv(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
+        receptor_density = zscore(gene_expression.to_numpy(), nan_policy='omit')
 else:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
     output_dir = os.path.join(beta_dir, 'regressions', 'PET')
@@ -75,6 +81,8 @@ if PLOT_CORR:
             receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
     elif rec.source  == 'autorad_zilles44':
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]
+    elif rec.source == 'AHBA':
+        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.dopamine]
     receptor_class = [rec.exc,rec.inh]
 
     plot_dir = os.path.join(output_dir, 'plots_corr')

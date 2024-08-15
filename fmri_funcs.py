@@ -117,7 +117,7 @@ def get_fts(db, sub, sess, fmri_dir, json_dir):
     frame_times = (np.arange(n_scans)*tr).flatten() #?n starts with 0 because of slice time correction to first slide- could be tr instead: np.cumsum([tr]* n_scans)
 
     if db == 'EncodeProb':
-        frame_times = frame_times + tr/2 #sllice timing correction was to middle slice 
+        frame_times = frame_times + tr/2 #slice timing correction was to middle slice 
 
     return frame_times
 
@@ -141,7 +141,7 @@ def get_ppssing(sub, db_name):
     if db_name == 'Explore':
         ppssing = 'space-MNI152NLin2009cAsym_desc-preproc_bold'
         fmri_path = get_fmri_dir(db_name)
-        fmri_path = op.join(fmri_path, f"sub-{sub:02d}")
+        fmri_path = op.join(fmri_path, f'sub-{sub:02d}', 'func')
     
     if db_name == 'PNAS':
         fmri_path = op.join(paths.root_dir, paths.data_dir,
@@ -154,7 +154,7 @@ def get_nii_files(ppssing, fmri_path, db_name):
     if db_name != 'Explore':
         return sorted(glob.glob(op.join(fmri_path, f'{ppssing}*.nii')))
     else:
-        return sorted(glob.glob(op.join(fmri_path,'func', f'*{ppssing}.nii.gz'))) 
+        return sorted(glob.glob(op.join(fmri_path, f'*{ppssing}.nii.gz'))) 
     
 def get_fmri_data(masker, masker_id, sub, output_dir,
                   ppssing, fmri_path, db_name):

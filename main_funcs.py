@@ -14,6 +14,7 @@ import numpy as np
 import pandas as pd
 import os.path as op
 from scipy.io import loadmat
+from initialize_subject import initialize_subject
 from params_and_paths import Params, Paths
 
 params = Params()
@@ -21,13 +22,14 @@ paths = Paths()
 
 def demean(x):
     """center regressors"""
-    return x - np.mean(x)
+    mean = np.nanmean(x)
+    return x - mean
 
 def get_json_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
    
     json_files_dir = {'NAConf': op.join(root_dir, data_dir, 'bids_dataset'),
                     'EncodeProb': op.join(root_dir, data_dir, 'bids_dataset'),
-                    'Explore': '/home_local/EXPLORE/bids_dataset',
+                    'Explore': op.join(root_dir, data_dir, 'bids/raw/'),
                     'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
     
     return json_files_dir[db_name]
@@ -37,7 +39,7 @@ def get_fmri_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
     
     fmri_dir = {'NAConf': op.join(root_dir, data_dir, 'derivatives'),
                 'EncodeProb': op.join(root_dir, data_dir, 'derivatives'),
-                'Explore': '/home_local/EXPLORE/DATA/bids/derivatives/fmriprep-22.1.1',
+                'Explore': op.join(root_dir, data_dir, 'bids/derivatives/fmriprep-23.1.3'),
                 'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
 
     return fmri_dir[db_name]
@@ -54,16 +56,16 @@ def get_beh_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
 
 def get_subjects(db, data_dir): 
     subjects = []
-    if db == 'EncodeProb':
+    if db != 'PNAS':
         folders = os.path.join(data_dir,
                             'sub-*')
         
         for folder in glob.glob(folders):
-            # Extract the number from the filename
-            number = folder.split('sub-')[1]
-            subjects.append(int(number))
-    
-    if db == 'PNAS':
+            if os.path.isdir(folder):  # Ensure the path is a directory
+                # Extract the number from the filename
+                number = folder.split('sub-')[1]
+                subjects.append(int(number))
+    else:
         folders = os.path.join(data_dir,
                             'subj*')
         
@@ -76,7 +78,7 @@ def get_subjects(db, data_dir):
     nsub_correct = {'PNAS': 21,
             'EncodeProb': 30,
             'NAConf': 60,
-            'Explore': 60}
+            'Explore': 59}
     
     if len(subjects) != nsub_correct[db]:
         raise ValueError(f"Found {len(subjects)} subjects but experiment has: {nsub_correct[db]}.")
@@ -89,10 +91,10 @@ def convert_to_secs(data, var):
 def get_seq(db, sub, sess, beh_dir):
 
     if db == 'Explore':
-        if sub not in subnums_explore:
+        if sub not in params.subnums_explore:
             subcsv = sub
-        else :
-            subcsv = subnums_explore[sub]
+        else:
+            subcsv = params.subnums_explore[sub]
 
         file = os.path.join(beh_dir, 'Data_neurospin/formatted/fmri_session',
                             f'sub-{sub:02d}/data_subject_{subcsv:02d}_session_{sess}.csv')
@@ -170,19 +172,30 @@ def rescale_answer(pos, pos_min, pos_max):
     answer = (pos + pos_max) / (pos_max - pos_min)
     return answer
 
-def get_events_explore(subnum, sess, nan_missed=True):
+def get_events_explore(sub, sess, nan_missed=True):
 
-    event_labels = ['cue', 'resp', 'out', 'missed', 'qA', 'qB', 'resp_qA', 'resp_qA', 'resp_qB', 'resp_qB']
+    #? distinguish free vs forced trials?
+    
+    events_fixed = ['cue', 'resp', 'out', 'missed', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf'] #will be added as an unmodulated regressor
+    events_modulated = ['reward','sub_qA_val', 'sub_qA_conf', 'io_qA_val', 'io_qA_conf', 
+                    'sub_qB_val', 'sub_qB_conf', 'io_qB_val', 'io_qB_conf']
+    event_labels = events_fixed + events_modulated + params.io_variables
+
+    io_times = []
+    for reg in params.io_variables:
+        io_times.append(f'{reg}_start')
     time_cols = ['trial_start', 'rt_start', 'outcome_start','missed_start',
-                 'qAstart', 'qBstart', 'respA_val_start', 'respA_conf_start',
-                 'respB_val_start', 'respB_conf_start']
-    
-    n_trials = 96
-    
-    trial_types_all = np.asarray(event_labels * n_trials)
-    durations_all = np.asarray([0, 0, 0, 5, 0, 0, 0, 0, 0, 0] * n_trials)
+                    'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'reward_start',
+                    'qA_val_sub_start', 'qA_conf_sub_start', 'qA_val_io_start', 'qA_conf_io_start',
+                    'qB_val_sub_start', 'qB_conf_sub_start', 'qB_val_io_start', 'qB_conf_io_start',
+                    ]  + io_times
 
-    para = initialize_subject(subnum)# no need to specify vol because we only get onsets from this function
+    n_trials = 96 #TODO: can I get this variable from somewhere?
+    arm_ids = ['A', 'B']
+
+    trial_types_all = np.asarray(event_labels * n_trials)
+
+    para = initialize_subject(sub)# no need to specify vol because we only get onsets from this function
     para = para.set_index(np.arange(0, para.shape[0]))
 
     # Get onsets for missed trials
@@ -197,45 +210,85 @@ def get_events_explore(subnum, sess, nan_missed=True):
     para['rt_start'] = np.nansum(para[['trial_start', 'rt']], axis=1)
     para.loc[para['rt_start'] == 0, 'rt_start'] = np.nan
 
-    para = para[para['block'] == (sess + 8)]
+    para = para[para['block'] == sess]
 
-    #infer questions onsets
-    
-    para.loc[para['rtQ1_val'] == para['rtA_val'], 'Q1_is_A'] = 1 
-    para.loc[para['rtQ1_val'] == para['rtB_val'], 'Q1_is_B'] = 1 
-    ind_Q1_is_A = para[para['Q1_is_A'] == 1].index
-    ind_Q1_is_B = para[para['Q1_is_B'] == 1].index
+    # add a time column for outcome modulator
+    para['reward_start'] = para['outcome_start']
 
-    for var in ['qAstart', 'qBstart', 'respA_val_start', 'respA_conf_start',
-                'respB_val_start', 'respB_conf_start']:
+    # ADD QUESTION PARAMTERS
+
+    #infer onset of questions
+    ind_Q1_is_A = para.index[para['rtQ1_val'] == para['rtA_val']]
+    ind_Q1_is_B = para.index[para['rtQ1_val'] == para['rtB_val']]
+
+    for var in ['qA_val_start', 'qA_conf_start', 
+                'qB_val_start', 'qB_conf_start']:
         para[var] = np.nan
-    
+
+    #I changed this to match the encodeProb questions: onset of question with duration of RT and modulation of subj response
     for i in ind_Q1_is_A: 
-        para['qAstart'][i] = para['trial_end'][i] + 1
-        para['respA_val_start'][i] =  para['qAstart'][i] + para['rtA_val'][i]
-        para['respA_conf_start'][i] = para['respA_val_start'][i] + 0.5 + para['rtA_conf'][i]
-        para['qBstart'][i] = para['respA_conf_start'][i] + 1
-        para['respB_val_startx'][i] = para['qBstart'][i] + para['rtB_val'][i]
-        para['respB_conf_start'][i] = para['respB_val_start'][i] + 1 + para['rtB_conf'][i]
+        para['qA_val_start'][i] =  para['trial_end'][i] + 1
+        para['qA_conf_start'][i] = para['qA_val_start'][i] + para['rtA_val'][i] + 0.5  
+        para['qB_val_start'][i] = para['qA_conf_start'][i] + 1 
+        para['qB_conf_start'][i] = para['qB_val_start'][i] + para['rtB_val'][i] + 1 
 
     for i in ind_Q1_is_B: 
-        para['qBstart'][i] = para['trial_end'][i] + 1
-        para['respB_val_start'][i] =  para['qBstart'][i] + para['rtB_val'][i]
-        para['respB_conf_start'][i] = para['respB_val_start'][i] + 0.5 + para['rtB_conf'][i]
-        para['qAstart'][i] = para['respB_conf_start'][i] + 1
-        para['respA_val_start'][i] = para['qAstart'][i] + para['rtA_val'][i]
-        para['respA_conf_start'][i] = para['respA_val_start'][i] + 1 + para['rtA_conf'][i]
+        para['qB_val_start'][i] = para['trial_end'][i] + 1
+        para['qB_conf_start'][i] = para['qB_val_start'][i] + para['rtB_val'][i] + 0.5
+        para['qA_val_start'][i] = para['qB_conf_start'][i] + 1
+        para['qA_conf_start'][i] = para['qA_val_start'][i] + para['rtA_val'][i] + 1 
+
+    #duplicate for sub and IO estimates 
+    for arm in arm_ids:
+        for l in ['val', 'conf']:
+            for e in ['sub', 'io']:
+                para[f'q{arm}_{l}_{e}_start'] = para[f'q{arm}_{l}_start'] #onset is the same for subj and IO estimate
+
+    #add columns for durations
+    for dur in events_fixed:
+        para[f'{dur}_drt'] = 0
+    para['missed_drt'] = 5
+    para['reward_drt'] = 0
+    for arm in arm_ids:
+        for l in ['val', 'conf']:
+            for e in ['sub', 'io']:
+                para[f'q{arm}_{l}_{e}_drt'] = para[f'rt{arm}_{l}']
+
+    #add columns for modulation
+    for mod in events_fixed:
+        para[f'{mod}_mod'] = 1
+    para['reward_mod'] = demean(para['reward'])
+    for arm in arm_ids:
+        for l in ['val', 'conf']:
+            para[f'q{arm}_{l}_sub_mod'] = 1 #! where are the subj responses saved?
+            para[f'q{arm}_{l}_io_mod'] = demean(para[f'opt{arm}_{l}'])
+
+    # ADD IO RESULTS OF INTEREST
+    for reg in params.io_variables:
+        para[f'{reg}_start'] = para['trial_start']
+        para[f'{reg}_drt'] = 0
+        para[f'{reg}_mod'] = demean(para[reg])
 
     onsets = []
     onsets.append(para[time_cols].values)
     onsets = np.hstack(onsets).ravel('C')
     trial_types = trial_types_all[~np.isnan(onsets)]
-    durations = durations_all[~np.isnan(onsets)]
+    durations = []
+    dur_cols = [col for col in para.columns if '_drt' in col]
+    durations.append(para[dur_cols].values)
+    durations = np.hstack(durations).ravel('C')
+    durations = durations[~np.isnan(onsets)] 
+    modulations = []
+    mod_cols = [col for col in para.columns if '_mod' in col]
+    modulations.append(para[mod_cols].values)
+    modulations = np.hstack(modulations).ravel('C')
+    modulations = modulations[~np.isnan(onsets)]
     onsets = onsets[~np.isnan(onsets)]
-    
+
     events = pd.DataFrame({'onset': onsets,
-                         'trial_type': trial_types,
-                         'duration': durations})
+                            'trial_type': trial_types,
+                            'duration': durations,
+                            'modulation': modulations})
 
     return events
 
@@ -244,105 +297,150 @@ def get_sessions(sub):
         return params.session[sub]
     else:
         return [1,2,3,4]
+    
+def get_stimq(db, sub, sess, data_dir):
+    if db == 'EncodeProb':
+        filepath = glob.glob(op.join(data_dir,
+                                    'behavior',
+                                    f'sub-{sub:02d}*',
+                                    f'*session_{sess}.pickle'))[0]
+        data = pickle.load(open(filepath, 'rb'))
+        indices_question = data['StimQ'][0].astype(int)
+    elif db == 'PNAS':
+        filespath = os.path.join(data_dir,'Behavioral_data')
+        beh_file = glob.glob(os.path.join(filespath,
+                                        f'*SUBJECT_{sub}_Sess_{sess+1}_*'))
+        beh_data = loadmat(beh_file[0])
+        indices_question = beh_data['StimQ'][0].astype(int)-1
+    return indices_question
 
-def get_events(db, sub, sess, data_dir): 
 
-    #TODO: the event modulation is currently only implemented for EncodeProb and PNAS
+def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None): 
 
-    if db == 'PNAS': 
+    if db == 'Explore':
+        events = get_events_explore(sub, sess)
+        return events
+    else:
 
-        data = get_data_PNAS(sub, sess, data_dir)
-        onsets = np.hstack((data['stim_onset'], data['question_onset'], data['question_onset'],data['question_onset']))
-        duration = np.hstack(([0] * data['stim_onset'],
-                            data['reaction_times'], data['reaction_times'], data['reaction_times']))
-        trial_type = np.hstack((['stim']*len(data['stim_onset']),
-                                ['q_conf']*len(data['question_onset']),
-                                ['sub_conf']*len(data['question_onset']),
-                                ['io_conf']*len(data['question_onset'])))
-        modulation = np.hstack(([1] * data['stim_onset'],
-                                [1] * data['question_onset'], 
-                                demean(data['subj_confidence']),
-                                [0] * data['question_onset'])) #IO modulation will be added in design matrix function
+        #add IO regressors
+        if params.update:
+        # IO regressors
+            io_regs = pd.DataFrame({'update': io_inference['update'],
+                                    'predictions': io_inference['p1_mean_array'],
+                                    'predictability': io_inference['entropy']})
+
+        else:
+            io_regs = pd.DataFrame({'surprise': io_inference['surprise'],
+                                    'confidence': io_inference['confidence_pre'],
+                                    'predictions': io_inference['p1_mean_array'],
+                                    'predictability': io_inference['entropy']})
+
+        stim_q = get_stimq(db, sub, sess, data_dir)
+        if stim_q[-1] >= len(seq): 
+            stim_q = stim_q[:-1]
+
+        io_conf_q = np.array([-np.log(io_inference['p1_sd_array'])[q]
+                for q in stim_q])
+    
+        if db == 'PNAS': 
+
+            data = get_data_PNAS(sub, sess, data_dir)
+            onsets = np.hstack((data['stim_onset'], data['question_onset'], data['question_onset'],data['question_onset']))
+            duration = np.hstack(([0] * data['stim_onset'],
+                                data['reaction_times'], data['reaction_times'], data['reaction_times']))
+            trial_type = np.hstack((['stim']*len(data['stim_onset']),
+                                    ['q_conf']*len(data['question_onset']),
+                                    ['sub_conf']*len(data['question_onset']),
+                                    ['io_conf']*len(data['question_onset'])))
+            modulation = np.hstack(([1] * data['stim_onset'],
+                                    [1] * data['question_onset'], 
+                                    demean(data['subj_confidence']),
+                                    demean(io_conf_q))) #IO modulation will be added in design matrix function
+            on_stim = data['stim_onset']
+
+        elif db == 'EncodeProb':
+            filepath = glob.glob(os.path.join(data_dir,
+                            'behavior',
+                            f'sub-{sub:02d}*',
+                            f'*sess_{sess}.csv'))[0]
+            data = pd.read_csv(filepath, header=1)
+            on_stim = convert_to_secs(data, 't_on_stim')
+
+            on_q_prob = convert_to_secs(data,'t_question_prob_on')
+            on_q_conf = convert_to_secs(data,'t_question_conf_on')
+            rt_prob = data['estim_rt'].dropna().values/1000
+            rt_conf = data['conf_rt'].dropna().values/1000
+
+            # on_resp_prob = convert_to_secs(data,'t_rating_prob')
+            # on_resp_conf = convert_to_secs(data,'t_rating_conf')
+
+            # off_q_prob = convert_to_secs(data, 't_question_prob_off')
+            # off_q_conf = convert_to_secs(data, 't_question_conf_off')
+
+            sub_prob = convert_to_secs(data, 'estim_position')
+            sub_prob = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
+            sub_conf = convert_to_secs(data, 'conf_position')
+            sub_conf = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
+
+            io_prob_q = np.array([io_inference['p1_mean_array'][q]
+                        for q in stim_q])
+
+            onsets = np.hstack((on_stim, on_q_prob, on_q_prob, on_q_prob, on_q_conf, on_q_conf, on_q_conf))
+            trial_type = np.hstack((['stim'] * len(on_stim),
+                                    ['q_prob'] * len(on_q_prob),
+                                    ['sub_prob'] * len(on_q_prob),
+                                    ['io_prob'] * len(on_q_prob),
+                                    ['q_conf'] * len(on_q_conf),
+                                    ['sub_conf'] * len(on_q_conf),
+                                    ['io_conf'] * len(on_q_conf)))
+            duration = np.hstack(([0] * on_stim,
+                                rt_prob, rt_prob, rt_prob, rt_conf, rt_conf, rt_conf))
+            modulation = np.hstack(([1] * on_stim, 
+                                    [1] * on_q_prob,
+                                    demean(sub_prob), 
+                                    demean(io_prob_q), 
+                                    [1] * on_q_conf,
+                                    demean(sub_conf),
+                                    demean(io_conf_q)))
+                    
+        elif db == 'NAConf':
+            filespath = os.path.join(data_dir,
+                    'behaviour_eyeTracker_data',
+                    f'sub-{sub}')
+            # pickle.load the experiment info file present in all subject behavioral folder
+            file = os.path.join(filespath, f'experiment_info_sub-{sub:02d}.pickle')
+            with open(file, 'rb') as f:
+                    exp = pickle.load(f)
+            # create event dataframe
+            on_q = exp[sess-1]['question_onsets']
+            resp = exp[sess-1]['response_onsets']
+
+            onsets = np.hstack((exp[sess-1]['stim_onsets'],
+                                exp[sess-1]['question_onsets'],
+                                exp[sess-1]['response_onsets']))
+
+            duration_stim = exp[sess-1]['durations']
+            rt = exp[sess-1]['rt']
+            resp_dur = [0] * len(resp)
+            duration = np.hstack((duration_stim, rt, resp_dur)) #include both conf and probs rt
+            trial_type = np.hstack((exp[sess-1]['conditions'],
+                                    ['q']* len(on_q),
+                                    ['resp']* len(resp)))
+            on_stim = exp[sess-1]['stim_onsets']
         
+        #add IO regressors 
+        for column in io_regs.columns:
+            onsets = np.concatenate((onsets, on_stim))
+            duration = np.concatenate((duration, [0] * on_stim))
+            trial_type = np.concatenate((trial_type, [column] * len(on_stim)))
+            centered_values = demean(io_regs[column].to_numpy()) #center all io modulation values 
+            modulation = np.concatenate((modulation, centered_values))
 
-    if db != 'PNAS':
-
-        if db == 'Explore':
-            events = get_events_explore(sub, sess)
-            return events
-
-        else: 
-            if db == 'EncodeProb':
-                filepath = glob.glob(os.path.join(data_dir,
-                                'behavior',
-                                f'sub-{sub:02d}*',
-                                f'*sess_{sess}.csv'))[0]
-                data = pd.read_csv(filepath, header=1)
-                on_stim = convert_to_secs(data, 't_on_stim')
-
-                on_q_prob = convert_to_secs(data,'t_question_prob_on')
-                on_q_conf = convert_to_secs(data,'t_question_conf_on')
-                rt_prob = data['estim_rt'].dropna().values/1000
-                rt_conf = data['conf_rt'].dropna().values/1000
-
-                # on_resp_prob = convert_to_secs(data,'t_rating_prob')
-                # on_resp_conf = convert_to_secs(data,'t_rating_conf')
-
-                # off_q_prob = convert_to_secs(data, 't_question_prob_off')
-                # off_q_conf = convert_to_secs(data, 't_question_conf_off')
-
-                sub_prob = convert_to_secs(data, 'estim_position')
-                sub_prob = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
-                sub_conf = convert_to_secs(data, 'conf_position')
-                sub_conf = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
-
-                onsets = np.hstack((on_stim, on_q_prob, on_q_prob, on_q_prob, on_q_conf, on_q_conf, on_q_conf))
-                trial_type = np.hstack((['stim'] * len(on_stim),
-                                        ['q_prob'] * len(on_q_prob),
-                                        ['sub_prob'] * len(on_q_prob),
-                                        ['io_prob'] * len(on_q_prob),
-                                        ['q_conf'] * len(on_q_conf),
-                                        ['sub_conf'] * len(on_q_conf),
-                                        ['io_conf'] * len(on_q_conf)))
-                duration = np.hstack(([0] * on_stim,
-                                    rt_prob, rt_prob, rt_prob, rt_conf, rt_conf, rt_conf))
-                modulation = np.hstack(([1] * on_stim, 
-                                        [1] * on_q_prob,
-                                        demean(sub_prob), 
-                                        [0] * on_q_prob, #IO modulation will be added in design matrix function
-                                        [1] * on_q_conf,
-                                        demean(sub_conf),
-                                        [0] * on_q_conf)) 
-                
-            if db == 'NAConf':
-                filespath = os.path.join(data_dir,
-                        'behaviour_eyeTracker_data',
-                        f'sub-{sub}')
-                # pickle.load the experiment info file present in all subject behavioral folder
-                file = os.path.join(filespath, f'experiment_info_sub-{sub:02d}.pickle')
-                with open(file, 'rb') as f:
-                        exp = pickle.load(f)
-                # create event dataframe
-                on_q = exp[sess-1]['question_onsets']
-                resp = exp[sess-1]['response_onsets']
-
-                onsets = np.hstack((exp[sess-1]['stim_onsets'],
-                                    exp[sess-1]['question_onsets'],
-                                    exp[sess-1]['response_onsets']))
-
-                duration_stim = exp[sess-1]['durations']
-                rt = exp[sess-1]['rt']
-                resp_dur = [0] * len(resp)
-                duration = np.hstack((duration_stim, rt, resp_dur)) #include both conf and probs rt
-                trial_type = np.hstack((exp[sess-1]['conditions'],
-                                        ['q']* len(on_q),
-                                        ['resp']* len(resp)))
-        
-    events = pd.DataFrame({'onset': onsets,
-                        'duration': duration,
-                        'trial_type': trial_type,
-                        'modulation': modulation
-                        })
+        events = pd.DataFrame({'onset': onsets,
+                            'duration': duration,
+                            'trial_type': trial_type,
+                            'modulation': modulation
+                            })
 
     return events
 
@@ -352,11 +450,11 @@ def convert_to_secs(data, var):
 def get_mvt_reg(db_name, sub, sess):
     mov_dir = {'NAConf': op.join(paths.root_dir, paths.data_dir, "derivatives"),
                'EncodeProb': op.join(paths.root_dir, paths.data_dir, "derivatives"),
-               'Explore': op.join(paths.data_dir, "mri_preproc"),
+               'Explore': op.join(paths.root_dir, paths.data_dir, "old_prep/mri_preproc"), #TODO: where are the new data?
                'PNAS': op.join(paths.root_dir, paths.data_dir,
                                "MRI_data/analyzed_data")}
 
-    # concatenate mvt_data across sessions
+    # concatenate mvt_data across sessions_encode
     mvt_data = pd.DataFrame()
 
     if db_name == 'PNAS':

@@ -63,7 +63,7 @@ mean_5HR3 = expression_full.loc[:, columns_to_average].mean(axis=1)
 expression_full['5HR3'] = mean_5HR3
 expression_full = expression_full.drop(columns=columns_to_average)
 
-expression_NA.to_csv(os.path.join(output_dir,'gene_expression_complex_desikan.csv'), index=False)
+expression_full.to_csv(os.path.join(output_dir,'gene_expression_complex_desikan.csv'), index=False)
 
 
 

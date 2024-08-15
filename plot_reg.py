@@ -23,10 +23,13 @@ elif rec.source == 'AHBA':
     receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.dopamine]
 receptor_class = [rec.exc,rec.inh]
 
-if FROM_OLS:
-    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
-else: 
-    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+if params.update:
+    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+else:
+    if FROM_OLS:
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
+    else: 
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if params.parcelated:
     mask_comb = params.mask + '_' + params.mask_details

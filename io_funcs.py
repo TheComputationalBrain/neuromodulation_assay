@@ -8,6 +8,7 @@ This file contains utility functions for the IO estimates.
 """
 
 import numpy as np
+from scipy.stats import dirichlet
 import sys 
 import os
 
@@ -36,7 +37,7 @@ def get_conditional_value(val, seq):
 
     return conditional_val
 
-def compute_p0_dist(dist, seq, res):
+def compute_p0_dist(dist, seq, res, prior_init):
     """
     This function creates the p0 distribution according to the shown sequence.
 
@@ -58,9 +59,9 @@ def compute_p0_dist(dist, seq, res):
     p0_dist = np.zeros((res, seqL))
 
     # Retrieve the correct distribution according to the sequence
-    p0_dist[:, 0] = np.ones((res,1)) #TODO check prior!
+    p0_dist[:, 0] = prior_init 
     for k in np.arange(1,seqL):
-        p0_dist[:, k] = dist[(seq[k], 1)][k-1]
+        p0_dist[:, k] = dist[(seq[k], 1)][:,k-1]
 
     return p0_dist
 
@@ -88,7 +89,7 @@ def compute_p1_dist(dist, seq, res):
 
     # Retrieve the correct distribution according to the sequence
     for k in range(seqL):
-        p1_dist[:, k] = dist[(seq[k], 1)][k]
+        p1_dist[:, k] = dist[(seq[k], 1)][:,k]
 
     return p1_dist
 
@@ -114,12 +115,17 @@ def get_post_inference(seq, seq_type, options):
     This function computes the posterior values for the distribution, the mean and
     the standard deviation given the sequence.
     """
+
+    #initial prior
+    prior_init = np.ones(options['resol']) / options['resol']
+
     if seq_type == 'bernoulli':
         out_hmm = IO.IdealObserver(seq, 'hmm', order=0, options=options)
 
         p1_dist_array = out_hmm[(1,)]['dist']
-        p0_dist_array = np.ones((options['resol'],seq.size)) #TODO check prior
-        p0_dist_array[1:] = out_hmm[(1,)]['dist'][:-1]
+        p0_dist_array = np.zeros((options['resol'],seq.size)) 
+        p0_dist_array[:,0] = prior_init
+        p0_dist_array[:,1:] = out_hmm[(1,)]['dist'][:,:-1]
         p1_mean_array = out_hmm[(1,)]['mean']
         p1_sd_array = out_hmm[(1,)]['SD']
 
@@ -128,7 +134,7 @@ def get_post_inference(seq, seq_type, options):
 
         dist = {(0, 1): out_hmm[(0, 1)]['dist'], (1, 1): out_hmm[(1, 1)]['dist']}
         p1_dist_array = compute_p1_dist(dist, seq, options['resol'])
-        p0_dist_array = compute_p0_dist(dist, seq, options['resol'])
+        p0_dist_array = compute_p0_dist(dist, seq, options['resol'], prior_init)
 
         val = {(0, 1): out_hmm[(0, 1)]['mean'], (1, 1): out_hmm[(1, 1)]['mean']}
         p1_mean_array = get_conditional_value(val, seq)
@@ -136,7 +142,7 @@ def get_post_inference(seq, seq_type, options):
         val = {(0, 1): out_hmm[(0, 1)]['SD'], (1, 1): out_hmm[(1, 1)]['SD']}
         p1_sd_array = get_conditional_value(val, seq)
 
-    update = np.zeros(seq.siz)
+    update = np.zeros(seq.size)
     for i in range(seq.size):
         update[i] = kl_divergence(p0_dist_array[:, i], p1_dist_array[:, i])
 

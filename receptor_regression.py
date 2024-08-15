@@ -41,10 +41,13 @@ fmri_dir = mf.get_fmri_dir(params.db)
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
 
-if FROM_OLS:
-    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
-else: 
-    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+if params.update:
+    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+else:
+    if FROM_OLS:
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
+    else: 
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
                                     
 if params.parcelated:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
@@ -55,7 +58,7 @@ if params.parcelated:
     if rec.source !='AHBA':
         receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
     else:
-        gene_expression = pd.load(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
+        gene_expression = pd.read_csv(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
         receptor_density = zscore(gene_expression.to_numpy(), nan_policy='omit')
 else:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 

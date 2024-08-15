@@ -33,6 +33,7 @@ from multiprocessing import Pool
 
 
 FROM_OLS = False
+PLOT_ONLY = True
 
 paths = Paths()
 params = Params()
@@ -45,15 +46,21 @@ subjects = [subj for subj in subjects if subj not in params.ignore]
 output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
-plot_path = os.path.join(output_dir, 'plot_raw')
-if not os.path.exists(plot_path):
-    os.makedirs(plot_path) 
 
 #get receptor data
-if FROM_OLS:
-    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
-else: 
-    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+if params.update:
+    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+    plot_path = os.path.join(output_dir, 'plot_raw_update')
+    if not os.path.exists(plot_path):
+        os.makedirs(plot_path) 
+else:
+    plot_path = os.path.join(output_dir, 'plot_raw')
+    if not os.path.exists(plot_path):
+        os.makedirs(plot_path) 
+    if FROM_OLS:
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
+    else: 
+        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if params.parcelated:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
@@ -196,11 +203,7 @@ def run_group_analysis(latent_var):
     eff_size_files = []
     for sub in subjects:
         #get contrast data (beta estimates) and concatinate
-        ef_size = nib.load(os.path.join(paths.home_dir,
-                                                params.db,
-                                                params.mask,
-                                                'first_level',
-                                                f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map.nii.gz'))
+        ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map.nii.gz'))
         eff_size_files.append(ef_size)
 
     #second level model:
@@ -222,35 +225,36 @@ def run_group_analysis(latent_var):
     fname = f'{latent_var}_tmap.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
-    #as np array 
-    y_data = masker.fit_transform(t_map).flatten()
+    if PLOT_ONLY == False:
+        #as np array 
+        y_data = masker.fit_transform(t_map).flatten()
 
-    #group level regression
-    if params.parcelated:
-        non_nan_region = ~np.isnan(receptor_density).any(axis=1)
-        non_nan_indices = np.where(non_nan_region)[0]
-        X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
-        y = y_data[non_nan_indices]
-    else:
-        non_nan_indices = ~np.isnan(y_data)
-        X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
-        y = y_data[non_nan_indices]
+        #group level regression
+        if params.parcelated:
+            non_nan_region = ~np.isnan(receptor_density).any(axis=1)
+            non_nan_indices = np.where(non_nan_region)[0]
+            X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+            y = y_data[non_nan_indices]
+        else:
+            non_nan_indices = ~np.isnan(y_data)
+            X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+            y = y_data[non_nan_indices]
 
-    print('-- running regression for tmap--')
-    reg_results = run_lin_reg(X,y)
-    fname = f'tmap_{latent_var}_group_reg.pickle' 
-    with open(os.path.join(output_dir, fname), 'wb') as f:
-        pickle.dump(reg_results, f)
+        print('-- running regression for tmap--')
+        reg_results = run_lin_reg(X,y)
+        fname = f'tmap_{latent_var}_group_reg.pickle' 
+        with open(os.path.join(output_dir, fname), 'wb') as f:
+            pickle.dump(reg_results, f)
 
-    #dominance analysis
-    print('-- running dominance for tmap--')
-    dominance_results = dominance_stats(X, y)
-    fname = f'tmap_{latent_var}_group_da.pickle' 
-    with open(os.path.join(output_dir, fname), 'wb') as f:
-        pickle.dump(dominance_results, f)
-    fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
-    fname = f'tmap_{latent_var}_group_da.png' 
-    fig.savefig(os.path.join(plot_path, fname))
+        #dominance analysis
+        print('-- running dominance for tmap--')
+        dominance_results = dominance_stats(X, y)
+        fname = f'tmap_{latent_var}_group_da.pickle' 
+        with open(os.path.join(output_dir, fname), 'wb') as f:
+            pickle.dump(dominance_results, f)
+        fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
+        fname = f'tmap_{latent_var}_group_da.png' 
+        fig.savefig(os.path.join(plot_path, fname))
 
     #mean beta
     plt.rcParams.update({'font.size': 8})
@@ -263,35 +267,36 @@ def run_group_analysis(latent_var):
     fname = f'{latent_var}_effect_map.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
-    #as np array 
-    y_data = masker.fit_transform(effect_map).flatten()
+    if PLOT_ONLY == False:
+        #as np array 
+        y_data = masker.fit_transform(effect_map).flatten()
 
-    #group level regression
-    if params.parcelated:
-        non_nan_region = ~np.isnan(receptor_density).any(axis=1)
-        non_nan_indices = np.where(non_nan_region)[0]
-        X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
-        y = y_data[non_nan_indices]
-    else:
-        non_nan_indices = ~np.isnan(y_data)
-        X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
-        y = y_data[non_nan_indices]
+        #group level regression
+        if params.parcelated:
+            non_nan_region = ~np.isnan(receptor_density).any(axis=1)
+            non_nan_indices = np.where(non_nan_region)[0]
+            X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+            y = y_data[non_nan_indices]
+        else:
+            non_nan_indices = ~np.isnan(y_data)
+            X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+            y = y_data[non_nan_indices]
 
-    print('-- running regression for beta--')
-    reg_results = run_lin_reg(X,y)
-    fname = f'effect_{latent_var}_group_reg.pickle' 
-    with open(os.path.join(output_dir, fname), 'wb') as f:
-        pickle.dump(reg_results, f)
+        print('-- running regression for beta--')
+        reg_results = run_lin_reg(X,y)
+        fname = f'effect_{latent_var}_group_reg.pickle' 
+        with open(os.path.join(output_dir, fname), 'wb') as f:
+            pickle.dump(reg_results, f)
 
-    #dominance analysis
-    print('-- running dominance for beta--')
-    dominance_results = dominance_stats(X, y)
-    fname = f'effect_{latent_var}_group_da.pickle' 
-    with open(os.path.join(output_dir, fname), 'wb') as f:
-        pickle.dump(dominance_results, f)
-    fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
-    fname = f'effect_{latent_var}_group_da.png' 
-    fig.savefig(os.path.join(plot_path, fname))
+        #dominance analysis
+        print('-- running dominance for beta--')
+        dominance_results = dominance_stats(X, y)
+        fname = f'effect_{latent_var}_group_da.pickle' 
+        with open(os.path.join(output_dir, fname), 'wb') as f:
+            pickle.dump(dominance_results, f)
+        fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
+        fname = f'effect_{latent_var}_group_da.png' 
+        fig.savefig(os.path.join(plot_path, fname))
 
 
     #variance of effect
@@ -305,33 +310,34 @@ def run_group_analysis(latent_var):
     fname = f'{latent_var}_variance_map.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
-    y_data = masker.fit_transform(var_map).flatten()
-    #group level regression
-    if params.parcelated:
-        non_nan_region = ~np.isnan(receptor_density).any(axis=1)
-        non_nan_indices = np.where(non_nan_region)[0]
-        X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
-        y = y_data[non_nan_indices]
-    else:
-        non_nan_indices = ~np.isnan(y_data)
-        X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
-        y = y_data[non_nan_indices]
+    if PLOT_ONLY == False:
+        y_data = masker.fit_transform(var_map).flatten()
+        #group level regression
+        if params.parcelated:
+            non_nan_region = ~np.isnan(receptor_density).any(axis=1)
+            non_nan_indices = np.where(non_nan_region)[0]
+            X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+            y = y_data[non_nan_indices]
+        else:
+            non_nan_indices = ~np.isnan(y_data)
+            X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+            y = y_data[non_nan_indices]
 
-    print('-- running regression for variance--')
-    reg_results = run_lin_reg(X,y)
-    fname = f'variance_{latent_var}_group_reg.pickle' 
-    with open(os.path.join(output_dir, fname), 'wb') as f:
-        pickle.dump(reg_results, f)
+        print('-- running regression for variance--')
+        reg_results = run_lin_reg(X,y)
+        fname = f'variance_{latent_var}_group_reg.pickle' 
+        with open(os.path.join(output_dir, fname), 'wb') as f:
+            pickle.dump(reg_results, f)
 
-    #dominance analysis
-    print('-- running dominance for variance--')
-    dominance_results = dominance_stats(X, y)
-    fname = f'variance_{latent_var}_group_da.pickle' 
-    with open(os.path.join(output_dir, fname), 'wb') as f:
-        pickle.dump(dominance_results, f)
-    fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
-    fname = f'variance_{latent_var}_group_da.png' 
-    fig.savefig(os.path.join(plot_path, fname))
+        #dominance analysis
+        print('-- running dominance for variance--')
+        dominance_results = dominance_stats(X, y)
+        fname = f'variance_{latent_var}_group_da.pickle' 
+        with open(os.path.join(output_dir, fname), 'wb') as f:
+            pickle.dump(dominance_results, f)
+        fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
+        fname = f'variance_{latent_var}_group_da.png' 
+        fig.savefig(os.path.join(plot_path, fname))
 
 
 my_pool = Pool(4)
