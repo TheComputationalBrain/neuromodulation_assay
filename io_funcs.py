@@ -103,7 +103,6 @@ def compute_entropy(p, base=None):
     return H
 
 def kl_divergence(p0, p1):
-    # Avoid division by zero and log of zero
     p0 = np.array(p0, dtype=np.float64)
     p1 = np.array(p1, dtype=np.float64)
     p0 = np.clip(p0, 1e-10, None)  # Avoid zero probabilities in p

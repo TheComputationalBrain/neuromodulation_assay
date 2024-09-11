@@ -68,7 +68,8 @@ if not os.path.exists(design_dir):
         os.makedirs(design_dir)
 
 subjects = mf.get_subjects(params.db, fmri_dir)
-subjects = [subj for subj in subjects if subj not in params.ignore] #for Explore the sibjects are already removed in the fMRI data folder
+subjects = [subj for subj in subjects if subj not in params.ignore] 
+#for Explore the subjects are already removed in the fMRI data folder/in NAConf some are already removed 
 
 for sub in subjects:
     

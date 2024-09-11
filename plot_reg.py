@@ -8,7 +8,7 @@ from statsmodels.stats.multitest import multipletests
 from params_and_paths import Paths, Params, Receptors
 
 PLOT_COEFS = True
-PLOT_DOMINANCE = True
+PLOT_DOMINANCE = False
 FROM_OLS = False
 
 paths = Paths()

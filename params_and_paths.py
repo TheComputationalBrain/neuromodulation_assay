@@ -8,10 +8,12 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'PNAS' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
-MASK_NAME = 'schaefer' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
+DB_NAME = 'NAConf' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44', 'AHBA'
+
+#fixed at best setting:
 UPDATE_REG = False #update or suprise + confidence as regressor
 #---------------------------------------------------
 
@@ -28,9 +30,13 @@ class Params:
 
         if db != 'Explore':
             self.io_options = {'p_c': 1/75, 'resol': 20} 
-        if db in ['EncodeProb', 'NAConf']:
+
+        if db == 'EncodeProb':
             self.seq_type = 'bernoulli'
             self.smoothing_fwhm = None #no smoothing necessary because of 7T fMRI
+        elif db == 'NAConf':
+            self.seq_type = 'bernoulli'
+            self.smoothing_fwhm = 2
         elif db == 'PNAS':
             self.seq_type = 'transition'
             self.smoothing_fwhm = 5
@@ -45,7 +51,7 @@ class Params:
 
         #participants to ignore and session deviations
         if db == 'NAConf':
-            self.ignore = [3, 6, 9, 51, 54, 59]
+            self.ignore = [3, 5, 6, 9, 36, 51, 54]
             self.session = []
         elif db == 'EncodeProb':
             self.ignore = [1, 4, 12, 20]
@@ -53,7 +59,6 @@ class Params:
         elif db == 'Explore':
             self.ignore = [9, 17, 46]
             self.session = []
-
             self.subnums_explore = {4: 6,
                                     6: 4,
                                     25: 28,

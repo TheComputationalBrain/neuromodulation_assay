@@ -77,7 +77,7 @@ def get_subjects(db, data_dir):
     #keep this as a test for now 
     nsub_correct = {'PNAS': 21,
             'EncodeProb': 30,
-            'NAConf': 60,
+            'NAConf': 56,
             'Explore': 59}
     
     if len(subjects) != nsub_correct[db]:
@@ -312,6 +312,14 @@ def get_stimq(db, sub, sess, data_dir):
                                         f'*SUBJECT_{sub}_Sess_{sess+1}_*'))
         beh_data = loadmat(beh_file[0])
         indices_question = beh_data['StimQ'][0].astype(int)-1
+    elif db == 'NAConf':
+        behav_dir = os.path.join(data_dir, 'behaviour_data', f'sub-{sub:02d}')
+        info = glob.glob(os.path.join(behav_dir, 'experiment_info*.pickle'))[0]
+        with open(info, 'rb') as f:
+            exp = pickle.load(f)
+        stim_q = exp[sess-1]['stim_q']
+        indices_question = [int(stim) for stim in stim_q]
+
     return indices_question
 
 
@@ -405,29 +413,65 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
                     
         elif db == 'NAConf':
             filespath = os.path.join(data_dir,
-                    'behaviour_eyeTracker_data',
-                    f'sub-{sub}')
-            # pickle.load the experiment info file present in all subject behavioral folder
+                    'behaviour_data',
+                    f'sub-{sub:02d}')
+            # load the experiment info file present in all subject behavioral folder
             file = os.path.join(filespath, f'experiment_info_sub-{sub:02d}.pickle')
             with open(file, 'rb') as f:
                     exp = pickle.load(f)
+
             # create event dataframe
-            on_q = exp[sess-1]['question_onsets']
-            resp = exp[sess-1]['response_onsets']
-
-            onsets = np.hstack((exp[sess-1]['stim_onsets'],
-                                exp[sess-1]['question_onsets'],
-                                exp[sess-1]['response_onsets']))
-
-            duration_stim = exp[sess-1]['durations']
-            rt = exp[sess-1]['rt']
-            resp_dur = [0] * len(resp)
-            duration = np.hstack((duration_stim, rt, resp_dur)) #include both conf and probs rt
-            trial_type = np.hstack((exp[sess-1]['conditions'],
-                                    ['q']* len(on_q),
-                                    ['resp']* len(resp)))
             on_stim = exp[sess-1]['stim_onsets']
-        
+            on_q_prob = exp[sess-1]['question_prob_onsets']
+            on_q_conf = exp[sess-1]['question_conf_onsets']
+
+            rt_prob = exp[sess-1]['rt_prob']
+            rt_conf = exp[sess-1]['rt_conf']
+
+            #create a variable for the onset of questions that were not missed 
+            not_nan = ~np.isnan(rt_prob)
+            on_q_prob_responded = on_q_prob[not_nan]
+            not_nan = ~np.isnan(rt_conf)
+            on_q_conf_responded = on_q_conf[not_nan]
+            #resp = exp[sess-1]['response_onsets']
+
+            onsets = np.hstack((on_stim,
+                                on_q_prob,
+                                on_q_prob_responded,
+                                on_q_prob_responded,
+                                on_q_conf,
+                                on_q_conf_responded,
+                                on_q_conf_responded))
+            trial_type = np.hstack((['stim']* len(on_stim), 
+                                    ['q_prob']* len(on_q_prob),
+                                    ['sub_prob']* len(on_q_prob_responded),
+                                    ['io_prob']* len(on_q_prob_responded),
+                                    ['q_conf']*len(on_q_conf),
+                                    ['sub_conf']* len(on_q_conf_responded),
+                                    ['io_conf']* len(on_q_conf_responded)))
+            duration_stim = exp[sess-1]['durations'] #durations are always = 1
+
+            duration = np.hstack((duration_stim, 
+                                    np.nan_to_num(exp[sess-1]['rt_prob'], nan=0), #TODO: is there a time out parameter?
+                                    rt_prob[~np.isnan(rt_prob)],
+                                    rt_prob[~np.isnan(rt_prob)],
+                                    np.nan_to_num(exp[sess-1]['rt_conf'], nan=0),
+                                    rt_conf[~np.isnan(rt_conf)],
+                                    rt_conf[~np.isnan(rt_conf)])) 
+            sub_prob = exp[sess-1]['sub_prob']
+            sub_conf = exp[sess-1]['sub_conf']
+
+            io_prob_q = np.array([io_inference['p1_mean_array'][q]
+                        for q in stim_q])
+            
+            modulation = np.hstack(([1] * on_stim, 
+                        [1] * on_q_prob,
+                        demean(sub_prob[~np.isnan(sub_prob)]), 
+                        demean(io_prob_q[~np.isnan(sub_prob)]), #? do we want to keep the IO estimate for these trials?
+                        [1] * on_q_conf,
+                        demean(sub_conf[~np.isnan(sub_conf)]),
+                        demean(io_conf_q[~np.isnan(sub_conf)])))
+            
         #add IO regressors 
         for column in io_regs.columns:
             onsets = np.concatenate((onsets, on_stim))
