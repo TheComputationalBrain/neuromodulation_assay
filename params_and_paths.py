@@ -99,10 +99,10 @@ class Receptors:
         if source == 'PET':
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                                "MOR", "NET", "NMDA", "VAChT"]
+                                "MOR", "NET", "NMDA", "VAChT", "a2"]
             self.serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
             self.acetylcholine = ["A4B2", "M1", "VAChT"]
-            self.noradrenaline = ["NET"]
+            self.noradrenaline = ["NET", "a2"]
             self.opioid = ["MOR"]
             self.glutamate = ["mGluR5", 'NMDA']
             self.histamine = ["H3"]

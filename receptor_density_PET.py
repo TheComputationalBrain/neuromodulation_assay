@@ -33,6 +33,7 @@ params = Params()
 
 #TODO: move path to paths class 
 receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images/' #path to downloaded data from Hansen et al. (2022)
+alpha_path = '/Users/alice/postdoc/NeuroModAssay/' #path to the data shared by Benedicte Ballanger
 output_dir = os.path.join(paths.home_dir,'receptors', 'PET')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
@@ -67,7 +68,7 @@ masker.fit()
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                           "MOR", "NET", "NMDA", "VAChT"])
+                           "MOR", "NET", "NMDA", "VAChT", "a2"])
 
 receptors_nii = [receptor_path + '/5HT1a_way_hc36_savli.nii',
                  receptor_path + '/5HT1b_p943_hc22_savli.nii',
@@ -93,7 +94,8 @@ receptors_nii = [receptor_path + '/5HT1a_way_hc36_savli.nii',
                  receptor_path + '/NMDA_ge179_hc29_galovic.nii.gz',
                  receptor_path + '/VAChT_feobv_hc4_tuominen.nii',
                  receptor_path + '/VAChT_feobv_hc5_bedard_sum.nii',
-                 receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii']
+                 receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
+                 alpha_path + '/Mean_Yohimbine_HC2050.nii']
 
 masked = []
 for receptor in receptors_nii:
@@ -109,6 +111,7 @@ receptor_data[:, 0] = r[:, 0]
 receptor_data[:, 2:9] = r[:, 3:10]
 receptor_data[:, 10:14] = r[:, 12:16]
 receptor_data[:, 15:18] = r[:, 19:22]
+receptor_data[:, 19] = r[:, 25]
 
 # weighted average of 5HT1B p943
 receptor_data[:, 1] = (zscore(r[:, 1])*22 + zscore(r[:, 2])*65) / (22+65)
@@ -190,7 +193,7 @@ if PLOT_RECEPTORS_INFLATED:
 #### correlation matrix
 serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
 acetylcholine = ["A4B2", "M1", "VAChT"]
-noradrenaline = ["NET"]
+noradrenaline = ["NET", "a2"]
 opioid = ["MOR"]
 glutamate = ["mGluR5", "NMDA"]
 histamine = ["H3"]
