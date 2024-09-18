@@ -75,7 +75,8 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
         'prediction_error': 'PE',
         'feedback_surprise': 'US',
         'signed_feedback_surprise': 'SS',
-        'unsigned_prediction_error': 'UPE'
+        'unsigned_prediction_error': 'UPE',
+        'entropy': 'entropy'
         }
 
     df = []
@@ -103,6 +104,8 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
                                   reward_levels=(30, 50, 70),
                                   reward_range=(1, 100),
                                   window_size=window_size)
+        
+        reward_levels = [30,50,70]
 
         for io_name, df_name in IO_MAP.items():
             for arm in arm_ids:
@@ -184,7 +187,7 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
     df["PE_prevrep"] = df["PE_prev"] * df["repeat_sign"]
     
     # Get difference between arms, the average, and the chosen arm
-    AB_cols = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU']
+    AB_cols = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'entropy']
     for col in AB_cols:
         df[col + '_diff'] = np.diff(df[[col + '_A', col + '_B']], axis=1)
         df[col + '_abs_diff'] = abs(df[col + '_diff'])
@@ -209,7 +212,7 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
                                       df[[f'{col}_A', f'{col}_B']].values)]
 
     # Apply transformations to columns of interest
-    col_contains = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'PE', 'US', 'SS', 'UPE']
+    col_contains = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'PE', 'US', 'SS', 'UPE', 'entropy']
     to_transform = []
     for col in list(df.columns):
         if np.any([col_str in col for col_str in col_contains]):

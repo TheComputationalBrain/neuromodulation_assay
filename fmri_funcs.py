@@ -116,7 +116,7 @@ def get_fts(db, sub, sess, fmri_dir, json_dir):
     tr = get_tr(db, sub, sess, json_dir)
     frame_times = (np.arange(n_scans)*tr).flatten() #?n starts with 0 because of slice time correction to first slide- could be tr instead: np.cumsum([tr]* n_scans)
 
-    if db == 'EncodeProb':
+    if db in ['EncodeProb', 'Explore']:
         frame_times = frame_times + tr/2 #slice timing correction was to middle slice 
 
     return frame_times

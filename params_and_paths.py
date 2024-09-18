@@ -8,10 +8,10 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'NAConf' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
-RECEPTOR_SOURCE = 'PET' #,'PET' or 'autorad_zilles44', 'AHBA'
+RECEPTOR_SOURCE = 'PET2' #,'PET', '$PET' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
 
 #fixed at best setting:
 UPDATE_REG = False #update or suprise + confidence as regressor
@@ -42,6 +42,7 @@ class Params:
             self.smoothing_fwhm = 5
         elif db == 'Explore':
             self.smoothing_fwhm = 5
+            self.split = True #Split free and forced trials 
 
 
         if UPDATE_REG:
@@ -59,13 +60,16 @@ class Params:
         elif db == 'Explore':
             self.ignore = [9, 17, 46]
             self.session = []
-            self.subnums_explore = {4: 6,
-                                    6: 4,
-                                    25: 28,
-                                    28: 25}
-            
-            self.io_variables = ['ER_A', 'EU_A', 'UU_A', 'PE_A', 'ER_B', 'EU_B', 'UU_B', 'PE_B']
-
+            #subject numbers are corrected in the formatted folder 
+            # self.subnums_explore = {4: 6,
+            #                         6: 4,
+            #                         25: 28,
+            #                         28: 25}
+            self.subnums_explore = {}
+            self.io_variables = ['EU_chosen_z', 'US_z', 'ER_chosen_z', 'entropy_chosen_z'] #TODO: try chosen-unchosen?
+            self.latent_vars = ['surprise_free', 'confidence_free', 'predictability_free', 'predictions_free',
+                                'surprise_forced', 'confidence_forced', 'predictability_forced', 'predictions_forced']
+        
         elif db == 'PNAS':
             self.ignore = []
             self.session = []
@@ -96,7 +100,7 @@ class Receptors:
     def __init__(self, source=RECEPTOR_SOURCE):
         self.source = RECEPTOR_SOURCE
 
-        if source == 'PET':
+        if source in ['PET', 'PET2']:
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                                 "MOR", "NET", "NMDA", "VAChT", "a2"]

@@ -39,7 +39,7 @@ def get_fmri_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
     
     fmri_dir = {'NAConf': op.join(root_dir, data_dir, 'derivatives'),
                 'EncodeProb': op.join(root_dir, data_dir, 'derivatives'),
-                'Explore': op.join(root_dir, data_dir, 'bids/derivatives/fmriprep-23.1.3'),
+                'Explore': op.join(root_dir, data_dir, 'bids/derivatives/fmriprep-23.1.3_MAIN'),
                 'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
 
     return fmri_dir[db_name]
@@ -126,7 +126,6 @@ def get_seq(db, sub, sess, beh_dir):
 
     return seq
 
-
 def get_data_PNAS(sub, sess, data_dir):
     
     filespath = os.path.join(data_dir,'Behavioral_data')
@@ -174,34 +173,56 @@ def rescale_answer(pos, pos_min, pos_max):
 
 def get_events_explore(sub, sess, nan_missed=True):
 
-    #? distinguish free vs forced trials?
+    #confidence = 1-EU (estimation confidence is the same); keep in mind that EncodeProb has calculated uncertainty
+    #surprise = feedback surprise at outcome
+    #predictabiliy = compute from prior that is returned from IO observer 
+    #prediction = expected reward
+    #(at outcome = prediction error and surprise of previous trial)
+
+    #?get IO estimate for subject response
     
-    events_fixed = ['cue', 'resp', 'out', 'missed', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf'] #will be added as an unmodulated regressor
+    events_fixed = ['cue', 'resp', 'out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf'] #will be added as an unmodulated regressor
     events_modulated = ['reward','sub_qA_val', 'sub_qA_conf', 'io_qA_val', 'io_qA_conf', 
                     'sub_qB_val', 'sub_qB_conf', 'io_qB_val', 'io_qB_conf']
     event_labels = events_fixed + events_modulated + params.io_variables
 
+    event_label_split = []
+    for event in event_labels:
+        if 'q' in event:
+            event_label_split.append(f"{event}_all") #questions and answers stay combined
+        else:
+            event_label_split.append(f"{event}_free") #split other modulators 
+            event_label_split.append(f"{event}_forced")
+
     io_times = []
     for reg in params.io_variables:
         io_times.append(f'{reg}_start')
-    time_cols = ['trial_start', 'rt_start', 'outcome_start','missed_start',
+
+    time_cols = ['trial_start', 'rt_start', 'outcome_start',
                     'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'reward_start',
                     'qA_val_sub_start', 'qA_conf_sub_start', 'qA_val_io_start', 'qA_conf_io_start',
                     'qB_val_sub_start', 'qB_conf_sub_start', 'qB_val_io_start', 'qB_conf_io_start',
                     ]  + io_times
 
-    n_trials = 96 #TODO: can I get this variable from somewhere?
     arm_ids = ['A', 'B']
 
-    trial_types_all = np.asarray(event_labels * n_trials)
-
     para = initialize_subject(sub)# no need to specify vol because we only get onsets from this function
-    para = para.set_index(np.arange(0, para.shape[0]))
+    #para = para.set_index(np.arange(0, para.shape[0]))
 
-    # Get onsets for missed trials
-    para['missed_start'] = np.nan
-    para.loc[para['ismissed'] == 1, 'missed_start'] = \
-        para['trial_start'][para['ismissed'] == 1]
+    #by block
+    para = para[para['block'] == sess].reset_index(drop=True)
+    #ignore first 4 trials as activity + confidence increases dramatically (but unrelated)
+    para = para.iloc[4:].reset_index(drop=True)
+    n_trials = len(para) #get trial n from length of df
+
+    trial_types_all = np.asarray(event_label_split * n_trials)
+    trial_types_all = [trial_name.replace('EU', '1-EU') for trial_name in trial_types_all] #chnage name to represent the convertion to confidence
+    trial_types_all = np.asarray(trial_types_all)
+
+    # Get onsets for missed trials #din't add a missed regressor since missed trials only appear in a few trial and prevent the creation of a design matrix by block
+    # para['missed_start'] = np.nan
+    # para.loc[para['ismissed'] == 1, 'missed_start'] = \
+    #     para['trial_start'][para['ismissed'] == 1]
 
     # Don't count missed trials as regular trials
     if nan_missed:
@@ -209,8 +230,6 @@ def get_events_explore(sub, sess, nan_missed=True):
         para.loc[para['ismissed'] == 1, 'outcome_start'] = np.nan
     para['rt_start'] = np.nansum(para[['trial_start', 'rt']], axis=1)
     para.loc[para['rt_start'] == 0, 'rt_start'] = np.nan
-
-    para = para[para['block'] == sess]
 
     # add a time column for outcome modulator
     para['reward_start'] = para['outcome_start']
@@ -247,7 +266,7 @@ def get_events_explore(sub, sess, nan_missed=True):
     #add columns for durations
     for dur in events_fixed:
         para[f'{dur}_drt'] = 0
-    para['missed_drt'] = 5
+    #para['missed_drt'] = 5
     para['reward_drt'] = 0
     for arm in arm_ids:
         for l in ['val', 'conf']:
@@ -257,29 +276,76 @@ def get_events_explore(sub, sess, nan_missed=True):
     #add columns for modulation
     for mod in events_fixed:
         para[f'{mod}_mod'] = 1
-    para['reward_mod'] = demean(para['reward'])
+    para['reward_mod'] = para['reward_z']
     for arm in arm_ids:
         for l in ['val', 'conf']:
-            para[f'q{arm}_{l}_sub_mod'] = 1 #! where are the subj responses saved?
-            para[f'q{arm}_{l}_io_mod'] = demean(para[f'opt{arm}_{l}'])
+            para[f'q{arm}_{l}_sub_mod'] = para[f'opt{arm}_{l}']
+            io_est = np.full(len(para), np.nan)
+            if l == 'val':
+                io_est[~para[f'opt{arm}_val'].isna()] = para.loc[~para[f'opt{arm}_val'].isna(), f'ER_{arm}']
+            else:
+                io_est[~para[f'opt{arm}_val'].isna()] = 1 - para.loc[~para[f'opt{arm}_val'].isna(), f'EU_{arm}']
+            para[f'q{arm}_{l}_io_mod'] = io_est #! could also be replace by behav model results 
 
     # ADD IO RESULTS OF INTEREST
+    #currently all estimates are releated to the chosen option
+    #other option that produces similar maps as EncodeProb is chosen-unchosen
     for reg in params.io_variables:
-        para[f'{reg}_start'] = para['trial_start']
+        if 'US' in reg:
+            para[f'{reg}_start'] = para['outcome_start'] # feedback surprise needs to be locked to outcome
+        else:
+            para[f'{reg}_start'] = para['trial_start']
         para[f'{reg}_drt'] = 0
-        para[f'{reg}_mod'] = demean(para[reg])
+        if 'EU' in reg:
+            para[f'{reg}_mod'] = 1 - para[reg]
+        else:
+            para[f'{reg}_mod'] = para[reg]
+
+    # SPLIT FREE AND FORCED 
+    dur_cols = [col for col in para.columns if '_drt' in col]
+    mod_cols = [col for col in para.columns if '_mod' in col]
+    all_cols = time_cols + dur_cols + mod_cols #?maybe substract question params?
+
+    for col in all_cols:
+        # Get the value of 'isfree'
+        if 'q' in col:
+            para[f'{col}_all'] = para[col] #questions and answers stay combined
+        else:
+            isfree = para['isfree']
+
+            # Get the original value of the column
+            original_array = para[col]
+
+            free_array = []
+            forced_array = []
+
+            for i, value in enumerate(original_array):
+                if isfree[i] == 1:
+                    free_array.append(value)
+                    forced_array.append(float('nan'))  
+                else:
+                    free_array.append(float('nan')) 
+                    forced_array.append(value)
+            
+            # Assign the new free and forced arrays to the para dictionary
+            para[f'{col}_free'] = free_array
+            para[f'{col}_forced'] = forced_array
 
     onsets = []
+    time_cols = [col for col in para if '_start' in col and ('_free' in col or '_forced' in col or '_all' in col)] #only the seperated predictors 
     onsets.append(para[time_cols].values)
     onsets = np.hstack(onsets).ravel('C')
     trial_types = trial_types_all[~np.isnan(onsets)]
     durations = []
-    dur_cols = [col for col in para.columns if '_drt' in col]
+    dur_cols = [col for col in para if '_drt' in col and ('_free' in col or '_forced' in col or '_all' in col)]
     durations.append(para[dur_cols].values)
     durations = np.hstack(durations).ravel('C')
     durations = durations[~np.isnan(onsets)] 
     modulations = []
-    mod_cols = [col for col in para.columns if '_mod' in col]
+    mod_cols = [col for col in para if '_mod' in col and ('_free' in col or '_forced' in col or '_all' in col)]
+    for col in mod_cols: #deman the free and forced trials seperatly
+        if not para[col].dropna().eq(1).all(): #skip the collumns that contain only a constant
+            para[col] = demean(para[col])
     modulations.append(para[mod_cols].values)
     modulations = np.hstack(modulations).ravel('C')
     modulations = modulations[~np.isnan(onsets)]
@@ -288,7 +354,7 @@ def get_events_explore(sub, sess, nan_missed=True):
     events = pd.DataFrame({'onset': onsets,
                             'trial_type': trial_types,
                             'duration': durations,
-                            'modulation': modulations})
+                        'modulation': modulations})
 
     return events
 
@@ -334,13 +400,13 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
         if params.update:
         # IO regressors
             io_regs = pd.DataFrame({'update': io_inference['update'],
-                                    'predictions': io_inference['p1_mean_array'],
+                                    'predictions': io_inference['p1'],
                                     'predictability': io_inference['entropy']})
 
         else:
             io_regs = pd.DataFrame({'surprise': io_inference['surprise'],
                                     'confidence': io_inference['confidence_pre'],
-                                    'predictions': io_inference['p1_mean_array'],
+                                    'predictions': io_inference['p1'],
                                     'predictability': io_inference['entropy']})
 
         stim_q = get_stimq(db, sub, sess, data_dir)

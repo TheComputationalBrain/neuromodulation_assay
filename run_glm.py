@@ -186,15 +186,28 @@ for sub in subjects:
     contrast_matrix = np.eye(design_matrix.shape[1])
     contrasts = dict([(column, contrast_matrix[i])
                             for i, column in enumerate(design_matrix.columns)])
-    if params.update:
-        contrasts = {'update': contrasts['update'],
-                    'predictions': contrasts['predictions'],
-                    'predictability': contrasts['predictability']}
+    
+    if params.db != 'Explore':
+        if params.update:
+            contrasts = {'update': contrasts['update'],
+                        'predictions': contrasts['predictions'],
+                        'predictability': contrasts['predictability']}
+        else:
+            contrasts = {'surprise': contrasts['surprise'],
+                        'confidence': contrasts['confidence'],
+                        'predictions': contrasts['predictions'],
+                        'predictability': contrasts['predictability']}
     else:
-        contrasts = {'surprise': contrasts['surprise'],
-                    'confidence': contrasts['confidence'],
-                    'predictions': contrasts['predictions'],
-                    'predictability': contrasts['predictability']}
+        if params.split: 
+            contrasts = {'surprise_free': contrasts['US_z_free'],
+                        'confidence_free': contrasts['1-EU_chosen_z_free'],
+                        'prediction_free': contrasts['ER_chosen_z_free'],
+                        'predictability_free': contrasts['entropy_chosen_z_free'],
+                        'surprise_forced': contrasts['US_z_forced'],
+                        'confidence_forced': contrasts['1-EU_chosen_z_forced'],
+                        'prediction_forced': contrasts['ER_chosen_z_forced'],
+                        'predictability_forced': contrasts['entropy_chosen_z_forced']}
+         
     
     for contrast_id in contrasts:
         contrast = compute_contrast(labels,

@@ -31,7 +31,7 @@ from dominance_stats import dominance_stats
 RUN_REGRESSION = True
 RUN_DOMINANCE = True
 FROM_OLS = False
-NUM_WORKERS = 14  # Set an appropriate number of workers to run dominance code in parallel
+NUM_WORKERS = 5  # Set an appropriate number of workers to run dominance code in parallel
 
 paths = Paths()
 params = Params()
@@ -61,8 +61,8 @@ if params.parcelated:
         gene_expression = pd.read_csv(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
         receptor_density = zscore(gene_expression.to_numpy(), nan_policy='omit')
 else:
-    receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
-    output_dir = os.path.join(beta_dir, 'regressions', 'PET')
+    receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) #vertex level analyis can only be run on PET data densities 
+    output_dir = os.path.join(beta_dir, 'regressions', rec.source)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
     receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))

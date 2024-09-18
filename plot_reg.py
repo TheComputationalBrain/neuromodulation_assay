@@ -8,14 +8,14 @@ from statsmodels.stats.multitest import multipletests
 from params_and_paths import Paths, Params, Receptors
 
 PLOT_COEFS = True
-PLOT_DOMINANCE = False
+PLOT_DOMINANCE = True
 FROM_OLS = False
 
 paths = Paths()
 params = Params()
 rec = Receptors()
 
-if rec.source == 'PET':
+if rec.source in ['PET', 'PET2']:
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
 elif rec.source  == 'autorad_zilles44':
     receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]
@@ -200,6 +200,12 @@ if PLOT_DOMINANCE:
         ax.set_xlabel('Receptor/Transporter')
         ax.set_ylabel('contribution (%)')
         ax.set_title(f'{mask_comb}: dominance analysis for {latent_var} with {rec.source}', fontsize=12)
+
+        textstr = f'average R²: {mean_R2:.2f}'
+        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=14,
+                verticalalignment='top', horizontalalignment='right', bbox=props)
+        
         plt.tight_layout()
         
         fname = f'{latent_var}_{mask_comb}_dominance.png'

@@ -33,8 +33,8 @@ params = Params()
 
 #TODO: move path to paths class 
 receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images/' #path to downloaded data from Hansen et al. (2022)
-alpha_path = '/Users/alice/postdoc/NeuroModAssay/' #path to the data shared by Benedicte Ballanger
-output_dir = os.path.join(paths.home_dir,'receptors', 'PET')
+alpha_path = '/home/ah278717/alpha2_receptor/' #path to the data shared by Benedicte Ballanger
+output_dir = os.path.join(paths.home_dir,'receptors', 'PET2')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 

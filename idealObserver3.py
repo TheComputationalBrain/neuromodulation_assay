@@ -45,7 +45,8 @@ def io_with_derivations(sequence, vol, sd=(10, 20),
                            'signed_feedback_surprise',
                            'expected_discrete_reward',
                            'expected_outcome_uncertainty',
-                           'estimation_confidence']
+                           'estimation_confidence',
+                           'entropy']
 
     vars_requiring_reward_prob = ['prior_reward_probability',
                                   'posterior_reward_probability',
@@ -118,6 +119,8 @@ def io_with_derivations(sequence, vol, sd=(10, 20),
             io[v] = expected_uncertainty_outcome(io[id_reward_prob])
         elif v == 'estimation_confidence':
             io[v] = estimation_confidence(io[id_dist])
+        elif v == 'entropy':
+            io[v] = entropy (io['prior'])
 
     return io
 
@@ -527,6 +530,15 @@ def expected_uncertainty_outcome(p_reward):
         expected_outcome_uncertainty[arm] = 1 - np.max(p_reward[arm], axis=1)
 
     return expected_outcome_uncertainty
+
+def entropy(prior):
+    "Entropy of the prior ditribution"
+
+    entropy = {arm: [] for arm in prior}
+    for arm in prior:
+       entropy[arm] = -np.sum(prior[arm] * np.log(prior[arm]), axis=1)
+
+    return entropy
 
 
 
