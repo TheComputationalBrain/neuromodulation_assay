@@ -29,9 +29,9 @@ from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
 RUN_REGRESSION = True
-RUN_DOMINANCE = True
+RUN_DOMINANCE = False
 FROM_OLS = False
-NUM_WORKERS = 5  # Set an appropriate number of workers to run dominance code in parallel
+NUM_WORKERS = 1  # Set an appropriate number of workers to run dominance code in parallel
 
 paths = Paths()
 params = Params()
@@ -42,12 +42,21 @@ subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
 
 if params.update:
-    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+    if params.db == 'Explore':
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model', params.model)
+    else:
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
 else:
-    if FROM_OLS:
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
-    else: 
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+    if params.db == 'Explore':
+        if FROM_OLS:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS',params.model)
+        else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
+    else:
+        if FROM_OLS:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
+        else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
                                     
 if params.parcelated:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  

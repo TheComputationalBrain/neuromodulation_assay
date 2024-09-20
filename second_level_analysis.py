@@ -34,6 +34,7 @@ from multiprocessing import Pool
 
 FROM_OLS = False
 PLOT_ONLY = True
+NUM_WORKERS = 4 #set number of CPUs
 
 paths = Paths()
 params = Params()
@@ -67,7 +68,7 @@ if params.parcelated:
     mask_comb = params.mask + '_' + params.mask_details 
     receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
 else:
-    receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
+    receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) #vertex level analyis can only be run on PET data densities 
     receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
     mask_comb = params.mask 
 
@@ -124,7 +125,7 @@ def run_lin_reg(X,y):
 def plot_res(res, r2):
     plt.rcParams.update({'font.size': 16})
 
-    if rec.source == 'PET':
+    if rec.source in ['PET', 'PET2']:
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
     elif rec.source  == 'autorad_zilles44':
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]
@@ -340,6 +341,6 @@ def run_group_analysis(latent_var):
         fig.savefig(os.path.join(plot_path, fname))
 
 
-my_pool = Pool(4)
+my_pool = Pool(NUM_WORKERS)
 my_pool.map(run_group_analysis,params.latent_vars)
 

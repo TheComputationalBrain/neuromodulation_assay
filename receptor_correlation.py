@@ -19,9 +19,15 @@ subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
 
 if params.update:
-    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+    if params.db == 'Explore':
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model', params.model)
+    else:
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
 else:
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+    if params.db == 'Explore':
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
+    else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if params.parcelated:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
@@ -35,8 +41,8 @@ if params.parcelated:
         gene_expression = pd.read_csv(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
         receptor_density = zscore(gene_expression.to_numpy(), nan_policy='omit')
 else:
-    receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET') #vertex level analyis can only be run on PET data densities 
-    output_dir = os.path.join(beta_dir, 'regressions', 'PET')
+    receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) #vertex level analyis can only be run on PET data densities 
+    output_dir = os.path.join(beta_dir, 'regressions', rec.source)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
     receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
@@ -77,7 +83,7 @@ if RUN_CORR:
 
 if PLOT_CORR:
 # plot correlation results in Boxplot
-    if rec.source == 'PET':
+    if rec.source in ['PET', 'PET2']:
             receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
     elif rec.source  == 'autorad_zilles44':
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]

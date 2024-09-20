@@ -91,13 +91,9 @@ def convert_to_secs(data, var):
 def get_seq(db, sub, sess, beh_dir):
 
     if db == 'Explore':
-        if sub not in params.subnums_explore:
-            subcsv = sub
-        else:
-            subcsv = params.subnums_explore[sub]
 
-        file = os.path.join(beh_dir, 'Data_neurospin/formatted/fmri_session',
-                            f'sub-{sub:02d}/data_subject_{subcsv:02d}_session_{sess}.csv')
+        file = glob.glob(os.path.join(beh_dir, 'Data_neurospin/formatted/fmri_session',
+                            f'sub-{sub:02d}/data_subject_*_session_{sess}.csv'))[0]
         seq = pd.read_csv(file, index_col=0)
 
     else:

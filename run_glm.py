@@ -53,13 +53,23 @@ if not os.path.exists(fmri_arr_dir):
         os.makedirs(fmri_arr_dir)
 
 if params.update:
-    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+    if params.db == 'Explore':
+        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model', params.model)
+    else:
+        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
     design_dir = os.path.join(output_dir, 'designmatrix_update')
 else:
-    if RUN_OLS:
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
+    if params.db == 'Explore':
+        if RUN_OLS:
+            output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS',params.model)
+        else:
+            output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
     else:
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+        if RUN_OLS:
+            output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
+        else:
+            output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+
     design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
     
 if not os.path.exists(output_dir):
@@ -199,14 +209,14 @@ for sub in subjects:
                         'predictability': contrasts['predictability']}
     else:
         if params.split: 
-            contrasts = {'surprise_free': contrasts['US_z_free'],
-                        'confidence_free': contrasts['1-EU_chosen_z_free'],
-                        'prediction_free': contrasts['ER_chosen_z_free'],
-                        'predictability_free': contrasts['entropy_chosen_z_free'],
-                        'surprise_forced': contrasts['US_z_forced'],
-                        'confidence_forced': contrasts['1-EU_chosen_z_forced'],
-                        'prediction_forced': contrasts['ER_chosen_z_forced'],
-                        'predictability_forced': contrasts['entropy_chosen_z_forced']}
+            contrasts = {'surprise_free': contrasts['US_free'],
+                        'confidence_free': contrasts[f'1-EU_{params.model}_free'],
+                        'prediction_free': contrasts[f'ER_{params.model}_free'],
+                        'predictability_free': contrasts[f'entropy_{params.model}_free'],
+                        'surprise_forced': contrasts[f'US_forced'],
+                        'confidence_forced': contrasts[f'1-EU_{params.model}_forced'],
+                        'prediction_forced': contrasts[f'ER_{params.model}_forced'],
+                        'predictability_forced': contrasts[f'entropy_{params.model}_forced']}
          
     
     for contrast_id in contrasts:

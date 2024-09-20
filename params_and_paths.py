@@ -11,7 +11,7 @@ Created on Mon Apr 15 09:59:22 2024
 DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
-RECEPTOR_SOURCE = 'PET2' #,'PET', '$PET' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
+RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
 
 #fixed at best setting:
 UPDATE_REG = False #update or suprise + confidence as regressor
@@ -65,10 +65,14 @@ class Params:
             #                         6: 4,
             #                         25: 28,
             #                         28: 25}
-            self.subnums_explore = {}
-            self.io_variables = ['EU_chosen_z', 'US_z', 'ER_chosen_z', 'entropy_chosen_z'] #TODO: try chosen-unchosen?
-            self.latent_vars = ['surprise_free', 'confidence_free', 'predictability_free', 'predictions_free',
-                                'surprise_forced', 'confidence_forced', 'predictability_forced', 'predictions_forced']
+            self.model = 'diff' #'chosen'; 'diff'
+            if self.model == 'chosen':
+                self.io_variables = ['US', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
+            elif self.model == 'diff':
+                self.io_variables = ['US', 'EU_diff', 'ER_diff', 'entropy_diff']
+
+            self.latent_vars = ['surprise_free', 'confidence_free', 'predictability_free', 'prediction_free',
+                                'surprise_forced', 'confidence_forced', 'predictability_forced', 'prediction_forced']
         
         elif db == 'PNAS':
             self.ignore = []
@@ -114,7 +118,7 @@ class Receptors:
             self.dopamine = ["D1", "D2", "DAT"]
             self.cannabinnoid = ["CB1"]
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
-            self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
+            self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'a2']
 
         if source == 'autorad_zilles44':
             self.receptor_names = ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa-BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',

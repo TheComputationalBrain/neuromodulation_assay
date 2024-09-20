@@ -8,7 +8,7 @@ from statsmodels.stats.multitest import multipletests
 from params_and_paths import Paths, Params, Receptors
 
 PLOT_COEFS = True
-PLOT_DOMINANCE = True
+PLOT_DOMINANCE = False
 FROM_OLS = False
 
 paths = Paths()
@@ -24,12 +24,21 @@ elif rec.source == 'AHBA':
 receptor_class = [rec.exc,rec.inh]
 
 if params.update:
-    beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+    if params.db == 'Explore':
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model', params.model)
+    else:
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
 else:
-    if FROM_OLS:
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
-    else: 
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+    if params.db == 'Explore':
+        if FROM_OLS:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS',params.model)
+        else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
+    else:
+        if FROM_OLS:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
+        else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if params.parcelated:
     mask_comb = params.mask + '_' + params.mask_details
