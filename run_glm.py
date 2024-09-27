@@ -179,10 +179,10 @@ for sub in subjects:
     #run GLM on all voxels
     if RUN_OLS:    
         print("---- Running glm with OLS ----")
-        labels, estimates = run_glm(fmri_data, design_matrix.values, noise_model='ols', n_jobs = 4)
+        labels, estimates = run_glm(fmri_data, design_matrix.values, noise_model='ols', n_jobs = 1)
     else: 
         print("---- Running glm with autoregressive model  ----")
-        labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 4)
+        labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 1)
 
     # save results
     label_fname = f'sub-{sub:02d}_{params.db}_labels_{params.mask}.pickle'
@@ -209,7 +209,7 @@ for sub in subjects:
                         'predictability': contrasts['predictability']}
     else:
         if params.split: 
-            contrasts = {'surprise_free': contrasts['US_free'],
+            contrasts = {'surprise_free': contrasts['SS_free'],
                         'confidence_free': contrasts[f'1-EU_{params.model}_free'],
                         'prediction_free': contrasts[f'ER_{params.model}_free'],
                         'predictability_free': contrasts[f'entropy_{params.model}_free'],
@@ -217,8 +217,12 @@ for sub in subjects:
                         'confidence_forced': contrasts[f'1-EU_{params.model}_forced'],
                         'prediction_forced': contrasts[f'ER_{params.model}_forced'],
                         'predictability_forced': contrasts[f'entropy_{params.model}_forced']}
-         
-    
+        else:
+            contrasts = {'surprise': contrasts['SS'],
+                        'confidence': contrasts[f'1-EU_chosen'],
+                        'predictions': contrasts[f'ER_chosen'],
+                        'predictability': contrasts[f'entropy_chosen']}
+            
     for contrast_id in contrasts:
         contrast = compute_contrast(labels,
                                     estimates,

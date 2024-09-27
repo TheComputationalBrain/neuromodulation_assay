@@ -31,7 +31,7 @@ from dominance_stats import dominance_stats
 RUN_REGRESSION = True
 RUN_DOMINANCE = False
 FROM_OLS = False
-NUM_WORKERS = 1  # Set an appropriate number of workers to run dominance code in parallel
+NUM_WORKERS = 5  # Set an appropriate number of workers to run dominance code in parallel
 
 paths = Paths()
 params = Params()

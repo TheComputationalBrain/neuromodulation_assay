@@ -36,7 +36,7 @@ class Params:
             self.smoothing_fwhm = None #no smoothing necessary because of 7T fMRI
         elif db == 'NAConf':
             self.seq_type = 'bernoulli'
-            self.smoothing_fwhm = 2
+            self.smoothing_fwhm = 5
         elif db == 'PNAS':
             self.seq_type = 'transition'
             self.smoothing_fwhm = 5
@@ -65,14 +65,14 @@ class Params:
             #                         6: 4,
             #                         25: 28,
             #                         28: 25}
-            self.model = 'diff' #'chosen'; 'diff'
-            if self.model == 'chosen':
-                self.io_variables = ['US', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
-            elif self.model == 'diff':
-                self.io_variables = ['US', 'EU_diff', 'ER_diff', 'entropy_diff']
+            self.split = False #split free and forced for the design matrix?
+            self.reward = True 
+            if self.reward:
+                self.model = 'chosen2_reward' #'chosen'; 'diff'
+            else: 
+                self.model = 'chosen2' #'chosen'; 'diff'
+            self.io_variables = ['SS', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
 
-            self.latent_vars = ['surprise_free', 'confidence_free', 'predictability_free', 'prediction_free',
-                                'surprise_forced', 'confidence_forced', 'predictability_forced', 'prediction_forced']
         
         elif db == 'PNAS':
             self.ignore = []

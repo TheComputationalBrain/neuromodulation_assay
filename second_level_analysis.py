@@ -34,7 +34,7 @@ from multiprocessing import Pool
 
 FROM_OLS = False
 PLOT_ONLY = True
-NUM_WORKERS = 4 #set number of CPUs
+NUM_WORKERS = 1 #set number of CPUs
 
 paths = Paths()
 params = Params()
@@ -62,6 +62,37 @@ else:
         beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
     else: 
         beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+
+if params.update:
+
+    if params.db == 'Explore':
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model', params.model)
+        plot_path = os.path.join(output_dir, params.model, 'plot_raw_update')
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+    else:
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+        plot_path = os.path.join(output_dir, 'plot_raw_update')
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+else:
+    if params.db == 'Explore':
+        plot_path = os.path.join(output_dir, params.model, 'plot_raw')
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+        if FROM_OLS:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS',params.model)
+        else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
+    else:
+        plot_path = os.path.join(output_dir, 'plot_raw')
+        if not os.path.exists(plot_path):
+            os.makedirs(plot_path) 
+        if FROM_OLS:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
+        else:
+            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+
 
 if params.parcelated:
     receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
