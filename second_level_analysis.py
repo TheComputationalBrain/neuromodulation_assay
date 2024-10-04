@@ -32,7 +32,6 @@ from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_20
 from multiprocessing import Pool
 
 
-FROM_OLS = False
 PLOT_ONLY = True
 NUM_WORKERS = 1 #set number of CPUs
 
@@ -58,10 +57,7 @@ else:
     plot_path = os.path.join(output_dir, 'plot_raw')
     if not os.path.exists(plot_path):
         os.makedirs(plot_path) 
-    if FROM_OLS:
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'OLS')
-    else: 
-        beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+    beta_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 if params.update:
 
@@ -80,18 +76,12 @@ else:
         plot_path = os.path.join(output_dir, params.model, 'plot_raw')
         if not os.path.exists(plot_path):
             os.makedirs(plot_path) 
-        if FROM_OLS:
-            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS',params.model)
-        else:
-            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
     else:
         plot_path = os.path.join(output_dir, 'plot_raw')
         if not os.path.exists(plot_path):
             os.makedirs(plot_path) 
-        if FROM_OLS:
-            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level','OLS')
-        else:
-            beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+        beta_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
 
 
 if params.parcelated:
