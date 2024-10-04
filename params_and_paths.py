@@ -8,7 +8,7 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+DB_NAME = 'NAConf' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
@@ -49,6 +49,7 @@ class Params:
             self.latent_vars = ['update', 'predictability', 'predictions']
         else:
             self.latent_vars = ['surprise', 'confidence', 'predictability', 'predictions']
+            #self.latent_vars = ['surprise', 'confidence', 'predictability']
 
         #participants to ignore and session deviations
         if db == 'NAConf':
@@ -67,13 +68,9 @@ class Params:
             #                         28: 25}
             self.split = False #split free and forced for the design matrix?
             self.reward = True 
-            if self.reward:
-                self.model = 'chosen2_reward' #'chosen'; 'diff'
-            else: 
-                self.model = 'chosen2' #'chosen'; 'diff'
-            self.io_variables = ['SS', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
+            self.model = 'US_reward' #'US_noreward'
+            self.io_variables = ['US', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
 
-        
         elif db == 'PNAS':
             self.ignore = []
             self.session = []

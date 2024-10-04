@@ -170,7 +170,7 @@ def rescale_answer(pos, pos_min, pos_max):
 def get_events_explore(sub, sess, nan_missed=True):
 
     #confidence = 1-EU (estimation confidence is the same); keep in mind that EncodeProb has calculated uncertainty
-    #surprise = feedback surprise at outcome
+    #surprise = feedback surprise at outcome/shannon surprise
     #predictabiliy = compute from prior that is returned from IO observer 
     #prediction = expected reward
     #(at outcome = prediction error and surprise of previous trial)
@@ -510,6 +510,7 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
 
             # create event dataframe
             on_stim = exp[sess-1]['stim_onsets']
+            on_stim = on_stim[4:].copy() #TODO: clean this up
             on_q_prob = exp[sess-1]['question_prob_onsets']
             on_q_conf = exp[sess-1]['question_conf_onsets']
 
@@ -530,6 +531,7 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
                                 on_q_conf,
                                 on_q_conf_responded,
                                 on_q_conf_responded))
+            
             trial_type = np.hstack((['stim']* len(on_stim), 
                                     ['q_prob']* len(on_q_prob),
                                     ['sub_prob']* len(on_q_prob_responded),
@@ -537,10 +539,11 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
                                     ['q_conf']*len(on_q_conf),
                                     ['sub_conf']* len(on_q_conf_responded),
                                     ['io_conf']* len(on_q_conf_responded)))
-            duration_stim = exp[sess-1]['durations'] #durations are always = 1
+            duration = exp[sess-1]['durations'] #durations are always = 1
+            duration_stim = duration[4:].copy()
 
             duration = np.hstack((duration_stim, 
-                                    np.nan_to_num(exp[sess-1]['rt_prob'], nan=0), #TODO: is there a time out parameter?
+                                    np.nan_to_num(exp[sess-1]['rt_prob'], nan=0), 
                                     rt_prob[~np.isnan(rt_prob)],
                                     rt_prob[~np.isnan(rt_prob)],
                                     np.nan_to_num(exp[sess-1]['rt_conf'], nan=0),
@@ -562,17 +565,20 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             
         #add IO regressors 
         for column in io_regs.columns:
+            regs = io_regs[column]
+            if db == 'NAConf':
+                regs = regs[4:].copy()
             onsets = np.concatenate((onsets, on_stim))
             duration = np.concatenate((duration, [0] * on_stim))
             trial_type = np.concatenate((trial_type, [column] * len(on_stim)))
-            centered_values = demean(io_regs[column].to_numpy()) #center all io modulation values 
+            centered_values = demean(regs.to_numpy()) #center all io modulation values 
             modulation = np.concatenate((modulation, centered_values))
 
         events = pd.DataFrame({'onset': onsets,
                             'duration': duration,
                             'trial_type': trial_type,
                             'modulation': modulation
-                            })
+                            })            
 
     return events
 

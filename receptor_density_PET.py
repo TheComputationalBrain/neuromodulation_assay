@@ -24,9 +24,8 @@ from nilearn import image, plotting
 from params_and_paths import Paths, Params
 
 
-PLOT_RECEPTORS=False
-PLOT_RECEPTORS_INFLATED=True
-
+PLOT_RECEPTORS=True
+PLOT_RECEPTORS_INFLATED=False
 
 paths = Paths()
 params = Params()
@@ -137,6 +136,9 @@ else:
 
 
 #### plotting   
+cmap = np.genfromtxt('/home/ah278717/hansen_receptors/data/colourmap.csv', delimiter=',')
+cmap_div = ListedColormap(cmap)
+
 #plot surface maps 
 if PLOT_RECEPTORS:
     if params.parcelated:
@@ -145,24 +147,27 @@ if PLOT_RECEPTORS:
                 os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
 
-            data = masker.inverse_transform(receptor_data[:, indx])
+            data = masker.inverse_transform(zscore(receptor_data[:, indx]))
             mask_img = image.new_img_like(data, image.get_data(data) != 0) 
             plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', mask_img=mask_img, bg_on_data=True,
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'],
                                             title=receptor, colorbar=True, cmap = 'plasma', )
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
+            plt.close()
+
     else:
-        plot_path = os.path.join(output_dir,'figures') 
+        plot_path = os.path.join(output_dir,'figures_cmap') 
         if not os.path.exists(plot_path):
                 os.makedirs(plot_path)
         for indx,receptor in enumerate(receptor_names):
-            data = masker.inverse_transform(receptor_data[:, indx])#remove everything that's 
+            data = masker.inverse_transform(zscore(receptor_data[:, indx]))
             plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', threshold=1e-50,
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'],
-                                            title=receptor, colorbar=True, cmap = 'plasma', symmetric_cbar=False)
+                                            title=receptor, colorbar=True, cmap = cmap_div, symmetric_cbar=False, bg_on_data=False)
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
-            plt.savefig(os.path.join(plot_path, fig_fname))
+            plt.savefig(os.path.join(plot_path, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
+            plt.close()
 
 if PLOT_RECEPTORS_INFLATED:
     if params.parcelated:
@@ -171,24 +176,29 @@ if PLOT_RECEPTORS_INFLATED:
                 os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
 
-            data = masker.inverse_transform(receptor_data[:, indx])
+            data = masker.inverse_transform(zscore(receptor_data[:, indx]))
             mask_img = image.new_img_like(data, image.get_data(data) != 0) 
-            plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', mask_img=mask_img, 
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', mask_img=mask_img, 
                                             hemispheres=['left'], views=['lateral', 'medial'],
                                             title=receptor, colorbar=True, cmap = 'plasma',inflate=True, symmetric_cbar=False)
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
             plt.savefig(os.path.join(plot_path, fig_fname))
+            plt.close()
+
     else:
         plot_path = os.path.join(output_dir,'figures_inflated') 
         if not os.path.exists(plot_path):
                 os.makedirs(plot_path) 
         for indx,receptor in enumerate(receptor_names):
-            data = masker.inverse_transform(receptor_data[:, indx])
-            plotting.plot_img_on_surf(data, surf_mesh='fsaverage5', 
+            data = masker.inverse_transform(zscore(receptor_data[:, indx]))
+            plotting.plot_img_on_surf(data, surf_mesh='fsaverage', 
                                             hemispheres=['left'], views=['lateral', 'medial'], threshold=1e-50,
                                             title=receptor, colorbar=True, cmap = 'plasma',inflate=True, symmetric_cbar=False)
             fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
-            plt.savefig(os.path.join(plot_path, fig_fname))
+            plt.savefig(os.path.join(plot_path, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
+            plt.close()
+
+
 
 #### correlation matrix
 serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
@@ -207,7 +217,8 @@ cmap_div = ListedColormap(cmap)
 
 #receptor_data = np.load(os.path.join(output_dir, f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True)
 ordered_receptors = [receptor for group in receptor_groups for receptor in group]
-df = pd.DataFrame(zscore(receptor_data), columns=receptor_names)
+df = pd.DataFrame(receptor_data, columns=receptor_names)
+df = df.apply(zscore)
 df = df[ordered_receptors]
 corr_matrix = df.corr()
 plt.figure(figsize=(10, 8))
