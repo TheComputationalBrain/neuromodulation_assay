@@ -24,6 +24,7 @@ from nilearn import plotting, image
 from nilearn.input_data import NiftiMasker, NiftiLabelsMasker
 from sklearn.linear_model import LinearRegression
 import main_funcs as mf
+import fmri_funcs as fun
 import nibabel as nib
 from scipy.stats import zscore
 from params_and_paths import Paths, Params, Receptors
@@ -46,6 +47,7 @@ subjects = [subj for subj in subjects if subj not in params.ignore]
 output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
+
 
 #get receptor data
 if params.update:
@@ -125,6 +127,8 @@ elif params.mask == 'schaefer_byvoxel':
     masker = NiftiMasker(mask_img=mask_img)
 else:
     raise ValueError("Unknown atlas!")
+
+masker.fit() 
 
 def run_lin_reg(X,y):
     results_dict = dict()
@@ -223,33 +227,43 @@ def run_group_analysis(latent_var):
     print(f'------- running group analysis for {latent_var} -------')
 
     eff_size_files = []
+    eff_size_arrays = []
+
     for sub in subjects:
         #get contrast data (beta estimates) and concatinate
         ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map.nii.gz'))
         eff_size_files.append(ef_size)
+        eff_size_arrays.append(masker.fit_transform(ef_size).flatten())
+
 
     #second level model:
     design_matrix = pd.DataFrame([1] * len(eff_size_files),
                                  columns=['intercept']) #one sample test
-    second_level_model = SecondLevelModel(smoothing_fwhm=params.smoothing_fwhm)
+    second_level_model = SecondLevelModel()
     second_level_model = second_level_model.fit(eff_size_files,
                                                 design_matrix=design_matrix)
     
-    #second level contrast
-    #tscore
-    t_map = second_level_model.compute_contrast(output_type='stat')
-    fname = f'{latent_var}_{params.mask}_tmap.nii.gz'
-    nib.save(t_map, os.path.join(output_dir, fname))
-    plotting.plot_img_on_surf(t_map, surf_mesh='fsaverage5', 
-                                            hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
-                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True)
+    #get mask for any NANs 
+    eff_size_data = np.stack(eff_size_arrays, axis=-1)
+    mask_array = np.where((eff_size_data == 0).any(axis=-1), 0, 1) #any voxel that is nan in ANY of the subjects
+    mask = masker.inverse_transform(mask_array)
 
-    fname = f'{latent_var}_tmap.png' 
+
+    #second level contrast
+    #zscore
+    z_map = second_level_model.compute_contrast(output_type='z_score')
+    fname = f'{latent_var}_{params.mask}_zmap.nii.gz'
+    nib.save(z_map, os.path.join(output_dir, fname))
+    plotting.plot_img_on_surf(z_map, surf_mesh='fsaverage5', 
+                                            hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
+                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, mask_img=mask)
+
+    fname = f'{latent_var}_zmap.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
     if PLOT_ONLY == False:
         #as np array 
-        y_data = masker.fit_transform(t_map).flatten()
+        y_data = masker.fit_transform(z_map).flatten()
 
         #group level regression
         if params.parcelated:
@@ -285,7 +299,7 @@ def run_group_analysis(latent_var):
     nib.save(effect_map, os.path.join(output_dir, fname))
     plotting.plot_img_on_surf(effect_map, surf_mesh='fsaverage5', 
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
-                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
+                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f', mask_img=mask)
     fname = f'{latent_var}_effect_map.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
@@ -321,45 +335,45 @@ def run_group_analysis(latent_var):
         fig.savefig(os.path.join(plot_path, fname))
 
 
-    #variance of effect
-    plt.rcParams.update({'font.size': 6})
-    var_map = second_level_model.compute_contrast(output_type='effect_variance')
-    fname = f'{latent_var}_{params.mask}_variance_map.nii.gz'
-    nib.save(var_map, os.path.join(output_dir, fname))
-    plotting.plot_img_on_surf(var_map, surf_mesh='fsaverage5', 
-                                            hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
-                                            title=latent_var, colorbar=True, cmap = 'black_red',inflate=True, symmetric_cbar='auto', cbar_tick_format='%.4f')
-    fname = f'{latent_var}_variance_map.png' 
-    plt.savefig(os.path.join(plot_path, fname))
+    # #variance of effect
+    # plt.rcParams.update({'font.size': 6})
+    # var_map = second_level_model.compute_contrast(output_type='effect_variance')
+    # fname = f'{latent_var}_{params.mask}_variance_map.nii.gz'
+    # nib.save(var_map, os.path.join(output_dir, fname))
+    # plotting.plot_img_on_surf(var_map, surf_mesh='fsaverage5', 
+    #                                         hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
+    #                                         title=latent_var, colorbar=True, cmap = 'black_red',inflate=True, symmetric_cbar='auto', cbar_tick_format='%.4f')
+    # fname = f'{latent_var}_variance_map.png' 
+    # plt.savefig(os.path.join(plot_path, fname))
 
-    if PLOT_ONLY == False:
-        y_data = masker.fit_transform(var_map).flatten()
-        #group level regression
-        if params.parcelated:
-            non_nan_region = ~np.isnan(receptor_density).any(axis=1)
-            non_nan_indices = np.where(non_nan_region)[0]
-            X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
-            y = y_data[non_nan_indices]
-        else:
-            non_nan_indices = ~np.isnan(y_data)
-            X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
-            y = y_data[non_nan_indices]
+    # if PLOT_ONLY == False:
+    #     y_data = masker.fit_transform(var_map).flatten()
+    #     #group level regression
+    #     if params.parcelated:
+    #         non_nan_region = ~np.isnan(receptor_density).any(axis=1)
+    #         non_nan_indices = np.where(non_nan_region)[0]
+    #         X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+    #         y = y_data[non_nan_indices]
+    #     else:
+    #         non_nan_indices = ~np.isnan(y_data)
+    #         X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+    #         y = y_data[non_nan_indices]
 
-        print('-- running regression for variance--')
-        reg_results = run_lin_reg(X,y)
-        fname = f'variance_{latent_var}_group_reg.pickle' 
-        with open(os.path.join(output_dir, fname), 'wb') as f:
-            pickle.dump(reg_results, f)
+    #     print('-- running regression for variance--')
+    #     reg_results = run_lin_reg(X,y)
+    #     fname = f'variance_{latent_var}_group_reg.pickle' 
+    #     with open(os.path.join(output_dir, fname), 'wb') as f:
+    #         pickle.dump(reg_results, f)
 
-        #dominance analysis
-        print('-- running dominance for variance--')
-        dominance_results = dominance_stats(X, y)
-        fname = f'variance_{latent_var}_group_da.pickle' 
-        with open(os.path.join(output_dir, fname), 'wb') as f:
-            pickle.dump(dominance_results, f)
-        fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
-        fname = f'variance_{latent_var}_group_da.png' 
-        fig.savefig(os.path.join(plot_path, fname))
+    #     #dominance analysis
+    #     print('-- running dominance for variance--')
+    #     dominance_results = dominance_stats(X, y)
+    #     fname = f'variance_{latent_var}_group_da.pickle' 
+    #     with open(os.path.join(output_dir, fname), 'wb') as f:
+    #         pickle.dump(dominance_results, f)
+    #     fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
+    #     fname = f'variance_{latent_var}_group_da.png' 
+    #     fig.savefig(os.path.join(plot_path, fname))
 
 
 my_pool = Pool(NUM_WORKERS)

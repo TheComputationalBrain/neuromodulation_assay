@@ -8,7 +8,7 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'NAConf' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+DB_NAME = 'PNAS' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
@@ -43,7 +43,6 @@ class Params:
         elif db == 'Explore':
             self.smoothing_fwhm = 5
             self.split = True #Split free and forced trials 
-
 
         if UPDATE_REG:
             self.latent_vars = ['update', 'predictability', 'predictions']
@@ -104,10 +103,10 @@ class Receptors:
         if source in ['PET', 'PET2']:
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                                "MOR", "NET", "NMDA", "VAChT", "a2"]
+                                "MOR", "NET", "NMDA", "VAChT", "A2"]
             self.serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
             self.acetylcholine = ["A4B2", "M1", "VAChT"]
-            self.noradrenaline = ["NET", "a2"]
+            self.noradrenaline = ["NET", "A2"]
             self.opioid = ["MOR"]
             self.glutamate = ["mGluR5", 'NMDA']
             self.histamine = ["H3"]
@@ -115,7 +114,7 @@ class Receptors:
             self.dopamine = ["D1", "D2", "DAT"]
             self.cannabinnoid = ["CB1"]
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
-            self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'a2']
+            self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'A2']
 
         if source == 'autorad_zilles44':
             self.receptor_names = ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa-BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',

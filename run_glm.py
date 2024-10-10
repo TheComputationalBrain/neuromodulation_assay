@@ -219,9 +219,9 @@ for sub in subjects:
                                     stat_type ='t')
 
         # Save t-map
-        t_val = masker.inverse_transform(contrast.stat())
-        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_tmap.nii.gz'
-        nib.save(t_val, os.path.join(output_dir, fname))
+        z_val = masker.inverse_transform(contrast.z_score())
+        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_zmap.nii.gz'
+        nib.save(z_val, os.path.join(output_dir, fname))
 
         #save effect size = beta 
         #save in a pickle format

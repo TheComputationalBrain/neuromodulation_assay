@@ -7,8 +7,9 @@ from scipy.stats import ttest_1samp
 from statsmodels.stats.multitest import multipletests
 from params_and_paths import Paths, Params, Receptors
 
-PLOT_COEFS = True
+PLOT_COEFS = False
 PLOT_DOMINANCE = True 
+ADD_CORR = False #if false, add the sign off the full regression instead
 
 paths = Paths()
 params = Params()
@@ -86,7 +87,6 @@ if PLOT_COEFS:
 
         # Assign colors to each group
         base_colors = sns.color_palette('husl', len(receptor_groups))
-        base_colors = sns.color_palette('husl', len(receptor_groups))
         colors = []
         for receptor in ordered_receptors:
             group_idx = receptor_to_group.get(receptor, -1)
@@ -146,6 +146,19 @@ if PLOT_DOMINANCE:
             print(f"File not found for {latent_var}, skipping...") #for now I only have the dominance data (computationally intensive) for surprise and confidence 
             continue
 
+        if 'a2' in results_df.columns:
+            results_df.rename(columns={'a2': 'A2'}, inplace=True)
+
+        if ADD_CORR:
+            fname = f'{latent_var}_{mask_comb}_correlation_results_bysubject.csv'
+        else: 
+            fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
+        
+        sign_results = pd.read_csv(os.path.join(output_dir, fname))
+        if 'a2' in sign_results.columns:
+            sign_results.rename(columns={'a2': 'A2'}, inplace=True)
+        sign_mean = sign_results.median(axis=0) #mean correlation for each receptor
+
         receptor_to_group = {}
         for group_idx, group in enumerate(receptor_groups):
             for receptor in group:
@@ -177,6 +190,8 @@ if PLOT_DOMINANCE:
 
         fig, ax = plt.subplots(figsize=(12, 8))
 
+        plt.rcParams.update({'font.size': 16})
+
         # Standardize the data by total model fit
         standardized_df = results_df[ordered_receptors].div(results_df[ordered_receptors].sum(axis=1), axis=0)
 
@@ -193,7 +208,19 @@ if PLOT_DOMINANCE:
         for i, (receptor, color) in enumerate(zip(ordered_receptors, colors)):
             if receptor not in receptor_class[0] and receptor not in receptor_class[1]:
                 bars[i].set_hatch('//')
-            
+
+        for i, (receptor, mean_value) in enumerate(zip(bar_data['receptor'], bar_data['mean_value'])):
+            sem = bar_data['sem'].iloc[i]  # Standard error for this bar
+            sign_val = sign_mean[receptor]  # Mean correlation for this receptor
+            if (params.db == 'Explore') & (latent_var == 'confidence'):
+                sign_val = sign_val * (-1)
+            # Determine the color of the circle based on the correlation sign
+            circle_color = '#C96868' if sign_val > 0 else '#7EACB5'
+            # Calculate the y-position of the circle (above the bar + error bar)
+            y_position = mean_value + sem + 0.01  # Add some padding for visibility
+            # Plot the circle
+            ax.plot(i, y_position, 'o', color=circle_color, markersize=8, label='_nolegend_')  # '_nolegend_' avoids adding this to the legend
+                    
         ax.set_xticks(np.arange(len(ordered_receptors)))
         ax.set_xticklabels(ordered_receptors, rotation=90)
         for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
@@ -201,18 +228,30 @@ if PLOT_DOMINANCE:
             label.set_color(base_colors[group_idx])
         ax.set_xlabel('Receptor/Transporter')
         ax.set_ylabel('contribution (%)')
-        ax.set_title(f'{mask_comb}: dominance analysis for {latent_var} with {rec.source}', fontsize=12)
+        #ax.set_title(f'{mask_comb}: dominance analysis for {latent_var} with {rec.source}', fontsize=12)
 
-        textstr = f'average R²: {mean_R2:.2f}'
-        props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
-        ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=14,
-                verticalalignment='top', horizontalalignment='right', bbox=props)
-        
+        # textstr = f'average R²: {mean_R2:.2f}'
+        # props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
+        # ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=14,
+        #         verticalalignment='top', horizontalalignment='right', bbox=props)
+
         plt.tight_layout()
         
         fname = f'{latent_var}_{mask_comb}_dominance.png'
         fig_dir = os.path.join(output_dir, 'plots')
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)
-        plt.savefig(os.path.join(fig_dir, fname), dpi=300)
+        plt.savefig(os.path.join(fig_dir, fname), dpi=300, bbox_inches='tight')
+
+        #bigger writing for poster 
+        for text in ax.get_figure().findobj(plt.Text):
+            text.set_fontsize(28)
+
+        fname = f'{latent_var}_{mask_comb}_dominance_poster.png'
+        fig_dir = os.path.join(output_dir, 'plots')
+        if not os.path.exists(fig_dir):
+            os.makedirs(fig_dir)
+        plt.savefig(os.path.join(fig_dir, fname), dpi=300, bbox_inches='tight',transparent=True)
+
+
 
