@@ -8,7 +8,7 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'PNAS' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
@@ -94,7 +94,8 @@ class Paths:
 
         self.home_dir = '/home_local/alice_hodapp/NeuroModAssay'
         self.root_dir = '/neurospin/unicog/protocols/IRMf'
-
+        self.receptor_path = '/home/ah278717/hansen_receptors/data/PET_nifti_images/' #path to downloaded data from Hansen et al. (2022)
+        self.alpha_path = '/home/ah278717/alpha2_receptor/' #path to the data shared by Benedicte Ballanger
 
 class Receptors:
     def __init__(self, source=RECEPTOR_SOURCE):

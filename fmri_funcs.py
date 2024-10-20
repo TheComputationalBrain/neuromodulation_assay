@@ -13,14 +13,14 @@ import nibabel as nib
 import abagen
 from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_2018
 from nilearn import image
-from nilearn.input_data import MultiNiftiMasker 
+from nilearn.input_data import NiftiMasker, MultiNiftiMasker 
 from main_funcs import *
 from params_and_paths import Params, Paths
 
 params = Params()
 paths = Paths()
 
-def get_masker(tr, smoothing_fwhm):
+def get_masker(tr=None,smoothing_fwhm=None):
     
     #mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
 
@@ -44,14 +44,19 @@ def get_masker(tr, smoothing_fwhm):
         mask = ~np.isin(image.get_data(atlas_img), [0,35,36,37,38,39,40,41,76,77,78,79,80,81,82,83])
         mask_img = image.new_img_like(atlas_img, mask) #only cortical structures 
 
-    masker = MultiNiftiMasker(
-        mask_img=mask_img,
-        detrend=True,  # Improves the SNR by removing linear trends
-        high_pass=params.hpf,  # kept small to keep sensitivity,
-        standardize=False,
-        smoothing_fwhm=smoothing_fwhm,
-        t_r=tr,
-    )
+    if tr==None:
+        masker = NiftiMasker(mask_img=mask_img)
+    else:
+        masker = MultiNiftiMasker(
+            mask_img=mask_img,
+            detrend=True,  # Improves the SNR by removing linear trends
+            high_pass=params.hpf,  # kept small to keep sensitivity,
+            standardize=False,
+            smoothing_fwhm=smoothing_fwhm,
+            t_r=tr,
+        )
+    
+     masker.fit()
     
     return masker
 

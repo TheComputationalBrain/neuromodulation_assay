@@ -19,7 +19,6 @@ params = Params()
 
 ATLAS_SCHAEFER = False
 ATLAS_DESIKAN = True
-#TODO: other parcelation
 
 output_dir = os.path.join(paths.home_dir,'receptors', 'AHBA')
 if not os.path.exists(output_dir):

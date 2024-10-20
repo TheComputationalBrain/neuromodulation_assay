@@ -20,7 +20,8 @@ def dominance_stats(X, y):
     """
     Return the dominance analysis statistics for multilinear regression.
 
-    see also: https://github.com/dominance-analysis/dominance-analysis
+    see also: https://github.com/dominance-analysis/dominance-analysis and
+    https://netneurotools.readthedocs.io/en/stable/generated/netneurotools.stats.get_dominance_stats.html
 
     Parameters
     ----------

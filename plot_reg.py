@@ -3,25 +3,55 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 from scipy.stats import ttest_1samp
 from statsmodels.stats.multitest import multipletests
+from matplotlib.legend_handler import HandlerTuple
 from params_and_paths import Paths, Params, Receptors
 
-PLOT_COEFS = False
+PLOT_COEFS = True
 PLOT_DOMINANCE = True 
 ADD_CORR = False #if false, add the sign off the full regression instead
+PLOT_LEGEND = True
 
 paths = Paths()
 params = Params()
 rec = Receptors()
 
+plt.rcParams.update({'font.size': 18})
+
 if rec.source in ['PET', 'PET2']:
         receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.dopamine, rec.cannabinnoid]
+        group_names = ['serotonin', 'acetylcholine', 'norepinephrine', 'opioid', 'glutamate', 'histamine', 'gaba', 'cannabinnoid']
 elif rec.source  == 'autorad_zilles44':
     receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.glutamate, rec.gaba, rec.dopamine]
 elif rec.source == 'AHBA':
     receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.dopamine]
 receptor_class = [rec.exc,rec.inh]
+
+receptor_label_formatted = [
+    '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$',
+    '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
+    '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$',
+    '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
+    '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$',
+    '$5\\text{-}\\mathrm{HTT}$',
+    '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$',
+    '$\\mathrm{M}_{\\mathrm{1}}$',
+    '$\\mathrm{VAChT}$',
+    '$\\mathrm{NET}$',
+    '$\\mathrm{A}_{\\mathrm{2}}$',
+    '$\\mathrm{MOR}$',
+    '$\\mathrm{m}\\mathrm{GluR}_{\\mathrm{5}}$',
+    '$\\mathrm{NMDA}$',
+    '$\\mathrm{H}_{\\mathrm{3}}$',
+    '$\\mathrm{GABA}_{\\mathrm{a}}$',
+    '$\\mathrm{D}_{\\mathrm{1}}$',
+    '$\\mathrm{D}_{\\mathrm{2}}$',
+    '$\\mathrm{DAT}$',
+    '$\\mathrm{CB}_{\\mathrm{1}}$'
+]
 
 if params.update:
     if params.db == 'Explore':
@@ -43,13 +73,13 @@ output_dir = os.path.join(beta_dir, 'regressions', rec.source)
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
 
-plt.rcParams.update({'font.size': 16})
-
 if PLOT_COEFS:
     #plot regression coefficients
     for latent_var in params.latent_vars:
         fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
         results_df = pd.read_csv(os.path.join(output_dir, fname))
+        if 'a2' in results_df.columns:
+            results_df.rename(columns={'a2': 'A2'}, inplace=True)
 
         #t-test
         t_test_results = []
@@ -112,7 +142,7 @@ if PLOT_COEFS:
                 ax.scatter(i, results_df[receptor].median(), color='red', zorder=5)  # Mark the median with a red dot
 
         ax.set_xticks(np.arange(len(ordered_receptors)))
-        ax.set_xticklabels(ordered_receptors, rotation=90)
+        ax.set_xticklabels(receptor_label_formatted, rotation=90)
         for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
             group_idx = receptor_to_group.get(receptor, -1)
             label.set_color(base_colors[group_idx])
@@ -190,7 +220,7 @@ if PLOT_DOMINANCE:
 
         fig, ax = plt.subplots(figsize=(12, 8))
 
-        plt.rcParams.update({'font.size': 16})
+        plt.rcParams.update({'font.size': 18})
 
         # Standardize the data by total model fit
         standardized_df = results_df[ordered_receptors].div(results_df[ordered_receptors].sum(axis=1), axis=0)
@@ -209,20 +239,22 @@ if PLOT_DOMINANCE:
             if receptor not in receptor_class[0] and receptor not in receptor_class[1]:
                 bars[i].set_hatch('//')
 
-        for i, (receptor, mean_value) in enumerate(zip(bar_data['receptor'], bar_data['mean_value'])):
-            sem = bar_data['sem'].iloc[i]  # Standard error for this bar
-            sign_val = sign_mean[receptor]  # Mean correlation for this receptor
-            if (params.db == 'Explore') & (latent_var == 'confidence'):
-                sign_val = sign_val * (-1)
-            # Determine the color of the circle based on the correlation sign
-            circle_color = '#C96868' if sign_val > 0 else '#7EACB5'
-            # Calculate the y-position of the circle (above the bar + error bar)
-            y_position = mean_value + sem + 0.01  # Add some padding for visibility
-            # Plot the circle
-            ax.plot(i, y_position, 'o', color=circle_color, markersize=8, label='_nolegend_')  # '_nolegend_' avoids adding this to the legend
-                    
+        for i, receptor in enumerate(bar_data['receptor']):
+            # Perform a one-sample t-test for each receptor against 0
+            t_stat, p_value = ttest_1samp(sign_results[receptor], 0)
+            if p_value < 0.05:
+                # Get the mean and SEM for the position
+                mean_value = bar_data['mean_value'].iloc[i]
+                sem = bar_data['sem'].iloc[i]
+                sign_val = sign_mean[receptor]
+                if (params.db == 'Explore') & (latent_var == 'confidence'):
+                    sign_val = sign_val * (-1)
+                dot_color = '#C96868' if sign_val > 0 else '#7EACB5'
+                y_position = mean_value + sem + 0.01
+                ax.plot(i, y_position, 'o', color=dot_color, markersize=8, label='_nolegend_')
+      
         ax.set_xticks(np.arange(len(ordered_receptors)))
-        ax.set_xticklabels(ordered_receptors, rotation=90)
+        ax.set_xticklabels(receptor_label_formatted, rotation=90)
         for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
             group_idx = receptor_to_group.get(receptor, -1)
             label.set_color(base_colors[group_idx])
@@ -252,6 +284,66 @@ if PLOT_DOMINANCE:
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)
         plt.savefig(os.path.join(fig_dir, fname), dpi=300, bbox_inches='tight',transparent=True)
+
+if PLOT_LEGEND:
+    # Define the legend elements and labels
+    legend_elements = []
+    legend_labels = []
+
+    # Add patches with adjacent light and dark squares for each receptor group
+    for group_idx, (color, name) in enumerate(zip(base_colors, group_names)):
+        dark_color = sns.dark_palette(color, n_colors=3)[1]
+        light_color = sns.light_palette(color, n_colors=3)[1]
+        
+        # Create two small squares next to each other
+        dark_square = mlines.Line2D([], [], color=dark_color, marker='s', markersize=10, linestyle='None')
+        light_square = mlines.Line2D([], [], color=light_color, marker='s', markersize=10, linestyle='None')
+        
+        # Add the tuple of squares and the group name
+        legend_elements.append((dark_square, light_square))
+        legend_labels.append(name)
+
+    # Add grey patches for excitatory/inhibitory distinction
+    dark_grey_patch = mpatches.Patch(color="dimgray", label="excitatory")
+    light_grey_patch = mpatches.Patch(color="lightgrey", label="inhibitory")
+    legend_elements.extend([dark_grey_patch, light_grey_patch])
+    legend_labels.extend(["excitatory", "inhibitory"])
+
+    # Add a hatch pattern example for transporters
+    hatch_example = mpatches.Patch(facecolor='white', edgecolor='black', hatch='//', label='transporter')
+    legend_elements.append(hatch_example)
+    legend_labels.append("transporter")
+
+    # Add red and blue dots to indicate positive/negative correlations
+    red_dot = mlines.Line2D([], [], color='#C96868', marker='o', markersize=8, linestyle='None', label="significant estimate in full model: positive")
+    blue_dot = mlines.Line2D([], [], color='#7EACB5', marker='o', markersize=8, linestyle='None', label="significant estimate in full model: negative")
+    legend_elements.extend([red_dot, blue_dot])
+    legend_labels.extend(["sig. estimate in full model:\npositive", "sig. estimate in full model:\nnegative"])
+
+    # Create a custom legend with both horizontal and vertical spacing
+    fig, ax = plt.subplots(figsize=(2, 4))
+    custom_legend = ax.legend(
+        legend_elements, 
+        legend_labels, 
+        handler_map={
+            tuple: HandlerTuple(ndivide=None, pad=0.8)  # Horizontal padding between squares
+        },
+        loc='center', ncol=1, frameon=False,
+        labelspacing=1  # Vertical spacing between rows
+    )
+    ax.axis('off')
+
+    #bigger writing for poster 
+    for text in ax.get_figure().findobj(plt.Text):
+        text.set_fontsize(20)
+
+    fname = f'dominance_legend.png' 
+    fig_dir = os.path.join(output_dir, 'plots')
+    if not os.path.exists(fig_dir):
+        os.makedirs(fig_dir)
+    plt.savefig(os.path.join(fig_dir, fname),dpi=300, bbox_inches='tight',transparent=True)
+    # Remove axis for clean legend display
+    plt.show()
 
 
 

@@ -22,8 +22,8 @@ import nibabel as nib
 from nilearn.glm.first_level import run_glm
 from nilearn.plotting import plot_design_matrix
 from nilearn.glm.contrasts import compute_contrast
-from nilearn.datasets import fetch_atlas_schaefer_2018
 from nilearn.input_data import NiftiLabelsMasker
+from nilearn.datasets import fetch_atlas_schaefer_2018
 from abagen import fetch_desikan_killiany
 from scipy.stats import zscore
 from functions_design_matrices import create_design_matrix, zscore_regressors
@@ -32,8 +32,6 @@ import main_funcs as mf
 import io_funcs as iof
 
 from params_and_paths import Params, Paths
-# import sys
-# sys.path.append('/Users/alice/postdoc/NeuroModAssay')
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
 SAVE_DMTX_PLOT = True
@@ -82,7 +80,6 @@ for sub in subjects:
     sessions = mf.get_sessions(sub)
     tr = fun.get_tr(params.db, sub, 1, json_file_dir) # in seconds
     masker = fun.get_masker(tr, params.smoothing_fwhm)
-    masker.fit() #TODO: restructure (maybe put in masking step)
 
     #fMRI data
     fmri_data = os.path.join(fmri_arr_dir, f'*{sub:02d}_data*.npy')
@@ -91,26 +88,23 @@ for sub in subjects:
     # check existence of the arrays
     if len(fmri_f) == 1:
         fmri_data = np.load(glob.glob(fmri_data)[0], allow_pickle=True)
-    # otherwise extract the data with masker (npy array is concatenated and saved within function)
+    # otherwise extract the data with masker 
     else:
         print("--- extraction from masker ----")
-        ppssing, fmri_path = fun.get_ppssing(sub, params.db)
-        #TODO: comments to make clear what's happening
+        #mask the correct nii files for study and saves + returns all runs as one numpy array
         nii_files, fmri_data = fun.get_fmri_data( 
             masker,
             params.mask,
             sub,
-            fmri_arr_dir,
-            ppssing,
-            fmri_path, 
+            fmri_arr_dir, 
             params.db)
         
     fmri_data = zscore(fmri_data)
 
     design_matrix = []
 
+    #create design matrix 
     for s,sess in enumerate(sessions):
-        #TODO: list of design matrixes and then concat at end to avoid deep copy
         #IO inference 
         seq = mf.get_seq(db=params.db,
                         sub=sub,
@@ -232,8 +226,6 @@ for sub in subjects:
         effect_size = masker.inverse_transform(contrast.effect_size())
         fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size_map.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
-
-        #TODO: work with nifti file also for glm data to make it less error prone?
 
         #if mask is schaefer compute the mean by region, as we only use this atlas for the autoradiography data that's only available in the Schaefer 100 parcelation
         if (params.mask == 'schaefer') & params.parcelated:
