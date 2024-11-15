@@ -422,13 +422,13 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
         if params.update:
         # IO regressors
             io_regs = pd.DataFrame({'update': io_inference['update'],
-                                    'predictions': io_inference['p1'],
+                                    'predictions': io_inference['p1_mean_array'],
                                     'predictability': io_inference['entropy']})
 
         else:
             io_regs = pd.DataFrame({'surprise': io_inference['surprise'],
                                     'confidence': io_inference['confidence_pre'],
-                                    'predictions': io_inference['p1'],
+                                    'predictions': io_inference['p1_mean_array'],
                                     'predictability': io_inference['entropy']})
 
         stim_q = get_stimq(db, sub, sess, data_dir)
