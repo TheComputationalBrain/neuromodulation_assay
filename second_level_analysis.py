@@ -227,11 +227,8 @@ def run_group_analysis(latent_var):
     #by hand d´so that I can omit nans for NaConf
     stacked_arrays = np.stack(eff_size_files, axis=0)
     mean_array = np.nanmean(stacked_arrays, axis=0) 
-    # std_array = np.nanstd(stacked_arrays, axis=0)      
-    # z_score = (mean_array) / (std_array)
     z_score = zscore(mean_array, axis=None, nan_policy='omit')
     plot_data = masker.inverse_transform(z_score)
-
     # plot 
     plotting.plot_img_on_surf(plot_data, surf_mesh='fsaverage', 
                                                 hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-80, vmin=-5, vmax=5,
