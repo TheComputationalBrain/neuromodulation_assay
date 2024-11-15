@@ -586,7 +586,7 @@ def convert_to_secs(data, var):
 def get_mvt_reg(db_name, sub, sess):
     mov_dir = {'NAConf': op.join(paths.root_dir, paths.data_dir, "derivatives"),
                'EncodeProb': op.join(paths.root_dir, paths.data_dir, "derivatives"),
-               'Explore': op.join(paths.root_dir, paths.data_dir, 'bids/derivatives/fmriprep-23.1.3_MAIN'), #TODO: where are the new data?
+               'Explore': op.join(paths.root_dir, paths.data_dir, 'bids/derivatives/fmriprep-23.1.3_MAIN'), 
                'PNAS': op.join(paths.root_dir, paths.data_dir,
                                "MRI_data/analyzed_data")}
 

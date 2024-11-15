@@ -28,7 +28,7 @@ def zscore_regressors(dmtx):
     cols = list(dmtx.columns)
     dmtx_z = copy.deepcopy(dmtx)  # initialise the design matrix with z-scored features
     for col in cols:
-        if 'session' not in col:
+        if all(x not in col for x in ('session', 'mvt')):
             dmtx_z[col] = zscore(dmtx_z[col])
     return dmtx_z
 
@@ -79,8 +79,5 @@ def create_design_matrix(events_all,
     # clean all regressors (exluding movement) 
     for reg in dmtx.columns:
         dmtx[reg] = clean_regs(dmtx[reg],tr)
-
-    #     if not 'missed' in dmtx.columns:
-    #         dmtx.insert(1, 'missed', [-0.087771710942605] *  len(dmtx)) #? what is this for?
 
     return dmtx
