@@ -56,7 +56,7 @@ def get_masker(tr=None,smoothing_fwhm=None):
             t_r=tr,
         )
     
-     masker.fit()
+    masker.fit()
     
     return masker
 
@@ -162,7 +162,9 @@ def get_nii_files(ppssing, fmri_path, db_name):
         return sorted(glob.glob(op.join(fmri_path, f'*{ppssing}.nii.gz'))) 
     
 def get_fmri_data(masker, masker_id, sub, output_dir,
-                  ppssing, fmri_path, db_name):
+                  db_name):
+    
+    ppssing, fmri_path = get_ppssing(sub, db_name) 
 
     nii_files = get_nii_files(ppssing, fmri_path, db_name)
     data_array = masker.fit_transform(nii_files) 

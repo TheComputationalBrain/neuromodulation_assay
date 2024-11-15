@@ -222,8 +222,9 @@ def run_group_analysis(latent_var):
     second_level_model = SecondLevelModel()
     second_level_model = second_level_model.fit(eff_size_files,
                                                 design_matrix=design_matrix)
-
+    
     #mean zscore -> for poster 
+    #by hand d´so that I can omit nans for NaConf
     stacked_arrays = np.stack(eff_size_files, axis=0)
     mean_array = np.nanmean(stacked_arrays, axis=0) 
     # std_array = np.nanstd(stacked_arrays, axis=0)      
@@ -245,8 +246,18 @@ def run_group_analysis(latent_var):
     nib.save(effect_map, os.path.join(output_dir, fname))
     plotting.plot_img_on_surf(effect_map, surf_mesh='fsaverage5', 
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
-                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f', mask_img=mask)
+                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
     fname = f'{latent_var}_effect_map.png' 
+    plt.savefig(os.path.join(plot_path, fname))
+
+    #z map 
+    t_map = second_level_model.compute_contrast(output_type='zscore')
+    fname = f'{latent_var}_{params.mask}_effect_map.nii.gz'
+    nib.save(t_map, os.path.join(output_dir, fname))
+    plotting.plot_img_on_surf(effect_map, surf_mesh='fsaverage5', 
+                                            hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
+                                            title=latent_var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
+    fname = f'{latent_var}_z_map.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
     if PLOT_ONLY == False:

@@ -296,7 +296,7 @@ def get_events_explore(sub, sess, nan_missed=True):
         para[f'{mod}_mod'] = 1
     para['ER_diff_mod'] = para['ER_diff']
     if params.reward:
-        para['reward_mod'] = para['reward'] #TODO: try without
+        para['reward_mod'] = para['reward'] 
     for arm in arm_ids:
         for l in ['val', 'conf']:
             para[f'q{arm}_{l}_sub_mod'] = para[f'opt{arm}_{l}']
@@ -510,14 +510,14 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
 
             # create event dataframe
             on_stim = exp[sess-1]['stim_onsets']
-            on_stim = on_stim[4:].copy() #TODO: clean this up
             on_q_prob = exp[sess-1]['question_prob_onsets']
             on_q_conf = exp[sess-1]['question_conf_onsets']
 
             rt_prob = exp[sess-1]['rt_prob']
             rt_conf = exp[sess-1]['rt_conf']
 
-            #create a variable for the onset of question (modulators) that were not missed (sice we have no values for the missed ones)
+            #create a variable for the onset of question modulators that were not missed (sice we have no values for the missed ones)
+            #there is a onset regressor for all questions
             not_nan = ~np.isnan(rt_prob)
             on_q_prob_responded = on_q_prob[not_nan]
             not_nan = ~np.isnan(rt_conf)
@@ -566,8 +566,6 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
         #add IO regressors 
         for column in io_regs.columns:
             regs = io_regs[column]
-            if db == 'NAConf':
-                regs = regs[4:].copy()
             onsets = np.concatenate((onsets, on_stim))
             duration = np.concatenate((duration, [0] * on_stim))
             trial_type = np.concatenate((trial_type, [column] * len(on_stim)))

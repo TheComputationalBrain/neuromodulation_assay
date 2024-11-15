@@ -260,6 +260,9 @@ if PLOT_DOMINANCE:
             label.set_color(base_colors[group_idx])
         ax.set_xlabel('Receptor/Transporter')
         ax.set_ylabel('contribution (%)')
+
+        if params.db == 'Explore':
+            ax.set_ylim(0,0.145)
         #ax.set_title(f'{mask_comb}: dominance analysis for {latent_var} with {rec.source}', fontsize=12)
 
         # textstr = f'average R²: {mean_R2:.2f}'
