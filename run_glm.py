@@ -24,7 +24,6 @@ from nilearn.plotting import plot_design_matrix
 from nilearn.glm.contrasts import compute_contrast
 from nilearn.input_data import NiftiLabelsMasker
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from abagen import fetch_desikan_killiany
 from scipy.stats import zscore
 from functions_design_matrices import create_design_matrix, zscore_regressors
 import fmri_funcs as fun
@@ -59,7 +58,7 @@ else:
     if params.db == 'Explore':
         output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
     else:
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level')
+        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level') 
 
     design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
     
@@ -79,14 +78,14 @@ for sub in subjects:
     #get global info that's not session specific
     sessions = mf.get_sessions(sub)
     tr = fun.get_tr(params.db, sub, 1, json_file_dir) # in seconds
-    masker = fun.get_masker(tr, params.smoothing_fwhm)
+    masker = fun.get_masker(fmri_dir,tr, params.smoothing_fwhm)
 
     #fMRI data
     fmri_data = os.path.join(fmri_arr_dir, f'*{sub:02d}_data*.npy')
     fmri_f = glob.glob(fmri_data)
 
     # check existence of the arrays
-    if len(fmri_f) == 1:
+    if len(fmri_f) == 1 and params.redo_mask == False:
         fmri_data = np.load(glob.glob(fmri_data)[0], allow_pickle=True)
     # otherwise extract the data with masker 
     else:
@@ -98,8 +97,9 @@ for sub in subjects:
             sub,
             fmri_arr_dir, 
             params.db)
-        
-    fmri_data = zscore(fmri_data)
+    
+    if params.zscore_per_session == False:
+        fmri_data = zscore(fmri_data)  
 
     design_matrix = []
 
@@ -142,7 +142,8 @@ for sub in subjects:
     design_matrix = pd.concat(design_matrix)
 
     # z-score the design matrix (over all session at once, rather than session-wise)
-    design_matrix = zscore_regressors(design_matrix)
+    if params.zscore_per_session == False:
+        design_matrix = zscore_regressors(design_matrix)
 
     # save design matrix
     design_matrix.to_pickle(
@@ -212,7 +213,7 @@ for sub in subjects:
                                     contrasts[contrast_id],
                                     stat_type ='t')
 
-        # Save t-map
+        # Save z-map
         z_val = masker.inverse_transform(contrast.z_score())
         fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_zmap.nii.gz'
         nib.save(z_val, os.path.join(output_dir, fname))

@@ -8,25 +8,29 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'EncodeProb' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
-MASK_NAME = 'harvard_oxford_cortical' #'harvard_oxford_cortical'; harvard_oxford_subcortical; schaefer, desikan
+DB_NAME = 'NAConf' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+MASK_NAME =  'schaefer' #'spm_noCereb','harvard_oxford_cortical'; 'schaefer', 'desikan'
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
+REDO_MASK = True #if False, the masking step will be skipped and the numpy datata array will be used instead except if smoothing/mask name have changed
 
 #fixed at best setting:
 UPDATE_REG = False #update or suprise + confidence as regressor
 #---------------------------------------------------
 
 class Params:
-    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcel = PARCELATED, update =UPDATE_REG):
+    def __init__(self, db=DB_NAME, mask = MASK_NAME, parcel = PARCELATED, update =UPDATE_REG, redo_mask=REDO_MASK):
         self.db = db
         self.mask = mask
+        self.redo_mask = redo_mask
 
         self.parcelated = parcel
         self.update = update
 
         self.hpf = 1/128
         self.hrf = 'spm'
+
+        self.zscore_per_session = True 
 
         if db != 'Explore':
             self.io_options = {'p_c': 1/75, 'resol': 20} 
@@ -42,17 +46,15 @@ class Params:
             self.smoothing_fwhm = 5
         elif db == 'Explore':
             self.smoothing_fwhm = 5
-            self.split = True #Split free and forced trials 
 
         if UPDATE_REG:
             self.latent_vars = ['update', 'predictability', 'predictions']
         else:
             self.latent_vars = ['surprise', 'confidence', 'predictability', 'predictions']
-            #self.latent_vars = ['surprise', 'confidence', 'predictability']
 
         #participants to ignore and session deviations
         if db == 'NAConf':
-            self.ignore = [3, 5, 6, 9, 36, 51, 54]
+            self.ignore = [3, 5, 6, 9, 36, 51]
             self.session = []
         elif db == 'EncodeProb':
             self.ignore = [1, 4, 12, 20]

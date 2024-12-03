@@ -20,7 +20,7 @@ from params_and_paths import Params, Paths
 params = Params()
 paths = Paths()
 
-def get_masker(tr=None,smoothing_fwhm=None):
+def get_masker(data_dir=None,tr=None,smoothing_fwhm=None):
     
     #mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
 
@@ -33,13 +33,15 @@ def get_masker(tr=None,smoothing_fwhm=None):
         atlas.labels = np.insert(atlas.labels, 0, "Background")
     elif params.mask == 'desikan':
         atlas = abagen.fetch_desikan_killiany() 
+    elif params.mask == 'spm_noCereb':
+        mask_img = os.path.join('/neurospin/unicog/protocols/IRMf/Meyniel_Atlas_2022/SPM', 'mask_GreyMatter_0_25_WithoutCereb.nii') #!hard coded for now
     else:
         raise ValueError("Unknown atlas!")
     
-    if params.mask != 'desikan':
+    if params.mask not in ['desikan', 'spm_noCereb']:
         atlas_img = image.load_img(atlas.maps)
         mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
-    else:
+    elif params.mask == 'desikan':
         atlas_img = image.load_img(atlas['image'])
         mask = ~np.isin(image.get_data(atlas_img), [0,35,36,37,38,39,40,41,76,77,78,79,80,81,82,83])
         mask_img = image.new_img_like(atlas_img, mask) #only cortical structures 
@@ -47,14 +49,31 @@ def get_masker(tr=None,smoothing_fwhm=None):
     if tr==None:
         masker = NiftiMasker(mask_img=mask_img)
     else:
-        masker = MultiNiftiMasker(
-            mask_img=mask_img,
-            detrend=True,  # Improves the SNR by removing linear trends
-            high_pass=params.hpf,  # kept small to keep sensitivity,
-            standardize=False,
-            smoothing_fwhm=smoothing_fwhm,
-            t_r=tr,
-        )
+        # resample the mask to NAConf resolution, as NAConf can't be resampled with the nans
+        #get example dataset from NAConf
+        nii_files = sorted(glob.glob(op.join('/neurospin/unicog/protocols/IRMf/MeynielMazancieux_NACONF_prob_2021/derivatives/sub-01', 'wtrasub*.nii')))
+        ref_epi = nib.load(nii_files[0])
+        mask_resampled = image.resample_img(mask_img,
+                                        target_affine=ref_epi.affine, target_shape=ref_epi.shape[0:3],
+                                            interpolation='nearest')
+        if params.zscore_per_session:
+            masker = MultiNiftiMasker(
+                mask_img=mask_resampled,
+                detrend=True,  # Improves the SNR by removing linear trends
+                high_pass=params.hpf,  # kept small to keep sensitivity,
+                standardize=True,
+                smoothing_fwhm=smoothing_fwhm,
+                t_r=tr,
+            )
+        else:
+            masker = MultiNiftiMasker(
+                mask_img=mask_resampled,
+                detrend=True,  # Improves the SNR by removing linear trends
+                high_pass=params.hpf,  # kept small to keep sensitivity,
+                standardize=False,
+                smoothing_fwhm=smoothing_fwhm,
+                t_r=tr,
+            )
     
     masker.fit()
     
@@ -119,7 +138,7 @@ def get_fts(db, sub, sess, fmri_dir, json_dir):
 
     n_scans = fetch_n_scans(sessfiles[0]) 
     tr = get_tr(db, sub, sess, json_dir)
-    frame_times = (np.arange(n_scans)*tr).flatten() #?n starts with 0 because of slice time correction to first slide- could be tr instead: np.cumsum([tr]* n_scans)
+    frame_times = (np.arange(n_scans)*tr).flatten() # starts with 0 because of slice time correction to first slide
 
     if db in ['EncodeProb', 'Explore', 'NAConf']:
         frame_times = frame_times + tr/2 #slice timing correction was to middle slice 
@@ -151,6 +170,7 @@ def get_ppssing(sub, db_name):
     if db_name == 'PNAS':
         fmri_path = op.join(paths.root_dir, paths.data_dir,
                             f'MRI_data/raw_data/subj{sub:02d}/fMRI')
+        
 
     return ppssing, fmri_path
 
@@ -160,6 +180,7 @@ def get_nii_files(ppssing, fmri_path, db_name):
         return sorted(glob.glob(op.join(fmri_path, f'{ppssing}*.nii')))
     else:
         return sorted(glob.glob(op.join(fmri_path, f'*{ppssing}.nii.gz'))) 
+
     
 def get_fmri_data(masker, masker_id, sub, output_dir,
                   db_name):
@@ -167,6 +188,16 @@ def get_fmri_data(masker, masker_id, sub, output_dir,
     ppssing, fmri_path = get_ppssing(sub, db_name) 
 
     nii_files = get_nii_files(ppssing, fmri_path, db_name)
+
+    #TODO: resample the data 
+    if db_name != 'NAConf':
+        #get example dataset from NAConf
+        ref_files = sorted(glob.glob(op.join('/neurospin/unicog/protocols/IRMf/MeynielMazancieux_NACONF_prob_2021/derivatives/sub-01', 'wtrasub*.nii')))
+        ref_epi = nib.load(ref_files[0])
+        nii_files = image.resample_img(nii_files,
+                                        target_affine=ref_epi.affine, target_shape=ref_epi.shape[0:3],
+                                        interpolation='nearest')
+
     data_array = masker.fit_transform(nii_files) 
 
     fname = f'sub-{sub:02d}_data_{ppssing}_mask-{masker_id}.npy'

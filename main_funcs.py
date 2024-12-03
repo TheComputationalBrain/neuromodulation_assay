@@ -247,7 +247,7 @@ def get_events_explore(sub, sess, nan_missed=True):
     para['rt_startB'] = para['rt_start'].where(para['choiceA'] == 0, None)
     para['ER_diff_start'] = para['outcome_start']
     if params.reward:
-        para['reward_start'] = para['outcome_start'] #TODO does this change the representations? -> if not remove 
+        para['reward_start'] = para['outcome_start'] 
 
 
     # ADD QUESTION PARAMTERS
@@ -289,7 +289,8 @@ def get_events_explore(sub, sess, nan_missed=True):
     for arm in arm_ids:
         for l in ['val', 'conf']:
             for e in ['sub', 'io']:
-                para[f'q{arm}_{l}_{e}_drt'] = para[f'rt{arm}_{l}']
+                #para[f'q{arm}_{l}_{e}_drt'] = para[f'rt{arm}_{l}'] #duration of question regressors = RTs 
+                para[f'q{arm}_{l}_{e}_drt'] = 0
 
     #add columns for modulation
     for mod in events_fixed:
@@ -422,13 +423,13 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
         if params.update:
         # IO regressors
             io_regs = pd.DataFrame({'update': io_inference['update'],
-                                    'predictions': io_inference['p1_mean_array'],
+                                    'predictions': io_inference['p1'],
                                     'predictability': io_inference['entropy']})
 
         else:
             io_regs = pd.DataFrame({'surprise': io_inference['surprise'],
                                     'confidence': io_inference['confidence_pre'],
-                                    'predictions': io_inference['p1_mean_array'],
+                                    'predictions': io_inference['p1'],
                                     'predictability': io_inference['entropy']})
 
         stim_q = get_stimq(db, sub, sess, data_dir)
@@ -439,19 +440,20 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
                 for q in stim_q])
     
         if db == 'PNAS': 
-
             data = get_data_PNAS(sub, sess, data_dir)
-            onsets = np.hstack((data['stim_onset'], data['question_onset'], data['question_onset'],data['question_onset']))
+            onsets = np.hstack((data['stim_onset'], data['question_onset'], data['question_onset'],data['question_onset'],data['question_onset']))
             duration = np.hstack(([0] * data['stim_onset'],
-                                data['reaction_times'], data['reaction_times'], data['reaction_times']))
+                                [0] * data['question_onset'], [0] * data['question_onset'],  [0] * data['question_onset'],[0] * data['question_onset']))
             trial_type = np.hstack((['stim']*len(data['stim_onset']),
                                     ['q_conf']*len(data['question_onset']),
                                     ['sub_conf']*len(data['question_onset']),
-                                    ['io_conf']*len(data['question_onset'])))
+                                    ['io_conf']*len(data['question_onset']),
+                                    ['rt_conf']*len(data['question_onset'])))
             modulation = np.hstack(([1] * data['stim_onset'],
                                     [1] * data['question_onset'], 
                                     demean(data['subj_confidence']),
-                                    demean(io_conf_q))) #IO modulation will be added in design matrix function
+                                    demean(io_conf_q),
+                                    demean(data['reaction_times']))) 
             on_stim = data['stim_onset']
 
         elif db == 'EncodeProb':
@@ -467,12 +469,6 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             rt_prob = data['estim_rt'].dropna().values/1000
             rt_conf = data['conf_rt'].dropna().values/1000
 
-            # on_resp_prob = convert_to_secs(data,'t_rating_prob')
-            # on_resp_conf = convert_to_secs(data,'t_rating_conf')
-
-            # off_q_prob = convert_to_secs(data, 't_question_prob_off')
-            # off_q_conf = convert_to_secs(data, 't_question_conf_off')
-
             sub_prob = convert_to_secs(data, 'estim_position')
             sub_prob = rescale_answer(sub_prob, pos_min=-500,pos_max=500)
             sub_conf = convert_to_secs(data, 'conf_position')
@@ -481,28 +477,34 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             io_prob_q = np.array([io_inference['p1_mean_array'][q]
                         for q in stim_q])
 
-            onsets = np.hstack((on_stim, on_q_prob, on_q_prob, on_q_prob, on_q_conf, on_q_conf, on_q_conf))
+            onsets = np.hstack((on_stim, on_q_prob, on_q_prob, on_q_prob, on_q_prob, on_q_conf, on_q_conf, on_q_conf, on_q_conf))
             trial_type = np.hstack((['stim'] * len(on_stim),
                                     ['q_prob'] * len(on_q_prob),
                                     ['sub_prob'] * len(on_q_prob),
                                     ['io_prob'] * len(on_q_prob),
+                                    ['rt_prob'] * len(on_q_prob),
                                     ['q_conf'] * len(on_q_conf),
                                     ['sub_conf'] * len(on_q_conf),
-                                    ['io_conf'] * len(on_q_conf)))
+                                    ['io_conf'] * len(on_q_conf),
+                                    ['rt_conf'] * len(on_q_conf)))
             duration = np.hstack(([0] * on_stim,
-                                rt_prob, rt_prob, rt_prob, rt_conf, rt_conf, rt_conf))
+                                [0] * on_q_prob, [0] * on_q_prob, [0] * on_q_prob, [0] * on_q_prob, 
+                                [0] * on_q_conf, [0] * on_q_conf, [0] * on_q_conf, [0] * on_q_conf))
             modulation = np.hstack(([1] * on_stim, 
                                     [1] * on_q_prob,
                                     demean(sub_prob), 
-                                    demean(io_prob_q), 
+                                    demean(io_prob_q),
+                                    demean(rt_prob), 
                                     [1] * on_q_conf,
                                     demean(sub_conf),
-                                    demean(io_conf_q)))
+                                    demean(io_conf_q),
+                                    demean(rt_prob)))
                     
         elif db == 'NAConf':
             filespath = os.path.join(data_dir,
                     'behaviour_data',
                     f'sub-{sub:02d}')
+            
             # load the experiment info file present in all subject behavioral folder
             file = os.path.join(filespath, f'experiment_info_sub-{sub:02d}.pickle')
             with open(file, 'rb') as f:
@@ -522,52 +524,62 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             on_q_prob_responded = on_q_prob[not_nan]
             not_nan = ~np.isnan(rt_conf)
             on_q_conf_responded = on_q_conf[not_nan]
-            #resp = exp[sess-1]['response_onsets']
+            resp = exp[sess-1]['response_onsets']
 
             onsets = np.hstack((on_stim,
                                 on_q_prob,
                                 on_q_prob_responded,
                                 on_q_prob_responded,
+                                on_q_prob_responded,
                                 on_q_conf,
                                 on_q_conf_responded,
+                                on_q_conf_responded,
                                 on_q_conf_responded))
+
             
             trial_type = np.hstack((['stim']* len(on_stim), 
                                     ['q_prob']* len(on_q_prob),
                                     ['sub_prob']* len(on_q_prob_responded),
                                     ['io_prob']* len(on_q_prob_responded),
+                                    ['rt_prob']* len(on_q_prob_responded),
                                     ['q_conf']*len(on_q_conf),
                                     ['sub_conf']* len(on_q_conf_responded),
-                                    ['io_conf']* len(on_q_conf_responded)))
-            duration = exp[sess-1]['durations'] #durations are always = 1
-            duration_stim = duration[4:].copy()
+                                    ['io_conf']* len(on_q_conf_responded),
+                                    ['rt_conf']* len(on_q_conf_responded)))
+  
+            duration = exp[sess-1]['durations'] #durations are always 0
+ 
+            duration = np.hstack((duration, 
+                                    [0] * on_q_prob, 
+                                    [0] * on_q_prob_responded,
+                                    [0] * on_q_prob_responded,
+                                    [0] * on_q_prob_responded,
+                                    [0] * on_q_conf,
+                                    [0] * on_q_conf_responded,
+                                    [0] * on_q_conf_responded,
+                                    [0] * on_q_conf_responded)) 
 
-            duration = np.hstack((duration_stim, 
-                                    np.nan_to_num(exp[sess-1]['rt_prob'], nan=0), 
-                                    rt_prob[~np.isnan(rt_prob)],
-                                    rt_prob[~np.isnan(rt_prob)],
-                                    np.nan_to_num(exp[sess-1]['rt_conf'], nan=0),
-                                    rt_conf[~np.isnan(rt_conf)],
-                                    rt_conf[~np.isnan(rt_conf)])) 
             sub_prob = exp[sess-1]['sub_prob']
             sub_conf = exp[sess-1]['sub_conf']
 
             io_prob_q = np.array([io_inference['p1_mean_array'][q]
                         for q in stim_q])
             
-            modulation = np.hstack(([1] * on_stim, 
-                        [1] * on_q_prob,
+            modulation = np.hstack(([1] * len(on_stim), 
+                        [1] * len(on_q_prob),
                         demean(sub_prob[~np.isnan(sub_prob)]), 
                         demean(io_prob_q[~np.isnan(sub_prob)]), 
-                        [1] * on_q_conf,
+                        demean(rt_prob[~np.isnan(rt_prob)]),
+                        [1] * len(on_q_conf),
                         demean(sub_conf[~np.isnan(sub_conf)]),
-                        demean(io_conf_q[~np.isnan(sub_conf)])))
+                        demean(io_conf_q[~np.isnan(sub_conf)]),
+                        demean(rt_conf[~np.isnan(rt_conf)])))
             
         #add IO regressors 
         for column in io_regs.columns:
             regs = io_regs[column]
             onsets = np.concatenate((onsets, on_stim))
-            duration = np.concatenate((duration, [0] * on_stim))
+            duration = np.concatenate((duration, [0] * len(on_stim)))
             trial_type = np.concatenate((trial_type, [column] * len(on_stim)))
             centered_values = demean(regs.to_numpy()) #center all io modulation values 
             modulation = np.concatenate((modulation, centered_values))

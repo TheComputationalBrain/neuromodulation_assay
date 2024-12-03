@@ -37,12 +37,16 @@ def clean_regs(reg, tr):
     Apply the same cleaning process to the given regressors as applied to the
     BOLD signal, i.e. first detrending and then high-pass filtering.
     """    
-    if not reg.name.startswith('mvt'):
-        return nilearn.signal.clean(reg.values.reshape(-1,1),
-            detrend=True,
-            high_pass=params.hpf, t_r=tr,
-            zscore_sample=False)
-    return reg.values
+    skip_regs = ['mvt', 'stim', 'q_conf', 'q_prob']
+
+    if any(keyword in reg.name for keyword in skip_regs):
+        return reg.values
+
+    return nilearn.signal.clean(reg.values.reshape(-1, 1),
+                                detrend=True,
+                                high_pass=params.hpf,
+                                t_r=tr,
+                                standardize=False)
 
 def create_design_matrix(events_all,
                         tr,
@@ -56,7 +60,7 @@ def create_design_matrix(events_all,
     ----------
      -event: dataframe, containinng onset, duration, tiral_type and modulation
     - tr: tr in sec
-    - frame_times
+    - frame_times (corrected for slice timing correction)
     - subject
     - sess: curent session 
     Returns
@@ -79,5 +83,8 @@ def create_design_matrix(events_all,
     # clean all regressors (exluding movement) 
     for reg in dmtx.columns:
         dmtx[reg] = clean_regs(dmtx[reg],tr)
+    
+    if params.zscore_per_session:
+        dmtx = zscore_regressors(dmtx)
 
     return dmtx
