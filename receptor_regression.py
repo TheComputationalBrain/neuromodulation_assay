@@ -31,6 +31,7 @@ from dominance_stats import dominance_stats
 RUN_REGRESSION = True
 RUN_DOMINANCE = True
 NUM_WORKERS = 14  # Set an appropriate number of workers to run dominance code in parallel
+START_AT = 1 #In case the dominance analysis was or had to be interrupted at some point, put the last processed subject here 
 
 paths = Paths()
 params = Params()
@@ -149,6 +150,7 @@ if RUN_DOMINANCE:
     for latent_var in params.latent_vars:
         print(f"--- dominance analysis for {latent_var} ----")
         results_df = pd.DataFrame(columns=rec.receptor_names)
+        subjects = [sub for sub in subjects if sub > START_AT]
         with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
             futures = [executor.submit(process_subject, sub, latent_var) for sub in subjects]
             for future in futures:
