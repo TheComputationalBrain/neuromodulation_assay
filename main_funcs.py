@@ -179,11 +179,11 @@ def get_events_explore(sub, sess, nan_missed=True):
     
     events_fixed = ['cue','out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf','respA', 'respB'] #will be added as an unmodulated regressor
     if params.reward:
-        events_modulated = ['ER_diff', 'reward','sub_qA_val', 'sub_qA_conf', 'io_qA_val', 'io_qA_conf', 
-                        'sub_qB_val', 'sub_qB_conf', 'io_qB_val', 'io_qB_conf']
+        events_modulated = ['rt_respA', 'rt_respB', 'ER_diff', 'reward','sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
+                        'sub_qB_val', 'io_qB_val', 'rt_qB_val', 'sub_qB_conf','io_qB_conf', 'rt_qB_conf']
     else:
-        events_modulated = ['ER_diff', 'sub_qA_val', 'sub_qA_conf', 'io_qA_val', 'io_qA_conf', 
-                'sub_qB_val', 'sub_qB_conf', 'io_qB_val', 'io_qB_conf']
+        events_modulated = ['rt_respA', 'rt_respB', 'ER_diff', 'sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
+                        'sub_qB_val', 'io_qB_val', 'rt_qB_val', 'sub_qB_conf','io_qB_conf', 'rt_qB_conf']
     event_labels = events_fixed + events_modulated + params.io_variables
 
     event_label_split = []
@@ -201,14 +201,16 @@ def get_events_explore(sub, sess, nan_missed=True):
         io_times.append(f'{reg}_start')
 
     if params.reward:
-        time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'rt_startA', 'rt_startB', 'ER_diff_start', 'reward_start',
-                        'qA_val_sub_start', 'qA_conf_sub_start', 'qA_val_io_start', 'qA_conf_io_start',
-                        'qB_val_sub_start', 'qB_conf_sub_start', 'qB_val_io_start', 'qB_conf_io_start',
+        time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'startA', 'startB', 
+                        'rt_startA', 'rt_startB', 'ER_diff_start', 'reward_start',
+                        'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
+                        'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
                         ]  + io_times
     else:
-        time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'rt_startA', 'rt_startB', 'ER_diff_start', 
-                        'qA_val_sub_start', 'qA_conf_sub_start', 'qA_val_io_start', 'qA_conf_io_start',
-                        'qB_val_sub_start', 'qB_conf_sub_start', 'qB_val_io_start', 'qB_conf_io_start',
+        time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'startA', 'startB', 
+                        'rt_startA', 'rt_startB','ER_diff_start', 
+                        'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
+                        'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
                         ]  + io_times
 
     arm_ids = ['A', 'B']
@@ -243,8 +245,10 @@ def get_events_explore(sub, sess, nan_missed=True):
     para.loc[para['rt_start'] == 0, 'rt_start'] = np.nan
 
     # add additional time columns 
-    para['rt_startA'] = para['rt_start'].where(para['choiceA'] == 1, None)
-    para['rt_startB'] = para['rt_start'].where(para['choiceA'] == 0, None)
+    para['startA'] = para['rt_start'].where(para['choiceA'] == 1, None)
+    para['startB'] = para['rt_start'].where(para['choiceA'] == 0, None)
+    para['rt_startA'] = para['startA']
+    para['rt_startB'] = para['startB']
     para['ER_diff_start'] = para['outcome_start']
     if params.reward:
         para['reward_start'] = para['outcome_start'] 
@@ -273,11 +277,11 @@ def get_events_explore(sub, sess, nan_missed=True):
         para['qA_val_start'][i] = para['qB_conf_start'][i] + 1
         para['qA_conf_start'][i] = para['qA_val_start'][i] + para['rtA_val'][i] + 1 
 
-    #duplicate for sub and IO estimates 
+    #duplicate for sub and IO estimates + RT regressor 
     for arm in arm_ids:
         for l in ['val', 'conf']:
-            for e in ['sub', 'io']:
-                para[f'q{arm}_{l}_{e}_start'] = para[f'q{arm}_{l}_start'] #onset is the same for subj and IO estimate
+            for e in ['sub', 'io', 'rt']:
+                para[f'q{arm}_{l}_{e}_start'] = para[f'q{arm}_{l}_start'] #onset is the same for subj and IO estimate + RT reg
 
     #add columns for durations
     for dur in events_fixed:
@@ -288,7 +292,7 @@ def get_events_explore(sub, sess, nan_missed=True):
         para['reward_drt'] = 0
     for arm in arm_ids:
         for l in ['val', 'conf']:
-            for e in ['sub', 'io']:
+            for e in ['sub', 'io', 'rt']:
                 #para[f'q{arm}_{l}_{e}_drt'] = para[f'rt{arm}_{l}'] #duration of question regressors = RTs 
                 para[f'q{arm}_{l}_{e}_drt'] = 0
 
@@ -307,6 +311,7 @@ def get_events_explore(sub, sess, nan_missed=True):
             else:
                 io_est[~para[f'opt{arm}_val'].isna()] = 1 - para.loc[~para[f'opt{arm}_val'].isna(), f'EU_{arm}']
             para[f'q{arm}_{l}_io_mod'] = io_est
+            para[f'q{arm}_{l}_rt_mod'] = para[f'rt{arm}_{l}']
 
     # ADD IO RESULTS OF INTEREST
     #currently all estimates are releated to the chosen option
@@ -323,7 +328,7 @@ def get_events_explore(sub, sess, nan_missed=True):
         # SPLIT FREE AND FORCED 
         dur_cols = [col for col in para.columns if '_drt' in col]
         mod_cols = [col for col in para.columns if '_mod' in col]
-        all_cols = time_cols + dur_cols + mod_cols #?maybe substract question params?
+        all_cols = time_cols + dur_cols + mod_cols 
 
         for col in all_cols:
             # Get the value of 'isfree'
