@@ -226,7 +226,6 @@ def get_events_explore(sub, sess, nan_missed=True):
 
     if params.split:
         trial_types_all = np.asarray(event_label_split * n_trials)
-
     else:
         trial_types_all = np.asarray(event_labels * n_trials)
     trial_types_all = [trial_name.replace('EU', '1-EU') for trial_name in trial_types_all] #chnage name to represent the convertion to confidence
@@ -287,6 +286,8 @@ def get_events_explore(sub, sess, nan_missed=True):
     for dur in events_fixed:
         para[f'{dur}_drt'] = 0
     #para['missed_drt'] = 5
+    para['rt_startA_drt'] = 0 
+    para['rt_startB_drt'] = 0
     para['ER_diff_drt'] = 0
     if params.reward:
         para['reward_drt'] = 0
@@ -300,6 +301,8 @@ def get_events_explore(sub, sess, nan_missed=True):
     for mod in events_fixed:
         para[f'{mod}_mod'] = 1
     para['ER_diff_mod'] = para['ER_diff']
+    para['rt_startA_mod'] = para['rt'].where(para['choiceA'] == 1, None)
+    para['rt_startB_mod'] = para['rt'].where(para['choiceB'] == 1, None)
     if params.reward:
         para['reward_mod'] = para['reward'] 
     for arm in arm_ids:
@@ -360,7 +363,6 @@ def get_events_explore(sub, sess, nan_missed=True):
     else:
         mod_cols = [col for col in para if '_mod' in col]
         dur_cols = [col for col in para if '_drt' in col]
-
 
     onsets = []
     onsets.append(para[time_cols].values)
