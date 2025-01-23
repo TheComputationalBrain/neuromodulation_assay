@@ -30,21 +30,26 @@ import main_funcs as mf
 import fmri_funcs as fun
 import nibabel as nib
 from scipy.stats import zscore
-from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 from nilearn.datasets import fetch_atlas_schaefer_2018
+from params_and_paths import Paths, Params, Receptors
 
-PLOT_ONLY = True
-RUN_PERMUTATION = True
-#for cluster permutation:
-N_PERM = 100000
-N_JOBS = 2
-TRESH = 0.001
-FWHM = 5
-TWO_SIDED = False
 paths = Paths()
 params = Params()
 rec = Receptors()
+
+PLOT_ONLY = True
+RUN_PERMUTATION = False
+#for cluster permutation:
+N_PERM = 100000
+N_JOBS = 4
+TRESH = 0.001
+FWHM = 5
+TWO_SIDED = False
+
+#resolution of the plots
+resolution = 'fsaverage5' #chnage freesurfer5 to freesurfer to get high res surface plots
+
 
 #adjust naming
 if params.zscore_per_session:   
@@ -56,7 +61,11 @@ fmri_dir = mf.get_fmri_dir(params.db)
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
 
-output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
+if params.db == 'Explore':
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
+else: 
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level',params.model)
+
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
 
@@ -105,6 +114,7 @@ else:
 
 masker.fit()
 
+#for the group dominance analysis 
 def plot_res(res, r2):
     plt.rcParams.update({'font.size': 16})
 
@@ -202,13 +212,18 @@ def plot_res(res, r2):
 
     return fig
 
+if params.db == 'Explore':
+    variables = ['surprise', 'confidence', 'prediction']
+else:
+    variables = params.latent_vars
+
 for var in params.latent_vars:
+
     print(f'------- running group analysis for {var} -------')
 
+    #get contrast data (beta estimates) and concatinate
     eff_size_files = []
-
     for sub in subjects:
-        #get contrast data (beta estimates) and concatinate
         ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{var}_{params.mask}_effect_size_map{zscore_info}.nii.gz'))
         eff_size_files.append(ef_size)
 
@@ -217,25 +232,27 @@ for var in params.latent_vars:
                                  columns=['intercept']) #one sample test
     second_level_model = SecondLevelModel()
     second_level_model = second_level_model.fit(eff_size_files,
-                                                design_matrix=design_matrix)
+                                        design_matrix=design_matrix)
+    fsaverage = datasets.fetch_surf_fsaverage(mesh=resolution)
 
     #mean beta
     plt.rcParams.update({'font.size': 8})
     effect_map = second_level_model.compute_contrast(second_level_contrast="intercept", output_type='effect_size')
-    fname = f'{var}_{params.mask}_effect_map.nii.gz'
+    #save as numpy
     effect = masker.transform(effect_map)
     with open(os.path.join(output_dir, 
                                 f'group_{var}_{params.mask}_effect_size{zscore_info}.pickle'), 'wb') as f:
                 pickle.dump(effect, f)
-
+    #save as nii
+    fname = f'{var}_{params.mask}_effect_map{zscore_info}.nii.gz'
     nib.save(effect_map, os.path.join(output_dir, fname))
-    plotting.plot_img_on_surf(effect_map, surf_mesh='fsaverage5', 
+    #plotting
+    plotting.plot_img_on_surf(effect_map, surf_mesh=resolution, 
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
                                             title=var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
     fname = f'{var}_effect_map.png' 
     plt.savefig(os.path.join(plot_path, fname))
-
-    fsaverage = datasets.fetch_surf_fsaverage(mesh="fsaverage")
+    #plotting right hemi only
     texture = surface.vol_to_surf(effect_map, fsaverage.pial_right)
     plotting.plot_surf_stat_map(
         fsaverage.infl_right, texture, hemi='right',
@@ -244,21 +261,19 @@ for var in params.latent_vars:
     fname = f'{var}_effect_map_right{zscore_info}.png' 
     plt.savefig(os.path.join(plot_path, fname), dpi=300)
 
-    #z map 
-    z_map = second_level_model.compute_contrast(second_level_contrast="intercept", output_type='z_score')
-    fname = f'{var}_{params.mask}_effect_map{zscore_info}.nii.gz'
-    nib.save(z_map, os.path.join(output_dir, fname))
 
-    #plot both hemis and lateral + medial
-    plotting.plot_img_on_surf(z_map, surf_mesh='fsaverage5', 
+    #z score
+    z_map = second_level_model.compute_contrast(second_level_contrast="intercept", output_type='z_score')
+    #save as nii
+    fname = f'{var}_{params.mask}_z_map{zscore_info}.nii.gz'
+    nib.save(z_map, os.path.join(output_dir, fname))
+    #plotting
+    plotting.plot_img_on_surf(z_map, surf_mesh=resolution, 
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
                                             title=var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
     fname = f'{var}_z_map{zscore_info}.png' 
     plt.savefig(os.path.join(plot_path, fname), dpi=300)
-
-    nib.save(z_map,os.path.join(output_dir, f'{var}_z_map{zscore_info}.nii.gz'))
-
-    #sanity check
+    #plotting right hemi only
     texture = surface.vol_to_surf(z_map, fsaverage.pial_right)
     plotting.plot_surf_stat_map(
         fsaverage.infl_right, texture, hemi='right',
@@ -267,6 +282,7 @@ for var in params.latent_vars:
     fname = f'{var}_z_map_right{zscore_info}.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
+    #dominance analysis on the group level --> exploratory, we use the subject level one for final analysis
     if PLOT_ONLY == False:
         y_data = masker.fit_transform(effect_map).flatten()
         #group level regression
@@ -289,7 +305,13 @@ for var in params.latent_vars:
         fig.savefig(os.path.join(plot_path, fname))
 
 if RUN_PERMUTATION:
-    for var in params.latent_vars_long:
+
+    if params.db == 'Explore':
+        variables_long = ['surprise', 'confidence', 'prediction','surprise_neg', 'confidence_neg', 'prediction_neg']
+    else:
+        variables_long = params.latent_vars_long
+
+    for var in variables_long:
         eff_size_files = []
         for sub in subjects:
             #get contrast data (beta estimates) and concatinate
@@ -308,11 +330,6 @@ if RUN_PERMUTATION:
                                     n_jobs=N_JOBS,
                                     smoothing_fwhm=FWHM,
                                     threshold=TRESH)
-        
-        if TWO_SIDED:
-            twosided = 'two_sided'
-        else:
-            twosided = ""
 
         nib.save(perm_dict['logp_max_t'],
                         os.path.join(output_dir,
