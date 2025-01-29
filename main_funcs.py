@@ -169,13 +169,11 @@ def rescale_answer(pos, pos_min, pos_max):
 
 def get_events_explore(sub, sess, nan_missed=True):
 
-    #confidence = 1-EU (estimation confidence is the same); keep in mind that EncodeProb has calculated uncertainty
-    #surprise = feedback surprise at outcome/shannon surprise
+    #confidence = 1-EU (estimation confidence is the same); 
+    #surprise = surprise at outcome/shannon surprise
     #predictabiliy = compute from prior that is returned from IO observer 
     #prediction = expected reward
     #(at outcome = prediction error and surprise of previous trial)
-
-    #?get IO estimate for subject response
     
     events_fixed = ['cue','out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf','respA', 'respB'] #will be added as an unmodulated regressor
     if params.reward:
@@ -220,16 +218,20 @@ def get_events_explore(sub, sess, nan_missed=True):
 
     #by block
     para = para[para['block'] == sess].reset_index(drop=True)
-    #ignore first 4 trials as activity + confidence increases dramatically (but unrelated)
-    para = para.iloc[4:].reset_index(drop=True)
+    #ignore first 4 or 8  trials as activity + confidence increases dramatically (but unrelated)
+    if params.remove_trials: #remove the first 4 trials -> does this reduce the positive component?
+        para = para.iloc[8:].reset_index(drop=True)
+    else:
+        para = para.iloc[4:].reset_index(drop=True)
+        
     n_trials = len(para) #get trial n from length of df
 
     if params.split:
         trial_types_all = np.asarray(event_label_split * n_trials)
     else:
         trial_types_all = np.asarray(event_labels * n_trials)
-    trial_types_all = [trial_name.replace('EU', '1-EU') for trial_name in trial_types_all] #chnage name to represent the convertion to confidence
-    trial_types_all = np.asarray(trial_types_all)
+    #trial_types_all = [trial_name.replace('EU', '1-EU') for trial_name in trial_types_all] #change name to represent the convertion to confidence
+    #trial_types_all = np.asarray(trial_types_all)
 
     # Get onsets for missed trials #din't add a missed regressor since missed trials only appear in a few trial and prevent the creation of a design matrix by block
     # para['missed_start'] = np.nan
@@ -248,13 +250,11 @@ def get_events_explore(sub, sess, nan_missed=True):
     para['startB'] = para['rt_start'].where(para['choiceA'] == 0, None)
     para['rt_startA'] = para['startA']
     para['rt_startB'] = para['startB']
-    para['ER_diff_start'] = para['outcome_start']
+    para['ER_diff_start'] = para['trial_start']
     if params.reward:
         para['reward_start'] = para['outcome_start'] 
 
-
     # ADD QUESTION PARAMTERS
-
     #infer onset of questions
     ind_Q1_is_A = para.index[para['rtQ1_val'] == para['rtA_val']]
     ind_Q1_is_B = para.index[para['rtQ1_val'] == para['rtB_val']]
@@ -285,7 +285,9 @@ def get_events_explore(sub, sess, nan_missed=True):
     #add columns for durations
     for dur in events_fixed:
         para[f'{dur}_drt'] = 0
-    #para['missed_drt'] = 5
+    for arm in arm_ids:
+        for l in ['val', 'conf']:
+            para[f'q{arm}_{l}_drt'] = para[f'rt{arm}_{l}']    
     para['rt_startA_drt'] = 0 
     para['rt_startB_drt'] = 0
     para['ER_diff_drt'] = 0
@@ -294,15 +296,17 @@ def get_events_explore(sub, sess, nan_missed=True):
     for arm in arm_ids:
         for l in ['val', 'conf']:
             for e in ['sub', 'io', 'rt']:
-                #para[f'q{arm}_{l}_{e}_drt'] = para[f'rt{arm}_{l}'] #duration of question regressors = RTs 
-                para[f'q{arm}_{l}_{e}_drt'] = 0
+                if e != 'rt':
+                    para[f'q{arm}_{l}_{e}_drt'] = para[f'rt{arm}_{l}'] #duration of question regressors = RTs 
+                else:
+                    para[f'q{arm}_{l}_{e}_drt'] = 0
 
     #add columns for modulation
     for mod in events_fixed:
         para[f'{mod}_mod'] = 1
-    para['ER_diff_mod'] = para['ER_diff']
     para['rt_startA_mod'] = para['rt'].where(para['choiceA'] == 1, None)
-    para['rt_startB_mod'] = para['rt'].where(para['choiceB'] == 1, None)
+    para['rt_startB_mod'] = para['rt'].where(para['choiceA'] == 0, None)
+    para['ER_diff_mod'] = para['ER_diff']
     if params.reward:
         para['reward_mod'] = para['reward'] 
     for arm in arm_ids:
@@ -322,10 +326,7 @@ def get_events_explore(sub, sess, nan_missed=True):
     for reg in params.io_variables:
         para[f'{reg}_start'] = para['outcome_start'] # lock IO regressors to outcome to stay as close as possible to the other datasets
         para[f'{reg}_drt'] = 0
-        if 'EU' in reg:
-            para[f'{reg}_mod'] = 1 - para[reg]
-        else:
-            para[f'{reg}_mod'] = para[reg]
+        para[f'{reg}_mod'] = para[reg]
 
     if params.split:
         # SPLIT FREE AND FORCED 
@@ -410,11 +411,11 @@ def get_stimq(db, sub, sess, data_dir):
         indices_question = beh_data['StimQ'][0].astype(int)-1
     elif db == 'NAConf':
         behav_dir = os.path.join(data_dir, 'behaviour_data', f'sub-{sub:02d}')
-        info = glob.glob(os.path.join(behav_dir, 'experiment_info*.pickle'))[0]
+        info = glob.glob(os.path.join(behav_dir, f'experiment_info_sub-{sub:02d}.pickle'))[0]
         with open(info, 'rb') as f:
             exp = pickle.load(f)
-        stim_q = exp[sess-1]['stim_q']
-        indices_question = [int(stim) for stim in stim_q]
+        indices_question = [int(stim) for stim in exp[sess-1]['stim_q']]
+
 
     return indices_question
 
@@ -432,7 +433,6 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             io_regs = pd.DataFrame({'update': io_inference['update'],
                                     'predictions': io_inference['p1'],
                                     'predictability': io_inference['entropy']})
-
         else:
             io_regs = pd.DataFrame({'surprise': io_inference['surprise'],
                                     'confidence': io_inference['confidence_pre'],
@@ -449,15 +449,15 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
         if db == 'PNAS': 
             data = get_data_PNAS(sub, sess, data_dir)
             onsets = np.hstack((data['stim_onset'], data['question_onset'], data['question_onset'],data['question_onset'],data['question_onset']))
-            duration = np.hstack(([0] * data['stim_onset'],
-                                [0] * data['question_onset'], [0] * data['question_onset'],  [0] * data['question_onset'],[0] * data['question_onset']))
+            duration = np.hstack(([0] * len(data['stim_onset']),
+                                data['reaction_times'], data['reaction_times'], data['reaction_times'],[0] * data['question_onset']))
             trial_type = np.hstack((['stim']*len(data['stim_onset']),
                                     ['q_conf']*len(data['question_onset']),
                                     ['sub_conf']*len(data['question_onset']),
                                     ['io_conf']*len(data['question_onset']),
                                     ['rt_conf']*len(data['question_onset'])))
-            modulation = np.hstack(([1] * data['stim_onset'],
-                                    [1] * data['question_onset'], 
+            modulation = np.hstack(([1] * len(data['stim_onset']),
+                                    [1] * len(data['question_onset']), 
                                     demean(data['subj_confidence']),
                                     demean(io_conf_q),
                                     demean(data['reaction_times']))) 
@@ -495,10 +495,10 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
                                     ['io_conf'] * len(on_q_conf),
                                     ['rt_conf'] * len(on_q_conf)))
             duration = np.hstack(([0] * on_stim,
-                                [0] * on_q_prob, [0] * on_q_prob, [0] * on_q_prob, [0] * on_q_prob, 
-                                [0] * on_q_conf, [0] * on_q_conf, [0] * on_q_conf, [0] * on_q_conf))
-            modulation = np.hstack(([1] * on_stim, 
-                                    [1] * on_q_prob,
+                                rt_prob, rt_prob, rt_prob, [0] * on_q_prob, 
+                                rt_conf, rt_conf, rt_conf, [0] * on_q_conf))
+            modulation = np.hstack(([1] * len(on_stim), 
+                                    [1] * len(on_q_prob),
                                     demean(sub_prob), 
                                     demean(io_prob_q),
                                     demean(rt_prob), 
@@ -517,6 +517,11 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             with open(file, 'rb') as f:
                     exp = pickle.load(f)
 
+            if params.remove_trials: #remove the first 8 trials -> does this reduce the positive component?
+                exp[sess-1]['stim_onsets'] = exp[sess-1]['stim_onsets'][8:]
+                io_regs = io_regs.iloc[8:].reset_index(drop=True)
+                exp[sess-1]['durations'] = exp[sess-1]['durations'][8:]
+
             # create event dataframe
             on_stim = exp[sess-1]['stim_onsets']
             on_q_prob = exp[sess-1]['question_prob_onsets']
@@ -524,14 +529,15 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
 
             rt_prob = exp[sess-1]['rt_prob']
             rt_conf = exp[sess-1]['rt_conf']
+            rt_conf_clean = np.nan_to_num(exp[sess-1]['rt_conf'], nan=4) 
+            rt_prob_clean = np.nan_to_num(exp[sess-1]['rt_prob'], nan=4)
 
             #create a variable for the onset of question modulators that were not missed (sice we have no values for the missed ones)
             #there is a onset regressor for all questions
-            not_nan = ~np.isnan(rt_prob)
-            on_q_prob_responded = on_q_prob[not_nan]
-            not_nan = ~np.isnan(rt_conf)
-            on_q_conf_responded = on_q_conf[not_nan]
-            resp = exp[sess-1]['response_onsets']
+            not_missed = exp[sess-1]['is_not_missed']
+            on_q_prob_responded = on_q_prob[not_missed]
+            on_q_conf_responded = on_q_conf[not_missed]
+            #resp = exp[sess-1]['response_onsets']
 
             onsets = np.hstack((on_stim,
                                 on_q_prob,
@@ -543,7 +549,6 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
                                 on_q_conf_responded,
                                 on_q_conf_responded))
 
-            
             trial_type = np.hstack((['stim']* len(on_stim), 
                                     ['q_prob']* len(on_q_prob),
                                     ['sub_prob']* len(on_q_prob_responded),
@@ -557,30 +562,30 @@ def get_events(db, sub, sess, data_dir=None, io_inference=None, seq=None):
             duration = exp[sess-1]['durations'] #durations are always 0
  
             duration = np.hstack((duration, 
-                                    [0] * on_q_prob, 
+                                    rt_prob_clean, 
+                                    rt_prob[not_missed],
+                                    rt_prob[not_missed],
                                     [0] * on_q_prob_responded,
-                                    [0] * on_q_prob_responded,
-                                    [0] * on_q_prob_responded,
-                                    [0] * on_q_conf,
-                                    [0] * on_q_conf_responded,
-                                    [0] * on_q_conf_responded,
+                                    rt_conf_clean,
+                                    rt_conf[not_missed],
+                                    rt_conf[not_missed],
                                     [0] * on_q_conf_responded)) 
-
+            
             sub_prob = exp[sess-1]['sub_prob']
             sub_conf = exp[sess-1]['sub_conf']
 
             io_prob_q = np.array([io_inference['p1_mean_array'][q]
                         for q in stim_q])
-            
+                    
             modulation = np.hstack(([1] * len(on_stim), 
                         [1] * len(on_q_prob),
-                        demean(sub_prob[~np.isnan(sub_prob)]), 
-                        demean(io_prob_q[~np.isnan(sub_prob)]), 
-                        demean(rt_prob[~np.isnan(rt_prob)]),
+                        demean(sub_prob[not_missed]), 
+                        demean(io_prob_q[not_missed]), 
+                        demean(rt_prob[not_missed]),
                         [1] * len(on_q_conf),
-                        demean(sub_conf[~np.isnan(sub_conf)]),
-                        demean(io_conf_q[~np.isnan(sub_conf)]),
-                        demean(rt_conf[~np.isnan(rt_conf)])))
+                        demean(sub_conf[not_missed]),
+                        demean(io_conf_q[not_missed]),
+                        demean(rt_conf[not_missed])))
             
         #add IO regressors 
         for column in io_regs.columns:
@@ -607,7 +612,7 @@ def get_mvt_reg(db_name, sub, sess):
                'EncodeProb': op.join(paths.root_dir, paths.data_dir, "derivatives"),
                'Explore': op.join(paths.root_dir, paths.data_dir, 'bids/derivatives/fmriprep-23.1.3_MAIN'), 
                'PNAS': op.join(paths.root_dir, paths.data_dir,
-                               "MRI_data/analyzed_data")}
+                               "MRI_data/raw_data")}
 
     # concatenate mvt_data across sessions_encode
     mvt_data = pd.DataFrame()
@@ -616,7 +621,7 @@ def get_mvt_reg(db_name, sub, sess):
 
         fname = glob.glob(op.join(mov_dir[db_name],
                                     f"subj{sub:02d}",
-                                    'preprocEPI',
+                                    'fMRI',
                                     f"rp_aepi_sess{sess}_*.txt"))[0]
         
         mvt_data = pd.read_csv(fname, sep='\s+', header=None,
