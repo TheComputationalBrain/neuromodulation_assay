@@ -28,10 +28,10 @@ import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
-RUN_REGRESSION = True
-RUN_DOMINANCE = True
-NUM_WORKERS = 14  # Set an appropriate number of workers to run dominance code in parallel
-START_AT = 1 #In case the dominance analysis was or had to be interrupted at some point, put the last processed subject here 
+RUN_REGRESSION = False
+RUN_DOMINANCE = True 
+NUM_WORKERS = 10  # Set an appropriate number of workers to run dominance code in parallel
+START_AT = 52 #In case the dominance analysis was or had to be interrupted at some point, put the last processed subject here 
 
 paths = Paths()
 params = Params()
@@ -64,7 +64,7 @@ if params.parcelated:
         gene_expression = pd.read_csv(os.path.join(receptor_dir,f'gene_expression_complex_desikan.csv'))
         receptor_density = zscore(gene_expression.to_numpy(), nan_policy='omit')
 else:
-    receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) #vertex level analyis can only be run on PET data densities 
+    receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) #voxel level analyis can only be run on PET data densities 
     output_dir = os.path.join(beta_dir, 'regressions', rec.source)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
@@ -76,22 +76,35 @@ if rec.source == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
     receptor_density = np.concatenate((receptor_density, receptor_density))
 
+
+if params.db in ['NAConf']:
+    add_info = '_firstTrialsRemoved'
+elif not params.zscore_per_session:
+    add_info = '_zscoreAll'
+else:
+    add_info = ""
+
 print(f'------- running regressions with {rec.source} as receptor density -------')
 
 if RUN_REGRESSION:
     #sklearn regression
+    if params.db == 'Explore':
+        variables = ['confidence', 'surprise']
+    else:
+        variables = params.latent_vars
+        
     columns = rec.receptor_names +["R2", "adjusted_R2", "BIC"]
 
     def calculate_bic(n, mse, num_params):
         bic = n * log(mse) + num_params * log(n)
         return bic
 
-    for latent_var in params.latent_vars:
+    for latent_var in variables:
         results_df = pd.DataFrame(columns=columns)
 
         for sub in subjects: 
             
-            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
+            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
 
             if params.parcelated:
                 non_nan_region = ~np.isnan(receptor_density).any(axis=1)
@@ -128,9 +141,14 @@ if RUN_REGRESSION:
         results_df.to_csv(os.path.join(output_dir, fname), index=False)  
 
 if RUN_DOMINANCE:
+    if params.db == 'Explore':
+        variables = ['confidence']
+    else:
+        variables = params.latent_vars
+
     def process_subject(sub, latent_var):
         print(f"--- dominance analysis for subject {sub} ----")
-        y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
+        y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
         if params.parcelated:
             non_nan_region = ~np.isnan(receptor_density).any(axis=1)
             non_nan_indices = np.where(non_nan_region)[0]
@@ -147,7 +165,7 @@ if RUN_DOMINANCE:
         results = pd.DataFrame([total_dominance_array], columns=rec.receptor_names)
         return results
 
-    for latent_var in params.latent_vars:
+    for latent_var in variables:
         print(f"--- dominance analysis for {latent_var} ----")
         results_df = pd.DataFrame(columns=rec.receptor_names)
         subjects = [sub for sub in subjects if sub > START_AT]

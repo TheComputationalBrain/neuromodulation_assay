@@ -53,13 +53,20 @@ if rec.source == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
     receptor_density = np.concatenate((receptor_density, receptor_density))
 
+if params.db in ['NAConf']:
+    add_info = '_firstTrialsRemoved'
+elif not params.zscore_per_session:
+    add_info = '_zscoreAll'
+else:
+    add_info = ""
+
 if RUN_CORR:
-    for latent_var in params.latent_vars:
+    for latent_var in ['confidence', 'surprise']:
         results_df = pd.DataFrame(columns=rec.receptor_names)
 
         for sub in subjects: 
             cors = np.zeros((len(rec.receptor_names),))
-            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size.pickle'), allow_pickle=True).flatten()
+            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
 
             for indx,receptor in enumerate(rec.receptor_names):
                 receptor = receptor_density[:,indx]
@@ -98,7 +105,7 @@ if PLOT_CORR:
     plt.rcParams.update({'font.size': 16})
 
     #by latent variable
-    for latent_var in params.latent_vars:
+    for latent_var in ['confidence', 'surprise']:
         fname = f'{latent_var}_{mask_comb}_correlation_results_bysubject.csv'
         results_df = pd.read_csv(os.path.join(output_dir, fname))
 

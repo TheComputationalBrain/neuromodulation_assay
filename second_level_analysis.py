@@ -48,23 +48,20 @@ FWHM = 5
 TWO_SIDED = False
 
 #resolution of the plots
-resolution = 'fsaverage5' #chnage freesurfer5 to freesurfer to get high res surface plots
-
-
-#adjust naming
-if params.zscore_per_session:   
-    zscore_info = ""
+resolution = 'fsaverage' #change freesurfer5 to freesurfer to get high res surface plots
+if params.db in ['NAConf']:
+    add_info = '_firstTrialsRemoved'
 else:
-     zscore_info = "_zscoreAll"
+    add_info = ""
 
 fmri_dir = mf.get_fmri_dir(params.db)
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
 
 if params.db == 'Explore':
-    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
-else: 
     output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level',params.model)
+else: 
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
 
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
@@ -203,7 +200,7 @@ def plot_res(res, r2):
     ax.set_xlabel('Receptor/Transporter')
     ax.set_ylabel('contribution (%)')
 
-    # Add mean and standard deviation of R² to the plot
+    # Add mean of R² to the plot
     textstr = f'Mean R²: {r2:.2f}'
     props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
     ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=14,
@@ -213,19 +210,27 @@ def plot_res(res, r2):
     return fig
 
 if params.db == 'Explore':
-    variables = ['surprise', 'confidence', 'prediction']
+    variables = ['confidence', 'surprise']
 else:
     variables = params.latent_vars
 
-for var in params.latent_vars:
+fsaverage = datasets.fetch_surf_fsaverage(mesh=resolution)
+template = datasets.load_mni152_template(resolution=2)
+
+for var in variables:
 
     print(f'------- running group analysis for {var} -------')
 
     #get contrast data (beta estimates) and concatinate
     eff_size_files = []
+    effect_arrays = []
     for sub in subjects:
-        ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{var}_{params.mask}_effect_size_map{zscore_info}.nii.gz'))
+        ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{var}_{params.mask}_effect_size_map{add_info}.nii.gz'))
+        if params.db == 'NAConf':
+            data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{var}_schaefer_effect_size{add_info}.pickle'), allow_pickle=True)
+            effect_arrays.append(data)
         eff_size_files.append(ef_size)
+
 
     #second level model:
     design_matrix = pd.DataFrame([1] * len(eff_size_files),
@@ -233,7 +238,7 @@ for var in params.latent_vars:
     second_level_model = SecondLevelModel()
     second_level_model = second_level_model.fit(eff_size_files,
                                         design_matrix=design_matrix)
-    fsaverage = datasets.fetch_surf_fsaverage(mesh=resolution)
+    
 
     #mean beta
     plt.rcParams.update({'font.size': 8})
@@ -241,45 +246,58 @@ for var in params.latent_vars:
     #save as numpy
     effect = masker.transform(effect_map)
     with open(os.path.join(output_dir, 
-                                f'group_{var}_{params.mask}_effect_size{zscore_info}.pickle'), 'wb') as f:
+                                f'group_{var}_{params.mask}_effect_size{add_info}.pickle'), 'wb') as f:
                 pickle.dump(effect, f)
     #save as nii
-    fname = f'{var}_{params.mask}_effect_map{zscore_info}.nii.gz'
+    fname = f'{var}_{params.mask}_effect_map{add_info}.nii.gz'
     nib.save(effect_map, os.path.join(output_dir, fname))
     #plotting
     plotting.plot_img_on_surf(effect_map, surf_mesh=resolution, 
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
-                                            title=var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
-    fname = f'{var}_effect_map.png' 
+                                            title=var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%2f')
+    fname = f'{var}_effect_map{add_info}.png' 
     plt.savefig(os.path.join(plot_path, fname))
+
     #plotting right hemi only
     texture = surface.vol_to_surf(effect_map, fsaverage.pial_right)
     plotting.plot_surf_stat_map(
         fsaverage.infl_right, texture, hemi='right',
         colorbar=True,
         bg_map=fsaverage.sulc_right)
-    fname = f'{var}_effect_map_right{zscore_info}.png' 
-    plt.savefig(os.path.join(plot_path, fname), dpi=300)
+    fname = f'{var}_effect_map_right{add_info}.png' 
 
 
     #z score
     z_map = second_level_model.compute_contrast(second_level_contrast="intercept", output_type='z_score')
     #save as nii
-    fname = f'{var}_{params.mask}_z_map{zscore_info}.nii.gz'
+    z_map =image.resample_img(z_map, template.affine)
+    fname = f'{var}_{params.mask}_z_map{add_info}.nii.gz'
     nib.save(z_map, os.path.join(output_dir, fname))
+
     #plotting
     plotting.plot_img_on_surf(z_map, surf_mesh=resolution, 
                                             hemispheres=['left', 'right'], views=['lateral', 'medial'], threshold=1e-50,
                                             title=var, colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
-    fname = f'{var}_z_map{zscore_info}.png' 
+    fname = f'{var}_z_map{add_info}.png' 
     plt.savefig(os.path.join(plot_path, fname), dpi=300)
-    #plotting right hemi only
-    texture = surface.vol_to_surf(z_map, fsaverage.pial_right)
-    plotting.plot_surf_stat_map(
-        fsaverage.infl_right, texture, hemi='right',
-        colorbar=True,
-        bg_map=fsaverage.sulc_right)
-    fname = f'{var}_z_map_right{zscore_info}.png' 
+
+    plt.rcParams.update({'font.size': 16})
+    plotting.plot_img_on_surf(z_map, surf_mesh=resolution, 
+                                            hemispheres=['right'], views=['lateral'], threshold=1e-80,
+                                            colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%i')
+
+    fname = f'{var}_z_map_right{add_info}.png' 
+    plt.savefig(os.path.join(plot_path, fname))
+    fname = f'{var}_z_map_right{add_info}.svg' 
+    plt.savefig(os.path.join(plot_path, fname), transparent=True)
+
+    z_map_zs = zscore(z_map.get_fdata())
+    z_map_zs = image.new_img_like(z_map, z_map_zs)
+    plotting.plot_img_on_surf(z_map_zs, surf_mesh=resolution, 
+                                        hemispheres=['right'], views=['lateral'], threshold=1e-80,
+                                        colorbar=True, cmap = 'cold_hot',inflate=True, symmetric_cbar=True, cbar_tick_format='%.2f')
+
+    fname = f'{var}_z_map_right{add_info}_zscore.png' 
     plt.savefig(os.path.join(plot_path, fname))
 
     #dominance analysis on the group level --> exploratory, we use the subject level one for final analysis
@@ -297,25 +315,27 @@ for var in params.latent_vars:
             y = y_data[non_nan_indices]
         #dominance analysis
         dominance_results = dominance_stats(X, y)
-        fname = f'beta_{var}_group_da{zscore_info}.pickle' 
+        fname = f'beta_{var}_group_da{add_info}.pickle' 
         with open(os.path.join(output_dir, fname), 'wb') as f:
             pickle.dump(dominance_results, f)
         fig = plot_res(dominance_results['total_dominance'], dominance_results['full_r_sq'])
-        fname = f'beta_{var}_group_da{zscore_info}.png' 
+        fname = f'beta_{var}_group_da{add_info}.png' 
         fig.savefig(os.path.join(plot_path, fname))
 
 if RUN_PERMUTATION:
 
     if params.db == 'Explore':
-        variables_long = ['surprise', 'confidence', 'prediction','surprise_neg', 'confidence_neg', 'prediction_neg']
+        variables_long = ['surprise', 'confidence', 'surprise_neg', 'confidence_neg']
     else:
         variables_long = params.latent_vars_long
 
+    # for var in variables_long:
     for var in variables_long:
+
         eff_size_files = []
         for sub in subjects:
             #get contrast data (beta estimates) and concatinate
-            ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{var}_{params.mask}_effect_size_map{zscore_info}.nii.gz'))
+            ef_size = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{var}_{params.mask}_effect_size_map{add_info}.nii.gz'))
             eff_size_files.append(ef_size)
 
         #second level model:
@@ -333,11 +353,11 @@ if RUN_PERMUTATION:
 
         nib.save(perm_dict['logp_max_t'],
                         os.path.join(output_dir,
-                                    f'{var}_logp_max_t{zscore_info}_{FWHM}.nii.gz'))
+                                    f'{var}_logp_max_t{add_info}_{FWHM}.nii.gz'))
         nib.save(perm_dict['logp_max_size'],
                         os.path.join(output_dir,
-                                    f'{var}_logp_max_size{zscore_info}_{FWHM}.nii.gz'))
+                                    f'{var}_logp_max_size{add_info}_{FWHM}.nii.gz'))
         nib.save(perm_dict['logp_max_mass'],
                     os.path.join(output_dir,
-                                f'{var}_logp_max_mass{zscore_info}_{FWHM}.nii.gz'))
+                                f'{var}_logp_max_mass{add_info}_{FWHM}.nii.gz'))
         

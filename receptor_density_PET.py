@@ -21,8 +21,9 @@ import seaborn as sns
 import fmri_funcs as fun
 from nilearn.input_data import NiftiLabelsMasker
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from nilearn import image, plotting
+from nilearn import image, plotting, datasets, surface
 from params_and_paths import Paths, Params
+from neuromaps import transforms
 
 
 PLOT_RECEPTORS=False
@@ -47,7 +48,6 @@ else:
     raise ValueError("Unknown atlas!")
 
 masker.fit()
-
 
 receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
@@ -80,43 +80,59 @@ receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
                  paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
                  paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
 
-masked = []
-for receptor in receptors_nii:
-    img = nib.load(receptor)
-    masked.append(masker.fit_transform(img))
+for proj in ['vol', 'surf']:    #['vol', 'surf']:
+    masked = []
+    for receptor in receptors_nii:
+        img = nib.load(receptor)
+        if proj == 'vol':
+            masked.append(masker.fit_transform(img))
+        else:
+            data_surf = transforms.mni152_to_fsaverage(img, fsavg_density='41k')
+            data_gii = []
+            for img in data_surf:
+                data_hemi = img.agg_data()
+                data_hemi = np.asarray(data_hemi).T
+                data_gii += [data_hemi]
+                receptor_array = np.hstack(data_gii).reshape(1,-1)
+            masked.append(receptor_array) 
+        
+    r = np.zeros([masked[0].shape[1], len(masked)])
+    for i in range(len(masked)):
+        r[:, i] = masked[i] 
 
-r = np.zeros([masked[0].shape[1], len(masked)])
-for i in range(len(masked)):
-    r[:, i] = masked[i] 
+    receptor_data = np.zeros([r.shape[0], len(receptor_names)])
+    receptor_data[:, 0] = r[:, 0]
+    receptor_data[:, 2:9] = r[:, 3:10]
+    receptor_data[:, 10:14] = r[:, 12:16]
+    receptor_data[:, 15:18] = r[:, 19:22]
+    receptor_data[:, 19] = r[:, 25]
 
-receptor_data = np.zeros([r.shape[0], len(receptor_names)])
-receptor_data[:, 0] = r[:, 0]
-receptor_data[:, 2:9] = r[:, 3:10]
-receptor_data[:, 10:14] = r[:, 12:16]
-receptor_data[:, 15:18] = r[:, 19:22]
-receptor_data[:, 19] = r[:, 25]
+    # weighted average of 5HT1B p943
+    receptor_data[:, 1] = (zscore(r[:, 1])*22 + zscore(r[:, 2])*65) / (22+65)
 
-# weighted average of 5HT1B p943
-receptor_data[:, 1] = (zscore(r[:, 1])*22 + zscore(r[:, 2])*65) / (22+65)
+    # weighted average of D2 flb457
+    receptor_data[:, 9] = (zscore(r[:, 10])*37 + zscore(r[:, 11])*55) / (37+55)
 
-# weighted average of D2 flb457
-receptor_data[:, 9] = (zscore(r[:, 10])*37 + zscore(r[:, 11])*55) / (37+55)
+    # weighted average of mGluR5 ABP688
+    receptor_data[:, 14] = (zscore(r[:, 16])*22 + zscore(r[:, 17])*28 + zscore(r[:, 18])*73) / (22+28+73)
 
-# weighted average of mGluR5 ABP688
-receptor_data[:, 14] = (zscore(r[:, 16])*22 + zscore(r[:, 17])*28 + zscore(r[:, 18])*73) / (22+28+73)
+    # weighted average of VAChT FEOBV
+    receptor_data[:, 18] = (zscore(r[:, 22])*4 + zscore(r[:, 23])*5 + zscore(r[:, 24])*18) / (4+5+18)
 
-# weighted average of VAChT FEOBV
-receptor_data[:, 18] = (zscore(r[:, 22])*4 + zscore(r[:, 23])*5 + zscore(r[:, 24])*18) / (4+5+18)
-
-#save receptor density maps 
-if params.parcelated:
-     with open(os.path.join(output_dir, 
-                       f'receptor_density_{params.mask}_{params.mask_details}.pickle'), 'wb') as f:
-            pickle.dump(receptor_data, f)
-else:
-    with open(os.path.join(output_dir, 
-                        f'receptor_density_{params.mask}.pickle'), 'wb') as f:
-            pickle.dump(receptor_data, f)
+    #save receptor density maps 
+    if proj == 'vol':
+        if params.parcelated:
+            with open(os.path.join(output_dir, 
+                            f'receptor_density_{params.mask}_{params.mask_details}.pickle'), 'wb') as f:
+                    pickle.dump(receptor_data, f)
+        else:
+            with open(os.path.join(output_dir, 
+                                f'receptor_density_{params.mask}.pickle'), 'wb') as f:
+                    pickle.dump(receptor_data, f)
+    else:
+         with open(os.path.join(output_dir, 
+                                f'receptor_density_{params.mask}_surf.pickle'), 'wb') as f:
+                    pickle.dump(receptor_data, f)
 
 
 #### plotting   

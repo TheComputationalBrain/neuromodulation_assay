@@ -8,11 +8,11 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'NAConf' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME =  'schaefer' #'spm_noCereb','harvard_oxford_cortical'; 'schaefer', 'desikan'
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
-REDO_MASK = True #if False, the masking step will be skipped and the numpy datata array will be used instead except if smoothing/mask name have changed
+REDO_MASK = False #if False, the masking step will be skipped and the numpy datata array will be used instead except if smoothing/mask name have changed
 
 #fixed at best setting:
 UPDATE_REG = False #update or suprise + confidence as regressor
@@ -27,7 +27,7 @@ class Params:
         self.parcelated = parcel
         self.update = update
 
-        self.hpf = 1/128
+        self.hpf = 1/128 
         self.hrf = 'spm'
 
         self.zscore_per_session = True 
@@ -37,10 +37,14 @@ class Params:
 
         if db == 'EncodeProb':
             self.seq_type = 'bernoulli'
-            self.smoothing_fwhm = None #no smoothing necessary because of 7T fMRI
+            self.smoothing_fwhm = 5 #no smoothing necessary because of 7T fMRI -> just for comparison with other studies 
         elif db == 'NAConf':
             self.seq_type = 'bernoulli'
             self.smoothing_fwhm = 5
+            self.naconf_behav_subj = \
+            [1, 2, 4, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 
+            24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 
+            43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 55, 56, 57, 58, 59, 60, 61] 
         elif db == 'PNAS':
             self.seq_type = 'transition'
             self.smoothing_fwhm = 5
@@ -50,7 +54,9 @@ class Params:
         if UPDATE_REG:
             self.latent_vars = ['update', 'predictability', 'predictions']
         else:
-            self.latent_vars = ['surprise', 'confidence', 'predictability', 'predictions']
+            self.latent_vars = ['surprise','confidence', 'predictability', 'predictions']
+
+        self.latent_vars_long = self.latent_vars + ['surprise_neg','confidence_neg', 'predictability_neg', 'predictions_neg']
 
         #participants to ignore and session deviations
         if db == 'NAConf':
@@ -68,9 +74,10 @@ class Params:
             #                         25: 28,
             #                         28: 25}
             self.split = False #split free and forced for the design matrix?
-            self.reward = True 
-            self.model = 'US_reward' #'US_noreward'
-            self.io_variables = ['US', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
+            self.reward = False 
+            self.model = 'noEntropy_noER'   #'noEntropy',''noEntropy_reducedDM'; 'previously: US_reward'
+            #self.io_variables = ['US', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
+            self.io_variables = ['US', 'EC_chosen'] 
 
         elif db == 'PNAS':
             self.ignore = []

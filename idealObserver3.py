@@ -118,7 +118,7 @@ def io_with_derivations(sequence, vol, sd=(10, 20),
         elif v == 'expected_outcome_uncertainty':
             io[v] = expected_uncertainty_outcome(io[id_reward_prob])
         elif v == 'estimation_confidence':
-            io[v] = estimation_confidence(io[id_dist])
+            io[v] = estimation_confidence(io[id_dist])  
         elif v == 'entropy':
             io[v] = entropy (io['prior'])
 
@@ -531,14 +531,40 @@ def expected_uncertainty_outcome(p_reward):
 
     return expected_outcome_uncertainty
 
+# def entropy(prior):
+#     "Entropy of the prior ditribution"
+
+#     entropy = {arm: [] for arm in prior}
+#     for arm in prior:
+#        entropy[arm] = -np.sum(prior[arm] * np.log(prior[arm]), axis=1)
+
+#     return entropy
+
 def entropy(prior):
-    "Entropy of the prior ditribution"
+    """Get entropy uncertainty.
 
-    entropy = {arm: [] for arm in prior}
-    for arm in prior:
-       entropy[arm] = -np.sum(prior[arm] * np.log(prior[arm]), axis=1)
+    Compute the entropy of the *predictive_distribution*
+    (dictionary of numpy arrays of shape [trials, reward levels]), 
+    for each option.
 
-    return entropy
+    The entropy is computed as -sum(p * log(p)) for each trial.
+    """
+    def compute_entropy(option_post):
+        # Add a small epsilon to avoid log(0)
+        return -np.sum(option_post * np.log(option_post), axis=1)
+    
+    return {option_name: compute_entropy(option_post)
+            for option_name, option_post in prior.items()}
+
+def expected_uncertainty(prior):
+    """Get expected uncertainty.
+
+    Compute the expected uncertainty of the *predictive_distribution*
+    (dictionary of numpy arrays of shape [trials, reward levels]), as the
+    probatility of the Maximum A Posterior value.
+    """
+    return {option_name: 1 - np.amax(option_post, 1)
+            for option_name, option_post in prior.items()}
 
 
 

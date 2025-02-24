@@ -25,7 +25,7 @@ def get_masker(data_dir=None,tr=None,smoothing_fwhm=None):
     #mask_path = os.path.join(mask_dir[DATA_ACCESS], MASK)
 
     if params.mask == 'harvard_oxford_cortical':
-            atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
+        atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
     elif params.mask == 'harvard_oxford_subcortical':
         atlas = fetch_atlas_harvard_oxford('sub-maxprob-thr25-2mm')
     elif params.mask == 'schaefer':
@@ -115,8 +115,9 @@ def demean(x):
 def get_fts(db, sub, sess, fmri_dir, json_dir):
         
     if db == 'PNAS':
-        epi_dir =  op.join(fmri_dir, f'subj{sub:02d}','preprocEPI')
-        ppcessed_files = 'swtuaepi*.nii'
+        epi_dir = op.join(paths.root_dir, paths.data_dir,
+                            f'MRI_data/raw_data/subj{sub:02d}/fMRI')
+        ppcessed_files = 'wtraepi*.nii'
     
     else:
         epi_dir =  op.join(fmri_dir, f'sub-{sub:02d}')
@@ -149,7 +150,6 @@ def get_ppssing(sub, db_name):
     if db_name == 'EncodeProb':
         if sub in [2, 16]:
             ppssing = 'wtrasub'
-    
         else:
             ppssing = 'wrtrasub'
     
@@ -171,7 +171,6 @@ def get_ppssing(sub, db_name):
         fmri_path = op.join(paths.root_dir, paths.data_dir,
                             f'MRI_data/raw_data/subj{sub:02d}/fMRI')
         
-
     return ppssing, fmri_path
 
 def get_nii_files(ppssing, fmri_path, db_name):

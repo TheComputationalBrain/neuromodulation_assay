@@ -10,13 +10,19 @@ surprise, confidence, predictability and predictions as parametric modulation of
 The output corresponds to the labels and estimates of the GLM.
 """
 
+import os
+#specify the number of threads before importing numpy to limit the amount of ressources that are taken up by numpy.
+os.environ["OMP_NUM_THREADS"] = "1" 
+os.environ["OPENBLAS_NUM_THREADS"] = "1"  
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import glob
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import os
 import pickle
 import nibabel as nib
 from nilearn.glm.first_level import run_glm
@@ -42,6 +48,15 @@ params = Params()
 beh_dir  = mf.get_beh_dir(params.db)
 json_file_dir = mf.get_json_dir(params.db)
 fmri_dir = mf.get_fmri_dir(params.db)
+
+#adjust naming
+if params.db in ['NAConf']:
+    if params.remove_trials:
+         add_info = '_firstTrialsRemoved'
+if not params.zscore_per_session:
+    add_info = '_zscoreAll'
+else:
+     add_info = ""
 
 #make output directories
 fmri_arr_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level',f'data_arrays_whole_brain_{params.smoothing_fwhm}') 
@@ -70,6 +85,7 @@ if not os.path.exists(design_dir):
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore] 
 #for Explore the subjects are already removed in the fMRI data folder/in NAConf some are already removed 
+
 
 for sub in subjects:
     
@@ -149,11 +165,11 @@ for sub in subjects:
     design_matrix.to_pickle(
         os.path.join(
             design_dir,
-            f'sub-{sub:02d}_design_matrix_' + params.db + '.pickle')) 
+            f'sub-{sub:02d}_design_matrix_' + params.db + f'{add_info}.pickle')) 
 
     # plot and save the design matrix
     if SAVE_DMTX_PLOT:
-        fig_fname = f'sub-{sub:02d}_design_matrix_' + params.db + '.png'
+        fig_fname = f'sub-{sub:02d}_design_matrix_' + params.db + f'{add_info}.png'
         fig_fpath = os.path.join(design_dir, fig_fname)
         if params.db == 'Explore':
             fig, ax = plt.subplots(figsize=[8, 12])
@@ -166,20 +182,23 @@ for sub in subjects:
 
     #run GLM on all voxels
     print("---- Running glm with autoregressive model  ----")
-    labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 4)
+    labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 1)
 
     # save results
-    label_fname = f'sub-{sub:02d}_{params.db}_labels_{params.mask}.pickle'
+    label_fname = f'sub-{sub:02d}_{params.db}_labels_{params.mask}{add_info}.pickle'
     with open(os.path.join(output_dir, label_fname), 'wb') as f:
         pickle.dump(labels, f)
-    estimates_fname = f'sub-{sub:02d}_{params.db}_estimates_{params.mask}.pickle'
+    estimates_fname = f'sub-{sub:02d}_{params.db}_estimates_{params.mask}{add_info}.pickle'
     with open(os.path.join(output_dir, estimates_fname), 'wb') as f:
         pickle.dump(estimates, f)
 
     # contasts 
     contrast_matrix = np.eye(design_matrix.shape[1])
+    contrast_matrix_neg = contrast_matrix * (-1)
     contrasts = dict([(column, contrast_matrix[i])
                             for i, column in enumerate(design_matrix.columns)])
+    contrasts_neg = dict([(column, contrast_matrix_neg[i])
+                          for i, column in enumerate(design_matrix.columns)])
     
     if params.db != 'Explore':
         if params.update:
@@ -190,22 +209,44 @@ for sub in subjects:
             contrasts = {'surprise': contrasts['surprise'],
                         'confidence': contrasts['confidence'],
                         'predictions': contrasts['predictions'],
-                        'predictability': contrasts['predictability']}
+                        'predictability': contrasts['predictability'],
+                        'surprise_neg': contrasts_neg['surprise'],
+                        'confidence_neg': contrasts_neg['confidence'],
+                        'predictions_neg': contrasts_neg['predictions'],
+                        'predictability_neg': contrasts_neg['predictability']
+                        }
     else:
         if params.split: 
             contrasts = {'surprise_free': contrasts['US_free'],
-                        'confidence_free': contrasts[f'1-EU_{params.model}_free'],
+                        'confidence_free': contrasts[f'EC_{params.model}_free'],
                         'prediction_free': contrasts[f'ER_{params.model}_free'],
                         'predictability_free': contrasts[f'entropy_{params.model}_free'],
                         'surprise_forced': contrasts[f'US_forced'],
-                        'confidence_forced': contrasts[f'1-EU_{params.model}_forced'],
+                        'confidence_forced': contrasts[f'EC_{params.model}_forced'],
                         'prediction_forced': contrasts[f'ER_{params.model}_forced'],
                         'predictability_forced': contrasts[f'entropy_{params.model}_forced']}
-        else:
+        elif params.model == 'US_reward':
             contrasts = {'surprise': contrasts['US'],
-                        'confidence': contrasts[f'1-EU_chosen'],
+                        'confidence': contrasts[f'EC_chosen'],
                         'predictions': contrasts[f'ER_chosen'],
-                        'predictability': contrasts[f'entropy_chosen']}
+                        'predictability': contrasts[f'entropy_chosen'],
+                        'surprise_neg': contrasts_neg['US'],
+                        'confidence_neg': contrasts_neg[f'EC_chosen'],
+                        'predictions_neg': contrasts_neg[f'ER_chosen'],
+                        'predictability_neg': contrasts_neg[f'entropy_chosen']}
+        elif params.model in ['noEntropy', 'noEntropy_reducedDM', 'noEntropy_reducedDM2']:
+            contrasts = {'surprise': contrasts['US'],
+                        'confidence': contrasts[f'EC_chosen'],
+                        'predictions': contrasts[f'ER_chosen'],
+                        'surprise_neg': contrasts_neg['US'],
+                        'confidence_neg': contrasts_neg[f'EC_chosen'],
+                        'predictions_neg': contrasts_neg[f'ER_chosen']}
+        elif params.model in ['noEntropy_noER']:
+            contrasts = {'surprise': contrasts['US'],
+                        'confidence': contrasts[f'EC_chosen'],
+                        'surprise_neg': contrasts_neg['US'],
+                        'confidence_neg': contrasts_neg[f'EC_chosen']}
+
             
     for contrast_id in contrasts:
         contrast = compute_contrast(labels,
@@ -215,17 +256,17 @@ for sub in subjects:
 
         # Save z-map
         z_val = masker.inverse_transform(contrast.z_score())
-        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_zmap.nii.gz'
+        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_zmap{add_info}.nii.gz'
         nib.save(z_val, os.path.join(output_dir, fname))
 
         #save effect size = beta 
         #save in a pickle format
         with open(os.path.join(output_dir, 
-                                    f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size.pickle'), 'wb') as f:
+                                    f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size{add_info}.pickle'), 'wb') as f:
                     pickle.dump(contrast.effect_size(), f)
         #save in nii format
         effect_size = masker.inverse_transform(contrast.effect_size())
-        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size_map.nii.gz'
+        fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size_map{add_info}.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
 
         #if mask is schaefer compute the mean by region, as we only use this atlas for the autoradiography data that's only available in the Schaefer 100 parcelation
@@ -234,11 +275,11 @@ for sub in subjects:
             atlas.labels = np.insert(atlas.labels, 0, "Background")
             masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
             effects_parcel = masker.fit_transform(effect_size)
-            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size.pickle'), 'wb') as f:
+            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size{add_info}.pickle'), 'wb') as f:
                 pickle.dump(effects_parcel, f)
         elif (params.mask == 'desikan') & params.parcelated:
             atlas = fetch_desikan_killiany() 
             masker = NiftiLabelsMasker(labels_img=atlas['image']) #parcelate
             effects_parcel = masker.fit_transform(effect_size)
-            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size.pickle'), 'wb') as f:
+            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size{add_info}.pickle'), 'wb') as f:
                 pickle.dump(effects_parcel, f)

@@ -37,7 +37,7 @@ def clean_regs(reg, tr):
     Apply the same cleaning process to the given regressors as applied to the
     BOLD signal, i.e. first detrending and then high-pass filtering.
     """    
-    skip_regs = ['mvt', 'stim', 'q_conf', 'q_prob']
+    skip_regs = ['mvt', 'stim', 'q_conf', 'q_prob', 'cue','out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf']  
 
     if any(keyword in reg.name for keyword in skip_regs):
         return reg.values

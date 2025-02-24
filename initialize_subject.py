@@ -76,6 +76,7 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
         'feedback_surprise': 'US',
         'signed_feedback_surprise': 'SS',
         'unsigned_prediction_error': 'UPE',
+        'estimation_confidence': 'EC',
         'entropy': 'entropy'
         }
 
@@ -187,7 +188,7 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
     df["PE_prevrep"] = df["PE_prev"] * df["repeat_sign"]
     
     # Get difference between arms, the average, and the chosen arm
-    AB_cols = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'entropy']
+    AB_cols = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'EC', 'entropy']
     for col in AB_cols:
         df[col + '_diff'] = np.diff(df[[col + '_A', col + '_B']], axis=1)
         df[col + '_abs_diff'] = abs(df[col + '_diff'])
@@ -212,7 +213,7 @@ def initialize_subject(sub, datadir=None, vol=4/96, window_size=2, as_predictors
                                       df[[f'{col}_A', f'{col}_B']].values)]
 
     # Apply transformations to columns of interest
-    col_contains = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'PE', 'US', 'SS', 'UPE', 'entropy']
+    col_contains = ['RMAP', 'ER', 'ERD', 'EU', 'EUO', 'UU', 'PE', 'US', 'SS', 'UPE', 'EC','entropy']
     to_transform = []
     for col in list(df.columns):
         if np.any([col_str in col for col_str in col_contains]):

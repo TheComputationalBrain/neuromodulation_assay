@@ -175,12 +175,16 @@ def get_events_explore(sub, sess, nan_missed=True):
     #prediction = expected reward
     #(at outcome = prediction error and surprise of previous trial)
     
-    events_fixed = ['cue','out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf','respA', 'respB'] #will be added as an unmodulated regressor
-    if params.reward:
-        events_modulated = ['rt_respA', 'rt_respB', 'ER_diff', 'reward','sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
-                        'sub_qB_val', 'io_qB_val', 'rt_qB_val', 'sub_qB_conf','io_qB_conf', 'rt_qB_conf']
-    else:
-        events_modulated = ['rt_respA', 'rt_respB', 'ER_diff', 'sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
+    # events_fixed = ['cue','out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf','respA', 'respB'] #will be added as an unmodulated regressor
+    # if params.reward:
+    #     events_modulated = ['rt_respA', 'rt_respB', 'ER_diff', 'reward','sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
+    #                     'sub_qB_val', 'io_qB_val', 'rt_qB_val', 'sub_qB_conf','io_qB_conf', 'rt_qB_conf']
+    # else:
+    #     events_modulated = ['rt_respA', 'rt_respB', 'ER_diff', 'sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
+    #                     'sub_qB_val', 'io_qB_val', 'rt_qB_val', 'sub_qB_conf','io_qB_conf', 'rt_qB_conf']
+
+    events_fixed = ['cue','out', 'qA_val', 'qA_conf', 'qB_val', 'qB_conf']
+    events_modulated = ['ER_diff', 'sub_qA_val', 'io_qA_val', 'rt_qA_val', 'sub_qA_conf', 'io_qA_conf', 'rt_qA_conf',
                         'sub_qB_val', 'io_qB_val', 'rt_qB_val', 'sub_qB_conf','io_qB_conf', 'rt_qB_conf']
     event_labels = events_fixed + events_modulated + params.io_variables
 
@@ -198,18 +202,23 @@ def get_events_explore(sub, sess, nan_missed=True):
     for reg in params.io_variables:
         io_times.append(f'{reg}_start')
 
-    if params.reward:
-        time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'startA', 'startB', 
-                        'rt_startA', 'rt_startB', 'ER_diff_start', 'reward_start',
-                        'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
-                        'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
-                        ]  + io_times
-    else:
-        time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'startA', 'startB', 
-                        'rt_startA', 'rt_startB','ER_diff_start', 
-                        'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
-                        'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
-                        ]  + io_times
+    # if params.reward:
+    #     time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'startA', 'startB', 
+    #                     'rt_startA', 'rt_startB', 'ER_diff_start', 'reward_start',
+    #                     'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
+    #                     'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
+    #                     ]  + io_times
+    # else:
+    #     time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'startA', 'startB', 
+    #                     'rt_startA', 'rt_startB','ER_diff_start', 
+    #                     'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
+    #                     'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
+    #                     ]  + io_times
+
+    time_cols = ['trial_start', 'outcome_start', 'qA_val_start', 'qA_conf_start', 'qB_val_start', 'qB_conf_start', 'ER_diff_start', 
+                            'qA_val_sub_start', 'qA_val_io_start', 'qA_val_rt_start', 'qA_conf_sub_start', 'qA_conf_io_start', 'qA_conf_rt_start',
+                            'qB_val_sub_start', 'qB_val_io_start', 'qB_val_rt_start', 'qB_conf_sub_start', 'qB_conf_io_start', 'qB_conf_rt_start'
+                            ]  + io_times
 
     arm_ids = ['A', 'B']
 
@@ -276,11 +285,19 @@ def get_events_explore(sub, sess, nan_missed=True):
         para['qA_val_start'][i] = para['qB_conf_start'][i] + 1
         para['qA_conf_start'][i] = para['qA_val_start'][i] + para['rtA_val'][i] + 1 
 
-    #duplicate for sub and IO estimates + RT regressor 
+    # #duplicate for sub and IO estimates + RT regressor #!remove the missing and redundand trials here!!
+    # for arm in arm_ids:
+    #     for l in ['val', 'conf']:
+    #         mask = para[f'q{arm}_{l}_start'].notna() & para[f'opt{arm}_{l}'].isna()
+    #         for e in ['sub', 'io', 'rt']:
+    #             para.loc[mask, f'q{arm}_{l}_{e}_start'] = np.nan  # Set NaN where no answer given
+    #             para.loc[~mask, f'q{arm}_{l}_{e}_start'] = para.loc[~mask, f'q{arm}_{l}_start']  # Otherwise, assign original value
+
+        # #duplicate for sub and IO estimates + RT regressor #!remove the missing and redundand trials here!!
     for arm in arm_ids:
         for l in ['val', 'conf']:
             for e in ['sub', 'io', 'rt']:
-                para[f'q{arm}_{l}_{e}_start'] = para[f'q{arm}_{l}_start'] #onset is the same for subj and IO estimate + RT reg
+                para[f'q{arm}_{l}_{e}_start'] = para[f'q{arm}_{l}_start']  
 
     #add columns for durations
     for dur in events_fixed:
@@ -288,8 +305,8 @@ def get_events_explore(sub, sess, nan_missed=True):
     for arm in arm_ids:
         for l in ['val', 'conf']:
             para[f'q{arm}_{l}_drt'] = para[f'rt{arm}_{l}']    
-    para['rt_startA_drt'] = 0 
-    para['rt_startB_drt'] = 0
+    # para['rt_startA_drt'] = 0 
+    # para['rt_startB_drt'] = 0
     para['ER_diff_drt'] = 0
     if params.reward:
         para['reward_drt'] = 0
@@ -301,22 +318,23 @@ def get_events_explore(sub, sess, nan_missed=True):
                 else:
                     para[f'q{arm}_{l}_{e}_drt'] = 0
 
-    #add columns for modulation
+    #add columns for modulation  
     for mod in events_fixed:
         para[f'{mod}_mod'] = 1
-    para['rt_startA_mod'] = para['rt'].where(para['choiceA'] == 1, None)
-    para['rt_startB_mod'] = para['rt'].where(para['choiceA'] == 0, None)
+    # para['rt_startA_mod'] = para['rt'].where(para['choiceA'] == 1, None)
+    # para['rt_startB_mod'] = para['rt'].where(para['choiceA'] == 0, None)
     para['ER_diff_mod'] = para['ER_diff']
     if params.reward:
         para['reward_mod'] = para['reward'] 
     for arm in arm_ids:
         for l in ['val', 'conf']:
             para[f'q{arm}_{l}_sub_mod'] = para[f'opt{arm}_{l}']
+            para[f'q{arm}_{l}_sub_mod'] = para[f'opt{arm}_{l}'].fillna(0) #! for now just replace it with 0 
             io_est = np.full(len(para), np.nan)
             if l == 'val':
-                io_est[~para[f'opt{arm}_val'].isna()] = para.loc[~para[f'opt{arm}_val'].isna(), f'ER_{arm}']
+                io_est[~para[f'q{arm}_val_start'].isna()] = para.loc[~para[f'q{arm}_val_start'].isna(), f'ER_{arm}']
             else:
-                io_est[~para[f'opt{arm}_val'].isna()] = 1 - para.loc[~para[f'opt{arm}_val'].isna(), f'EU_{arm}']
+                io_est[~para[f'q{arm}_conf_start'].isna()] = para.loc[~para[f'q{arm}_conf_start'].isna(), f'EC_{arm}']
             para[f'q{arm}_{l}_io_mod'] = io_est
             para[f'q{arm}_{l}_rt_mod'] = para[f'rt{arm}_{l}']
 
@@ -386,6 +404,18 @@ def get_events_explore(sub, sess, nan_missed=True):
                             'trial_type': trial_types,
                             'duration': durations,
                         'modulation': modulations})
+
+    filtered_events = events.copy()
+
+    # for arm in arm_ids:
+    #     for l in ['val', 'conf']:
+    #         trial_type_sub = f"sub_q{arm}_{l}"
+    #         trial_type_io = f"io_q{arm}_{l}"
+
+    #         # Check if modulation is consistent for sub_q{arm}_{l}
+    #         if filtered_events.loc[filtered_events['trial_type'] == trial_type_sub, 'modulation'].nunique() == 1:
+    #             # Remove both sub_q{arm}_{l} and io_q{arm}_{l}
+    #             filtered_events = filtered_events[~filtered_events['trial_type'].isin([trial_type_sub, trial_type_io])]
 
     return events
 
@@ -639,8 +669,9 @@ def get_mvt_reg(db_name, sub, sess):
             op.join(mov_dir[db_name], f"sub-{sub:02d}",
                     "func", f"sub-{sub:02d}_task-*_run-0{sess}*.tsv"))[0]
 
-        mvt_data = pd.read_csv(fname, sep='\t', header=0,
-                            names=[f"mvt{k}" for k in range(6)], index_col=False).fillna(0)
+        mvt_data = pd.read_csv(fname, sep='\t')
+        mvt_data = mvt_data[['trans_x', 'trans_y', 'trans_z', 'rot_x', 'rot_y', 'rot_z']]
+        mvt_data.columns = [f"mvt{k}" for k in range(6)]
 
     return mvt_data
 

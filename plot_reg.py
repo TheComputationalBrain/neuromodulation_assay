@@ -6,14 +6,14 @@ import seaborn as sns
 import matplotlib.patches as mpatches
 import matplotlib.lines as mlines
 from scipy.stats import ttest_1samp
-from statsmodels.stats.multitest import multipletests
+from statsmodels.stats.multitest import fdrcorrection
 from matplotlib.legend_handler import HandlerTuple
 from params_and_paths import Paths, Params, Receptors
 
 PLOT_COEFS = True
 PLOT_DOMINANCE = True 
 ADD_CORR = False #if false, add the sign off the full regression instead
-PLOT_LEGEND = True
+PLOT_LEGEND = False
 
 paths = Paths()
 params = Params()
@@ -73,9 +73,14 @@ output_dir = os.path.join(beta_dir, 'regressions', rec.source)
 if not os.path.exists(output_dir):
     os.makedirs(output_dir) 
 
+if params.db == 'Explore':
+    variables = ['surprise', 'confidence']
+else:
+    variables = params.latent_vars
+
 if PLOT_COEFS:
     #plot regression coefficients
-    for latent_var in params.latent_vars:
+    for latent_var in variables:
         fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
         results_df = pd.read_csv(os.path.join(output_dir, fname))
         if 'a2' in results_df.columns:
@@ -84,16 +89,20 @@ if PLOT_COEFS:
         #t-test
         t_test_results = []
         p_values = []
+        t_values = []
         for receptor in rec.receptor_names:
             t_stat, p_value = ttest_1samp(results_df[receptor], 0)
             t_test_results.append({'receptor': receptor, 't_stat': t_stat, 'p_value': p_value})
             p_values.append(p_value)
+            t_values.append(t_stat)
 
-        _, p_values_corrected, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
+        _, p_values_corrected = fdrcorrection(p_values, alpha=0.05)
         significant_receptors = []
-        for receptor, p_value_corrected in zip(rec.receptor_names, p_values_corrected):
+        significant_receptors_signs = []
+        for receptor, p_value_corrected, t in zip(rec.receptor_names, p_values_corrected, t_values):
             if p_value_corrected < 0.05:
                 significant_receptors.append(receptor)
+                significant_receptors_signs.append(np.sign(t))
 
         ttest_df = pd.DataFrame(t_test_results)
 
@@ -139,7 +148,12 @@ if PLOT_COEFS:
 
         for i, receptor in enumerate(ordered_receptors):
             if receptor in significant_receptors:
-                ax.scatter(i, results_df[receptor].median(), color='red', zorder=5)  # Mark the median with a red dot
+                idx = significant_receptors.index(receptor)
+                if significant_receptors_signs[idx] >0:
+                    color = '#C96868'
+                else:
+                    color = '#7EACB5'
+                ax.scatter(i, results_df[receptor].median(), color=color, zorder=5)  # Mark the median with a  dot
 
         ax.set_xticks(np.arange(len(ordered_receptors)))
         ax.set_xticklabels(receptor_label_formatted, rotation=90)
@@ -151,7 +165,7 @@ if PLOT_COEFS:
         ax.set_title(f'{mask_comb}: regression coefficients for {latent_var} (FDR corrected) with {rec.source}', fontsize=12)
 
         # Add mean and standard deviation of R² to the plot
-        textstr = f'Mean R²: {mean_R2:.2f}\nAdjusted mean R²: {mean_R2_adj:.2f}\nmean BIC: {mean_BIC:.2f}'
+        textstr = f'Mean R²: {mean_R2:.2f}\nmean BIC: {mean_BIC:.2f}'
         props = dict(boxstyle='round', facecolor='wheat', alpha=0.5)
         ax.text(0.95, 0.95, textstr, transform=ax.transAxes, fontsize=14,
                 verticalalignment='top', horizontalalignment='right', bbox=props)
@@ -168,13 +182,14 @@ if PLOT_COEFS:
 #plot dominance analysis 
 
 if PLOT_DOMINANCE:
-    for latent_var in params.latent_vars:
+    for latent_var in variables:
 
         try:
             results_df = pd.read_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj.pickle'))
         except FileNotFoundError:
             print(f"File not found for {latent_var}, skipping...") #for now I only have the dominance data (computationally intensive) for surprise and confidence 
             continue
+
 
         if 'a2' in results_df.columns:
             results_df.rename(columns={'a2': 'A2'}, inplace=True)
@@ -187,7 +202,7 @@ if PLOT_DOMINANCE:
         sign_results = pd.read_csv(os.path.join(output_dir, fname))
         if 'a2' in sign_results.columns:
             sign_results.rename(columns={'a2': 'A2'}, inplace=True)
-        sign_mean = sign_results.median(axis=0) #mean correlation for each receptor
+        sign_mean = sign_results.mean(axis=0) #mean correlation for each receptor
 
         receptor_to_group = {}
         for group_idx, group in enumerate(receptor_groups):
@@ -229,7 +244,7 @@ if PLOT_DOMINANCE:
         bar_data = standardized_df[ordered_receptors].mean()
         bar_data = bar_data.reset_index()
         bar_data.columns = ['receptor', 'mean_value']
-        bar_data['sem'] = sem_data.values
+        bar_data['sem'] = sem_data.values  
 
         bars = ax.bar(bar_data['receptor'], bar_data['mean_value'], yerr=bar_data['sem'],
                     color=[color['face'] for color in colors], edgecolor=[color['edge'] for color in colors], capsize=5)
@@ -238,20 +253,6 @@ if PLOT_DOMINANCE:
         for i, (receptor, color) in enumerate(zip(ordered_receptors, colors)):
             if receptor not in receptor_class[0] and receptor not in receptor_class[1]:
                 bars[i].set_hatch('//')
-
-        for i, receptor in enumerate(bar_data['receptor']):
-            # Perform a one-sample t-test for each receptor against 0
-            t_stat, p_value = ttest_1samp(sign_results[receptor], 0)
-            if p_value < 0.05:
-                # Get the mean and SEM for the position
-                mean_value = bar_data['mean_value'].iloc[i]
-                sem = bar_data['sem'].iloc[i]
-                sign_val = sign_mean[receptor]
-                if (params.db == 'Explore') & (latent_var == 'confidence'):
-                    sign_val = sign_val * (-1)
-                dot_color = '#C96868' if sign_val > 0 else '#7EACB5'
-                y_position = mean_value + sem + 0.01
-                ax.plot(i, y_position, 'o', color=dot_color, markersize=8, label='_nolegend_')
       
         ax.set_xticks(np.arange(len(ordered_receptors)))
         ax.set_xticklabels(receptor_label_formatted, rotation=90)
