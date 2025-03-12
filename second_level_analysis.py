@@ -18,14 +18,15 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import pickle
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('tkagg')
 import matplotlib.pyplot as plt
 import seaborn as sns
 from nilearn.glm.second_level import SecondLevelModel, non_parametric_inference
 from nilearn import plotting, image
 from nilearn import datasets
 from nilearn import surface
-from nilearn.input_data import NiftiMasker, NiftiLabelsMasker
-from sklearn.linear_model import LinearRegression
+from nilearn.input_data import NiftiLabelsMasker
 import main_funcs as mf
 import fmri_funcs as fun
 import nibabel as nib

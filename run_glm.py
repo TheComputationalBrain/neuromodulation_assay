@@ -277,9 +277,4 @@ for sub in subjects:
             effects_parcel = masker.fit_transform(effect_size)
             with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size{add_info}.pickle'), 'wb') as f:
                 pickle.dump(effects_parcel, f)
-        elif (params.mask == 'desikan') & params.parcelated:
-            atlas = fetch_desikan_killiany() 
-            masker = NiftiLabelsMasker(labels_img=atlas['image']) #parcelate
-            effects_parcel = masker.fit_transform(effect_size)
-            with open(os.path.join(output_dir, f'sub-{sub:02d}_{contrast_id}_{params.mask}_{params.mask_details}_effect_size{add_info}.pickle'), 'wb') as f:
-                pickle.dump(effects_parcel, f)
+

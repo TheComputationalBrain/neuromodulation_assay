@@ -13,11 +13,13 @@ from scipy import ndimage
 from scipy.stats import zscore
 from scipy.spatial.distance import cdist
 from sklearn.linear_model import LinearRegression
-from neuromaps import nulls, transforms
+from neuromaps import nulls, transforms, images 
 from nilearn import datasets, surface
 from params_and_paths import Paths, Params, Receptors
 import fmri_funcs as fun
 from nilearn import image, datasets
+from nilearn.input_data import NiftiLabelsMasker
+from nilearn.datasets import fetch_atlas_schaefer_2018
 
 
 paths = Paths()
@@ -26,7 +28,7 @@ rec = Receptors()
 
 EXPLORE_MODEL = 'noEntropy_noER'
 
-output_dir = os.path.join(paths.home_dir, 'domain_general')
+output_dir = os.path.join(paths.home_dir, 'variance_explained')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -51,16 +53,16 @@ template = datasets.load_mni152_template(resolution=2)
 tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore']  
 n_perm = 1000
 
-with open(os.path.join(output_dir,'regression_null_models_grouplevel.txt'), "w") as outfile:
+receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) 
+receptor_data =np.load(os.path.join(receptor_dir,f'receptor_density_schaefer_100.pickle'), allow_pickle=True)
+
+with open(os.path.join(output_dir,'regression_null_models_grouplevel_schaefer100_vario.txt'), "w") as outfile:
     for task in tasks:
         outfile.write(f'{task}:\n')
         if task == 'Explore':
             task_path = os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
         else:
             task_path = os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
-
-        receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) 
-        receptor_data =np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True)
                     
         if task in ['NAConf']:
             add_info = '_firstTrialsRemoved'
@@ -69,30 +71,35 @@ with open(os.path.join(output_dir,'regression_null_models_grouplevel.txt'), "w")
         else:
             add_info = ""
 
-        for contrast in ['confidence']:
+        for contrast in ['confidence', 'surprise']:
+            print(f"--- variogram for {task} and {contrast} ----")
+
             fname = f'{contrast}_schaefer_effect_map{add_info}.nii.gz'
             data_vol = nib.load(os.path.join(task_path, fname))
             
-
             #masker
-            masker = fun.get_masker()
-            masker.fit()
-            data_vol =image.resample_img(data_vol, template.affine)  #make sure to resample to mni 2mm
-            #? masking returns a shorter array, is that a problem fot the null model?
-            data_array = masker.fit_transform(data_vol)
-            nulls = nulls.burt2020(data_vol, atlas='MNI152', density='2mm', n_perm=n_perm)
+            atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
+            atlas.labels = np.insert(atlas.labels, 0, "Background")
+            masker = NiftiLabelsMasker(labels_img=atlas.maps) #parcelate
+            data_parcel = masker.fit_transform(data_vol)
+            map  = nib.load(atlas.maps)
+
+            #get a parcelation gifti
+            # labels = [label.decode() for label in atlas.labels]
+            # parc_left = images.construct_shape_nii(atlas.map, labels=labels,
+            #                                     intent='NIFTI_INTENT_LABEL')
+
+            perms = nulls.burt2020(data_parcel, atlas='MNI152', density='2mm', n_perm=n_perm, parcellation=map)
 
             null_list = []
             for p in range(n_perm):
-                null_img = image.new_img_like(data_vol, nulls[:,:,:,p])
+                null_img = image.new_img_like(data_parcel, perms[:,:,:,p])
                 null_array = masker.fit_transform(null_img)
                 null_list.append(null_array)
             null_arrays = np.concatenate(null_list, axis=0).T 
-            
-            #do the nulls have zeros at the same spots?
-            #adjust the receptor data so it has the same values 
+
             emp, model_pval = get_reg_r_pval(zscore(receptor_data),
-                        zscore(data_array.reshape(-1,1), axis=None), 
+                        zscore(data_parcel.reshape(-1,1), axis=None), 
                         zscore(null_arrays), n_perm)
             
             outfile.write(f'{contrast}:\n')

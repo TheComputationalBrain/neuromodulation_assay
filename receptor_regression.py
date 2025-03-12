@@ -19,7 +19,9 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import numpy as np
 import pandas as pd
 import pickle
+import nibabel as nib
 from math import log
+from neuromaps import transforms
 from concurrent.futures import ProcessPoolExecutor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
@@ -28,10 +30,11 @@ import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
-RUN_REGRESSION = False
-RUN_DOMINANCE = True 
+RUN_REGRESSION = True
+RUN_DOMINANCE = False 
+ON_SURFACE = True
 NUM_WORKERS = 10  # Set an appropriate number of workers to run dominance code in parallel
-START_AT = 52 #In case the dominance analysis was or had to be interrupted at some point, put the last processed subject here 
+START_AT = 0 #In case the dominance analysis was or had to be interrupted at some point, put the last processed subject here 
 
 paths = Paths()
 params = Params()
@@ -40,6 +43,11 @@ rec = Receptors()
 fmri_dir = mf.get_fmri_dir(params.db)
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore]
+
+if ON_SURFACE:
+    proj = '_surf'
+else:
+    proj = ''
 
 if params.update:
     if params.db == 'Explore':
@@ -68,14 +76,12 @@ else:
     output_dir = os.path.join(beta_dir, 'regressions', rec.source)
     if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
-    receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
+    receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}{proj}.pickle'), allow_pickle=True), nan_policy='omit')
     mask_comb = params.mask 
 
-#TDODO: run on just one hemisphere instead
 if rec.source == 'autorad_zilles44':
     #autoradiography dataset is only one hemisphere 
     receptor_density = np.concatenate((receptor_density, receptor_density))
-
 
 if params.db in ['NAConf']:
     add_info = '_firstTrialsRemoved'
@@ -104,16 +110,30 @@ if RUN_REGRESSION:
 
         for sub in subjects: 
             
-            y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
+            if ON_SURFACE:
+                data_vol = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz'))
+                effect_data = transforms.mni152_to_fsaverage(data_vol, fsavg_density='41k', method='nearest')
+                data_gii = []
+                for img in effect_data:
+                    data_hemi = img.agg_data()
+                    data_hemi = np.asarray(data_hemi).T
+                    data_gii += [data_hemi]
+                    y_data = np.hstack(data_gii)    
+                zeromask = np.isclose(y_data, 0)
+                mask = np.logical_not(zeromask)
+                y_data, receptor_density_zm = y_data[mask], receptor_density[mask,:]
+            else: 
+                y_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
+                receptor_density_zm = receptor_density
 
             if params.parcelated:
-                non_nan_region = ~np.isnan(receptor_density).any(axis=1)
+                non_nan_region = ~np.isnan(receptor_density_zm).any(axis=1)
                 non_nan_indices = np.where(non_nan_region)[0]
-                X = receptor_density[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
+                X = receptor_density_zm[non_nan_indices,:] #manual assignment of autored data means that some regions are empty
                 y = y_data[non_nan_indices]
             else:
                 non_nan_indices = ~np.isnan(y_data)
-                X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
+                X = receptor_density_zm[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
                 y = y_data[non_nan_indices]
 
             lin_reg = LinearRegression()
@@ -137,7 +157,7 @@ if RUN_REGRESSION:
             results = pd.DataFrame([np.append(coefs, [r_squared, adjusted_r_squared, bic])], columns = results_df.columns)
             results_df = pd.concat([results_df,results], ignore_index=True)
 
-        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
+        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all{proj}.csv'
         results_df.to_csv(os.path.join(output_dir, fname), index=False)  
 
 if RUN_DOMINANCE:

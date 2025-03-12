@@ -11,13 +11,20 @@ from matplotlib.legend_handler import HandlerTuple
 from params_and_paths import Paths, Params, Receptors
 
 PLOT_COEFS = True
-PLOT_DOMINANCE = True 
+PLOT_DOMINANCE = False 
 ADD_CORR = False #if false, add the sign off the full regression instead
 PLOT_LEGEND = False
+ON_SURFACE = True
 
 paths = Paths()
 params = Params()
 rec = Receptors()
+
+if ON_SURFACE:
+    proj = '_surf'
+else:
+    proj = ''
+
 
 plt.rcParams.update({'font.size': 18})
 
@@ -81,7 +88,7 @@ else:
 if PLOT_COEFS:
     #plot regression coefficients
     for latent_var in variables:
-        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
+        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all{proj}_nearest.csv'
         results_df = pd.read_csv(os.path.join(output_dir, fname))
         if 'a2' in results_df.columns:
             results_df.rename(columns={'a2': 'A2'}, inplace=True)
@@ -172,7 +179,7 @@ if PLOT_COEFS:
         plt.tight_layout()
         plt.show()
         
-        fname = f'{latent_var}_{mask_comb}_all_reg_coef.png'
+        fname = f'{latent_var}_{mask_comb}_all_reg_coef{proj}_nearest.png'
         fig_dir = os.path.join(output_dir, 'plots')
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)
