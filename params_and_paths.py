@@ -8,7 +8,7 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'PNAS' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
 MASK_NAME =  'schaefer' #'spm_noCereb','harvard_oxford_cortical'; 'schaefer', 'desikan'
 PARCELATED = False
 RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2

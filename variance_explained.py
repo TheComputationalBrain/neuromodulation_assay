@@ -13,14 +13,18 @@ from neuromaps import transforms
 from math import log
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 from scipy.stats import zscore, sem, ttest_rel
 import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 
 FROM_BETA = False
-FROM_RECEPTOR = False
+FROM_RECEPTOR = True
 ON_SURFACE = True
-COMP_NULL = True
+COMP_NULL = False
+
+model_type = 'lin+quad'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
 
 if ON_SURFACE:
     proj = '_on_surf'
@@ -35,23 +39,31 @@ output_dir = os.path.join(paths.home_dir, 'variance_explained')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 
-tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
+#tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
+tasks = ['lanA']
+latent_vars = ['S-N'] #['confidence', 'surprise']
 
 fmri_dir = {'NAConf': os.path.join('/neurospin/unicog/protocols/IRMf', 'MeynielMazancieux_NACONF_prob_2021', 'derivatives'),
             'EncodeProb': os.path.join('/neurospin/unicog/protocols/IRMf', 'EncodeProb_BounmyMeyniel_2020', 'derivatives'),
             'Explore': os.path.join('/neurospin/unicog/protocols/IRMf', 'Explore_Meyniel_Paunov_2021', 'bids/derivatives/fmriprep-23.1.3_MAIN'),
-            'PNAS': os.path.join('/neurospin/unicog/protocols/IRMf', 'Meyniel_MarkovGuess_2014', 'MRI_data/analyzed_data')}
+            'PNAS': os.path.join('/neurospin/unicog/protocols/IRMf', 'Meyniel_MarkovGuess_2014', 'MRI_data/analyzed_data'),
+            'lanA': '/home_local/alice_hodapp/language_localizer/'}
 
 ignore = {'NAConf': [3, 5, 6, 9, 36, 51],
             'EncodeProb': [1, 4, 12, 20],
             'Explore': [9, 17, 46],
-            'PNAS': []}
+            'PNAS': [],
+            'lanA' : []}
+
+#todo: error if lanA and not surface!
 
 if FROM_BETA:
     for task in tasks: 
 
         if task == 'Explore':
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
+        elif task == 'lanA':
+            beta_dir = fmri_dir['lanA']
         else:
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level')
 
@@ -74,12 +86,15 @@ if FROM_BETA:
 
         with open(os.path.join(output_dir,f'predict_from_beta{proj}.txt'), "a") as outfile:
             outfile.write(f'{task}: variance explained in analysis:\n\n')
-            for latent_var in ['surprise', 'confidence']:
+            for latent_var in latent_vars:
                 all_data = []
                 all_rsquared = []
                 for sub in subjects:
                         if ON_SURFACE:
-                            file = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz'))
+                            if 'lanA':
+                                file = nib.load(os.path.join(beta_dir,'subjects', f'{sub:03d}', 'SPM', 'spmT_S-N.nii'))
+                            else:
+                                file = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz'))
                             effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
                             data_gii = []
                             for img in effect_data:
@@ -118,13 +133,15 @@ if FROM_BETA:
             outfile.write('\n\n')
 
 if FROM_RECEPTOR:
-    latent_vars = ['surprise', 'confidence'] 
     df = pd.DataFrame(index=tasks, columns=latent_vars)
 
     for task in tasks: 
+        print(f'running cv for task: {task}')
 
         if task == 'Explore':
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
+        elif task == 'lanA':
+            beta_dir = fmri_dir['lanA']
         else:
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level')
 
@@ -140,7 +157,7 @@ if FROM_RECEPTOR:
 
         if ON_SURFACE: 
             receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) 
-            receptor_density =zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}_on_surf.pickle'), allow_pickle=True))
+            receptor_density =zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}_surf.pickle'), allow_pickle=True))
             mask_comb = params.mask 
         else:                                            
             if params.parcelated:
@@ -162,9 +179,17 @@ if FROM_RECEPTOR:
             outfile.write(f'{task}: variance explained in analysis with {rec.source} as predictor:\n\n')
             n_features = receptor_density.shape[1]
             for latent_var in latent_vars:
+                print(f'latent variable: {latent_var}')
                 r2_scores = [] 
                 if ON_SURFACE:
-                    fmri_files = glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz'))
+                    if 'lanA':
+                        fmri_files = []
+                        for subj in subjects:
+                            subj_id = f"{subj:03d}"  
+                            pattern = os.path.join(beta_dir, 'subjects', subj_id, 'SPM', 'spmT_*.nii')
+                            fmri_files.extend(glob.glob(pattern))
+                    else:
+                        fmri_files = glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz'))
                     fmri_activity = []
                     for file in fmri_files:
                         data_vol = nib.load(file)
@@ -184,6 +209,7 @@ if FROM_RECEPTOR:
                             fmri_activity.append(pickle.load(f))
                         
                 for i in range(len(subjects)):
+                    print(f'CV for subject {i}')
                     X_train = []
                     y_train = []
 
@@ -215,10 +241,47 @@ if FROM_RECEPTOR:
                         X_test = receptor_density[~mask_test]
                         y_test = zscore(fmri_activity[i].flatten()[~mask_test])
                     
-                    # Fit the model on the combined data
-                    model = LinearRegression()
+                    if model_type == 'linear':
+                        # Linear regression only
+                        model = LinearRegression()
+
+                    elif model_type == 'poly2':
+                        # Full second-degree polynomial (linear + quadratic + interactions)
+                        poly = PolynomialFeatures(degree=2, include_bias=False)
+                        model = make_pipeline(poly, LinearRegression())
+
+                    else:
+                        # Fit polynomial features to training data only
+                        poly = PolynomialFeatures(degree=2, include_bias=False)
+                        X_train_poly = poly.fit_transform(X_train)
+                        X_test_poly = poly.transform(X_test)
+
+                        feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+
+                        if model_type == 'lin+quad':
+                            # Linear + quadratic only (exclude interaction terms)
+                            mask = [
+                                (" " not in name) or ("^" in name)  # keep original features and squared terms
+                                for name in feature_names
+                            ]
+
+                        elif model_type == 'lin+interact':
+                            # Linear + interactions only (exclude squared terms)
+                            mask = [
+                                "^" not in name  # keep everything that is NOT quadratic
+                                for name in feature_names
+                            ]
+
+                        # Apply mask to filter features
+                        X_train = X_train_poly[:, mask]
+                        X_test = X_test_poly[:, mask]
+                        filtered_feature_names = feature_names[mask]
+
+                        # Fit model
+                        model = LinearRegression()
+
                     model.fit(X_train, y_train)
-                    
+
                     # Predict on the left-out subject
                     y_pred = model.predict(X_test)
                     r2 = r2_score(y_test, y_pred)
@@ -229,25 +292,32 @@ if FROM_RECEPTOR:
                 outfile.write(f'{latent_var}: {average_r2}, sem: {sem_r2}\n')
                 df.loc[task, latent_var] = average_r2
 
-                with open(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2{proj}.pickle'), "wb") as fp:   
-                    pickle.dump(r2_scores, fp)
+                if model_type == 'linear':
+                    with open(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2{proj}.pickle'), "wb") as fp:   
+                        pickle.dump(r2_scores, fp)
+                else:
+                    with open(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2{proj}_{model_type}.pickle'), "wb") as fp:   
+                        pickle.dump(r2_scores, fp)
 
             outfile.write('\n\n')
-    df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}.csv'))
+    if model_type == 'linear':
+        df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}.csv'))
+    else:
+        df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}_{model_type}.csv'))
 
 
 if COMP_NULL:
     latent_vars = ['surprise', 'confidence'] 
     df = pd.DataFrame(index=tasks, columns=latent_vars)
 
-    with open(os.path.join(output_dir,f'compare_emp_null_cv_{proj}.txt'), "w") as outfile:
+    with open(os.path.join(output_dir,f'compare_emp_null_cv_{proj}_{model_type}.txt'), "w") as outfile:
         for task in tasks: 
             for latent_var in latent_vars:
                 outfile.write(f'{task} and {latent_var}:\n')
                 #get the empirical r2 (on surf)
-                emp = np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2_on_surf.pickle'), allow_pickle=True)
+                emp = np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2_on_surf_{model_type}.pickle'), allow_pickle=True)
                 #get the null r2
-                null = np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_null_cv_r2.pickle'), allow_pickle=True)
+                null = np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_null_cv_r2_{model_type}.pickle'), allow_pickle=True)
                 null_df = pd.DataFrame(null)
                 null_means = null_df.mean().tolist()
 
@@ -259,10 +329,10 @@ if COMP_NULL:
                 ttest = ttest_rel(null_means, emp, alternative='less') 
                 outfile.write(f't-value: {ttest.statistic}\n') 
                 outfile.write(f'p-value: {ttest.pvalue}\n')
-                outfile.write(f'df: {ttest.pvalue}\n')
+                outfile.write(f'df: {ttest.df}\n')
                 outfile.write(f'\n\n')
 
-            df.to_csv(os.path.join(output_dir,f'overview_null_cv{proj}.csv'))
+            df.to_csv(os.path.join(output_dir,f'overview_null_cv{proj}_{model_type}.csv'))
 
 
 

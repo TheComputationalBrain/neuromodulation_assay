@@ -56,6 +56,11 @@ def get_beh_dir(db_name, root_dir=paths.root_dir, data_dir=paths.data_dir):
 
 def get_subjects(db, data_dir): 
     subjects = []
+
+    if db == 'lanA':
+        subjects = list(range(1, 61))
+        return subjects
+
     if db != 'PNAS':
         folders = os.path.join(data_dir,
                             'sub-*')

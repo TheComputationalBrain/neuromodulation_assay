@@ -15,6 +15,9 @@ from matplotlib.colors import ListedColormap, BoundaryNorm
 from scipy.stats import ttest_1samp
 from params_and_paths import Paths, Params, Receptors
 from nilearn.datasets import fetch_atlas_surf_destrieux
+from scipy.stats import ttest_ind
+from neuromaps import transforms
+
 
 
 paths = Paths()
@@ -98,7 +101,6 @@ if IDV_FDR:
 
     for contrast in contrasts:
     # Initialize arrays to store masks
-        task_masks = []
         # Loop through tasks and load data
         for task in tasks:
             if task == 'Explore':
@@ -430,12 +432,20 @@ if CORR_ALL:
 
         for contrast_file in os.listdir(task_path):  # Loop through subject files
             contrast_path = os.path.join(task_path, contrast_file)
-            if contrast_file.endswith(f"group_confidence_schaefer_effect_size{add_info}.pickle"):  
-                confidence_array = np.load(contrast_path, allow_pickle=True).flatten()
-                data_list.append({'task': task, 'contrast': 'confidence', 'data': confidence_array})
-            elif contrast_file.endswith(f"group_surprise_schaefer_effect_size{add_info}.pickle"):  # Load surprise arrays
-                surprise_array = np.load(contrast_path, allow_pickle=True).flatten()
-                data_list.append({'task': task, 'contrast': 'surprise', 'data': surprise_array})
+            if contrast_file.endswith(f"confidence_schaefer_effect_map{add_info}.nii.gz"):  
+                img = nib.load(contrast_path)
+                # surface projection
+                surf_data = transforms.mni152_to_fsaverage(img, fsavg_density='41k')
+                data_gii = [img.agg_data().T for img in surf_data]
+                surf_map = np.hstack(data_gii)
+                data_list.append({'task': task, 'contrast': 'confidence', 'data': surf_map})
+            elif contrast_file.endswith(f"surprise_schaefer_effect_map{add_info}.nii.gz"):  # Load surprise arrays
+                img = nib.load(contrast_path)
+                # surface projection
+                surf_data = transforms.mni152_to_fsaverage(img, fsavg_density='41k')
+                data_gii = [img.agg_data().T for img in surf_data]
+                surf_map = np.hstack(data_gii)
+                data_list.append({'task': task, 'contrast': 'surprise', 'data': surf_map})
 
     all_data = pd.DataFrame(data_list)
 
@@ -475,6 +485,7 @@ if CORR_ALL:
     fname = '4group_correlation_heatmap_by_task.png'
     plt.savefig(os.path.join(output_dir, fname), bbox_inches="tight", dpi=300)
 
+
     def custom_sort(row):
         if row['contrast'] == 'confidence':
             return (0, row['task'] == 'Explore', row['task'])  # Confidence first, Explore last within confidence
@@ -492,11 +503,238 @@ if CORR_ALL:
     )
     correlation_df_reordered.to_csv(os.path.join(output_dir, 'correlation_df_reordered.csv'))
     mask = np.triu(np.ones_like(correlation_df_reordered, dtype=bool))
+
+    # Create a 2D string array for annotations
+    annot_matrix = correlation_df_reordered.copy().astype(str)
+
+    # Helper to underline using Unicode
+    def underline_unicode(text):
+        return ''.join(char + '\u0332' for char in text)
+
+    # Helper to extract task and contrast from label
+    def parse_label(label):
+        task, contrast = label.split('_')
+        return task, contrast
+
+    for i, row_label in enumerate(sorted_labels):
+        task_i, contrast_i = parse_label(row_label)
+        for j, col_label in enumerate(sorted_labels):
+            task_j, contrast_j = parse_label(col_label)
+
+            underline = False
+
+            # Confidence-confidence
+            if contrast_i == 'confidence' and contrast_j == 'confidence':
+                underline = True
+
+            # Surprise-surprise (excluding Explore), but include EncodeProb-Explore
+            elif contrast_i == 'surprise' and contrast_j == 'surprise':
+                if task_i != 'Explore' and task_j != 'Explore':
+                    underline = True
+                elif set([task_i, task_j]) == set(['EncodeProb', 'Explore']):
+                    underline = True
+
+            corr_value = correlation_matrix_reordered[i, j]
+            corr_str = f"{corr_value:.2f}"
+            annot_matrix.iloc[i, j] = underline_unicode(corr_str) if underline else corr_str
+
+
     plt.figure(figsize=(12, 10))
-    sns.heatmap(correlation_df_reordered, annot=True, fmt=".2f", cmap=cmap_div, square=True, center=0)
+    sns.heatmap(
+        correlation_df_reordered, 
+        annot=annot_matrix.values, 
+        fmt="", 
+        cmap=cmap_div, 
+        square=True, 
+        center=0
+    )
     fname = '4group_correlation_heatmap_by_contrast.png'
     plt.savefig(os.path.join(output_dir, fname), bbox_inches="tight", dpi=300)
     plt.close('all')
+
+    # --- Create separate heatmaps for confidence-confidence and surprise-surprise correlations ---
+
+    # Helper to check task/contrast
+    def parse_label(label):
+        task, contrast = label.split('_')
+        return task, contrast
+
+    def bold(val):
+        return f"$\\bf{{{val:.2f}}}$"
+
+    # Define subsets
+    confidence_labels = [label for label in sorted_labels if '_confidence' in label]
+    surprise_labels = [label for label in sorted_labels if '_surprise' in label]
+
+    conf_indices = [sorted_labels.index(label) for label in confidence_labels]
+    surp_indices = [sorted_labels.index(label) for label in surprise_labels]
+
+    conf_matrix = correlation_matrix_reordered[np.ix_(conf_indices, conf_indices)]
+    surp_matrix = correlation_matrix_reordered[np.ix_(surp_indices, surp_indices)]
+
+    conf_df = pd.DataFrame(conf_matrix, index=confidence_labels, columns=confidence_labels)
+    surp_df = pd.DataFrame(surp_matrix, index=surprise_labels, columns=surprise_labels)
+
+    # Compute global color scale
+    combined_min = correlation_df_reordered.min().min()
+    combined_max = correlation_df_reordered.max().max()
+
+    # Create annotations for confidence
+    annot_conf = conf_df.copy().astype(str)
+    for i in range(len(confidence_labels)):
+        for j in range(len(confidence_labels)):
+            val = conf_matrix[i, j]
+            annot_conf.iloc[i, j] = bold(val)
+
+    # Create annotations for surprise
+    annot_surp = surp_df.copy().astype(str)
+    for i, row_label in enumerate(surprise_labels):
+        task_i, contrast_i = parse_label(row_label)
+        for j, col_label in enumerate(surprise_labels):
+            task_j, contrast_j = parse_label(col_label)
+
+            val = surp_matrix[i, j]
+            bold_it = False
+            if contrast_i == 'surprise' and contrast_j == 'surprise':
+                if task_i != 'Explore' and task_j != 'Explore':
+                    bold_it = True
+                elif set([task_i, task_j]) == set(['EncodeProb', 'Explore']):
+                    bold_it = True
+            annot_surp.iloc[i, j] = bold(val) if bold_it else f"{val:.2f}"
+
+    # Plot confidence-confidence heatmap
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(
+        conf_df,
+        annot=annot_conf.values,
+        fmt="",
+        cmap=cmap_div,
+        square=True,
+        center=0,
+        vmin=combined_min,
+        vmax=combined_max,
+        cbar=True,
+        annot_kws={"size": 24}
+    )
+    plt.savefig(os.path.join(output_dir, 'heatmap_confidence_vs_confidence.png'), bbox_inches="tight", dpi=300)
+    plt.close()
+
+    # Plot surprise-surprise heatmap
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(
+        surp_df,
+        annot=annot_surp.values,
+        fmt="",
+        cmap=cmap_div,
+        square=True,
+        center=0,
+        vmin=combined_min,
+        vmax=combined_max,
+        cbar=True,
+        annot_kws={"size": 24}
+    )
+    plt.savefig(os.path.join(output_dir, 'heatmap_surprise_vs_surprise.png'), bbox_inches="tight", dpi=300)
+    plt.close()
+
+    # --- Confidence–Confidence: Only lower triangle (off-diagonal) ---
+
+    conf_matrix_full = correlation_matrix_reordered[np.ix_(conf_indices, conf_indices)]
+    conf_labels = confidence_labels
+
+    # Mask upper triangle and diagonal
+    mask_upper = np.triu(np.ones_like(conf_matrix_full, dtype=bool), k=1)
+    conf_matrix_lower = np.where(mask_upper, np.nan, conf_matrix_full)
+
+    conf_lower_df = pd.DataFrame(conf_matrix_lower, index=conf_labels, columns=conf_labels)
+
+    # Annotations
+    annot_conf_lower = conf_lower_df.copy().astype(str)
+    for i in range(len(conf_labels)):
+        for j in range(len(conf_labels)):
+            val = conf_matrix_lower[i, j]
+            annot_conf_lower.iloc[i, j] = f"{val:.2f}" if not np.isnan(val) else ""
+
+    # Plot lower triangle
+    plt.figure(figsize=(8, 7))
+    sns.heatmap(
+        conf_lower_df,
+        annot=annot_conf_lower.values,
+        fmt="",
+        cmap=cmap_div,
+        square=True,
+        center=0,
+        vmin=combined_min,
+        vmax=combined_max,
+        cbar=True,
+        mask=mask_upper,
+        annot_kws={"size": 24}
+    )
+    plt.savefig(os.path.join(output_dir, 'heatmap_confidence_confidence_lowertriangle.png'), bbox_inches="tight", dpi=300)
+    plt.close()
+
+    # --- Surprise–Surprise: Only lower triangle (off-diagonal) ---
+
+    surp_matrix_full = correlation_matrix_reordered[np.ix_(surp_indices, surp_indices)]
+    surp_labels = surprise_labels
+
+    # Mask upper triangle and diagonal
+    mask_upper_surp = np.triu(np.ones_like(surp_matrix_full, dtype=bool), k=1)
+    surp_matrix_lower = np.where(mask_upper_surp, np.nan, surp_matrix_full)
+
+    surp_lower_df = pd.DataFrame(surp_matrix_lower, index=surp_labels, columns=surp_labels)
+
+    # Annotations
+    annot_surp_lower = surp_lower_df.copy().astype(str)
+    for i in range(len(surp_labels)):
+        for j in range(len(surp_labels)):
+            val = surp_matrix_lower[i, j]
+            annot_surp_lower.iloc[i, j] = f"{val:.2f}" if not np.isnan(val) else ""
+
+    # Plot lower triangle
+    plt.figure(figsize=(8, 7))
+    sns.heatmap(
+        surp_lower_df,
+        annot=annot_surp_lower.values,
+        fmt="",
+        cmap=cmap_div,
+        square=True,
+        center=0,
+        vmin=combined_min,
+        vmax=combined_max,
+        cbar=True,
+        mask=mask_upper_surp,
+        annot_kws={"size":24}
+    )
+    plt.savefig(os.path.join(output_dir, 'heatmap_surprise_surprise_lowertriangle.png'), bbox_inches="tight", dpi=300)
+    plt.close()
+
+    # --- Confidence vs Surprise: Full 4×4 block ---
+
+    cross_matrix = correlation_matrix_reordered[np.ix_(conf_indices, surp_indices)]
+    cross_df = pd.DataFrame(cross_matrix, index=confidence_labels, columns=surprise_labels)
+
+    annot_cross = cross_df.copy().astype(str)
+    for i in range(len(confidence_labels)):
+        for j in range(len(surprise_labels)):
+            annot_cross.iloc[i, j] = f"{cross_matrix[i, j]:.2f}"
+
+    plt.figure(figsize=(8, 7))
+    sns.heatmap(
+        cross_df,
+            annot=annot_cross.values,
+            fmt="",
+            cmap=cmap_div,
+            square=True,
+            center=0,
+            vmin=combined_min,
+            vmax=combined_max,
+            cbar=True,
+            annot_kws={"size": 18}
+        )
+    plt.xlabel("Surprise")
+    plt.ylabel("Confidence")
+    plt.savefig(os.path.join(output_dir, 'heatmap_confidence_surprise.png'), bbox_inches="tight", dpi=300)
+    plt.close()
 
 
 #### correlation with just the probabaility learning datasets

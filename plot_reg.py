@@ -10,11 +10,13 @@ from statsmodels.stats.multitest import fdrcorrection
 from matplotlib.legend_handler import HandlerTuple
 from params_and_paths import Paths, Params, Receptors
 
-PLOT_COEFS = True
-PLOT_DOMINANCE = False 
+PLOT_COEFS = False
+PLOT_DOMINANCE = True 
 ADD_CORR = False #if false, add the sign off the full regression instead
 PLOT_LEGEND = False
-ON_SURFACE = True
+ON_SURFACE = False
+
+MODEL_TYPE = 'lin+quad'
 
 paths = Paths()
 params = Params()
@@ -24,7 +26,6 @@ if ON_SURFACE:
     proj = '_surf'
 else:
     proj = ''
-
 
 plt.rcParams.update({'font.size': 18})
 
@@ -192,24 +193,24 @@ if PLOT_DOMINANCE:
     for latent_var in variables:
 
         try:
-            results_df = pd.read_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj.pickle'))
+            results_df = pd.read_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj_{MODEL_TYPE}.pickle'))
         except FileNotFoundError:
-            print(f"File not found for {latent_var}, skipping...") #for now I only have the dominance data (computationally intensive) for surprise and confidence 
+            print(f"File not found for {latent_var}, skipping...") 
             continue
 
 
         if 'a2' in results_df.columns:
             results_df.rename(columns={'a2': 'A2'}, inplace=True)
 
-        if ADD_CORR:
-            fname = f'{latent_var}_{mask_comb}_correlation_results_bysubject.csv'
-        else: 
-            fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
+        # if ADD_CORR:
+        #     fname = f'{latent_var}_{mask_comb}_correlation_results_bysubject.csv'
+        # else: 
+        #     fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all.csv'
         
-        sign_results = pd.read_csv(os.path.join(output_dir, fname))
-        if 'a2' in sign_results.columns:
-            sign_results.rename(columns={'a2': 'A2'}, inplace=True)
-        sign_mean = sign_results.mean(axis=0) #mean correlation for each receptor
+        # sign_results = pd.read_csv(os.path.join(output_dir, fname))
+        # if 'a2' in sign_results.columns:
+        #     sign_results.rename(columns={'a2': 'A2'}, inplace=True)
+        # sign_mean = sign_results.mean(axis=0) #mean correlation for each receptor
 
         receptor_to_group = {}
         for group_idx, group in enumerate(receptor_groups):
@@ -280,7 +281,7 @@ if PLOT_DOMINANCE:
 
         plt.tight_layout()
         
-        fname = f'{latent_var}_{mask_comb}_dominance.png'
+        fname = f'{latent_var}_{mask_comb}_dominance_{MODEL_TYPE}.png'
         fig_dir = os.path.join(output_dir, 'plots')
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)
@@ -290,7 +291,7 @@ if PLOT_DOMINANCE:
         for text in ax.get_figure().findobj(plt.Text):
             text.set_fontsize(28)
 
-        fname = f'{latent_var}_{mask_comb}_dominance_poster.png'
+        fname = f'{latent_var}_{mask_comb}_dominance_poster_{MODEL_TYPE}.png'
         fig_dir = os.path.join(output_dir, 'plots')
         if not os.path.exists(fig_dir):
             os.makedirs(fig_dir)

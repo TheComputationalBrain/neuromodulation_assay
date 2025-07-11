@@ -25,15 +25,18 @@ from neuromaps import transforms
 from concurrent.futures import ProcessPoolExecutor
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
+from sklearn.preprocessing import PolynomialFeatures
+from sklearn.pipeline import make_pipeline
 from scipy.stats import zscore
 import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 from dominance_stats import dominance_stats
 
+MODEL_TYPE = 'lin+quad'  # 'linear', 'poly2', 'lin+quad', 'lin+interact'
 RUN_REGRESSION = True
-RUN_DOMINANCE = False 
-ON_SURFACE = True
-NUM_WORKERS = 10  # Set an appropriate number of workers to run dominance code in parallel
+RUN_DOMINANCE = True 
+ON_SURFACE = False
+NUM_WORKERS = 30  # Set an appropriate number of workers to run dominance code in parallel
 START_AT = 0 #In case the dominance analysis was or had to be interrupted at some point, put the last processed subject here 
 
 paths = Paths()
@@ -90,6 +93,11 @@ elif not params.zscore_per_session:
 else:
     add_info = ""
 
+def calculate_bic(n, mse, num_params):
+    bic = n * log(mse) + num_params * log(n)
+    return bic
+
+
 print(f'------- running regressions with {rec.source} as receptor density -------')
 
 if RUN_REGRESSION:
@@ -99,11 +107,28 @@ if RUN_REGRESSION:
     else:
         variables = params.latent_vars
         
-    columns = rec.receptor_names +["R2", "adjusted_R2", "BIC"]
-
-    def calculate_bic(n, mse, num_params):
-        bic = n * log(mse) + num_params * log(n)
-        return bic
+    if MODEL_TYPE == 'linear':
+        columns = rec.receptor_names + ["R2", "adjusted_R2", "BIC"]
+    else:
+        poly = PolynomialFeatures(degree=2, include_bias=False)
+        dummy = np.zeros((1, receptor_density.shape[1]))
+        poly_features = poly.fit_transform(dummy)
+        feature_names = poly.get_feature_names_out(rec.receptor_names)
+        if MODEL_TYPE == 'lin+quad':
+        # Linear + quadratic only (exclude interaction terms)
+            mask = [
+                (" " not in name) or ("^" in name)  # keep original features and squared terms
+                for name in feature_names
+            ]
+            feature_names = feature_names[mask]
+        elif MODEL_TYPE == 'lin+interact':
+            # Linear + interactions only (exclude squared terms)
+            mask = [
+                "^" not in name  # keep everything that is NOT quadratic
+                for name in feature_names
+                                ]
+            feature_names = feature_names[mask]
+        columns = list(feature_names) + ["R2", "adjusted_R2", "BIC"]
 
     for latent_var in variables:
         results_df = pd.DataFrame(columns=columns)
@@ -136,35 +161,69 @@ if RUN_REGRESSION:
                 X = receptor_density_zm[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
                 y = y_data[non_nan_indices]
 
-            lin_reg = LinearRegression()
-            lin_reg.fit(X, y)
-            yhat = lin_reg.predict(X)
-            coefs = lin_reg.coef_
+                if MODEL_TYPE == 'linear':
+                    # Linear regression only
+                    model = LinearRegression()
 
-            #adjusted R2
-            SS_Residual = sum((y - yhat) ** 2)
-            SS_Total = sum((y - np.mean(y)) ** 2)
-            r_squared = 1 - (float(SS_Residual)) / SS_Total
-            adjusted_r_squared = 1 - (1 - r_squared) * \
-                (len(y) - 1) / (len(y) - X.shape[1] - 1)
+                elif MODEL_TYPE == 'poly2':
+                    # Full second-degree polynomial (linear + quadratic + interactions)
+                    poly = PolynomialFeatures(degree=2, include_bias=False)
+                    model = make_pipeline(poly, LinearRegression())
+
+                else:
+                    # Fit polynomial features to training data only
+                    poly = PolynomialFeatures(degree=2, include_bias=False)
+                    X = poly.fit_transform(X)
+
+                    feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+
+                    if MODEL_TYPE == 'lin+quad':
+                        # Linear + quadratic only (exclude interaction terms)
+                        mask = [
+                            (" " not in name) or ("^" in name)  # keep original features and squared terms
+                            for name in feature_names
+                        ]
+                        # Apply mask to filter features
+                    elif MODEL_TYPE == 'lin+interact':
+                        # Linear + interactions only (exclude squared terms)
+                        mask = [
+                            "^" not in name  # keep everything that is NOT quadratic
+                            for name in feature_names
+                        ]
+                        # Apply mask to filter features
+                    X = X[:, mask]
+                    filtered_feature_names = feature_names[mask]
+
+                    # Fit model
+                    model = LinearRegression()
             
-            #BIC
-            num_params = len(lin_reg.coef_) + 1
-            mse = mean_squared_error(y, yhat)
-            bic = calculate_bic(len(y), mse, num_params)
+
+                model.fit(X, y)
+                if MODEL_TYPE == 'poly2':
+                    coefs = model.named_steps['linearregression'].coef_
+                else:
+                    coefs = model.coef_
+                yhat = model.predict(X)
+                SS_Residual = sum((y - yhat) ** 2)
+                SS_Total = sum((y - np.mean(y)) ** 2)
+                r_squared = 1 - (float(SS_Residual)) / SS_Total
+                adjusted_r_squared = 1 - (1 - r_squared) * (len(y) - 1) / (len(y) - X.shape[1] - 1) 
+                num_params = len(coefs) + 1
+                mse = mean_squared_error(y, yhat)
+                bic = calculate_bic(len(y), mse, num_params)
 
             #results by functional activity across participants 
-            results = pd.DataFrame([np.append(coefs, [r_squared, adjusted_r_squared, bic])], columns = results_df.columns)
+            results = pd.DataFrame([np.append(coefs, [r_squared, adjusted_r_squared, bic])], columns = columns)
             results_df = pd.concat([results_df,results], ignore_index=True)
 
-        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all{proj}.csv'
+        if MODEL_TYPE == 'linear':
+            fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all{proj}.csv'
+        else:
+            fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all{proj}_{MODEL_TYPE}.csv'
         results_df.to_csv(os.path.join(output_dir, fname), index=False)  
 
 if RUN_DOMINANCE:
-    if params.db == 'Explore':
-        variables = ['confidence']
-    else:
-        variables = params.latent_vars
+    variables = ['confidence', 'surprise']
 
     def process_subject(sub, latent_var):
         print(f"--- dominance analysis for subject {sub} ----")
@@ -178,8 +237,28 @@ if RUN_DOMINANCE:
             non_nan_indices = ~np.isnan(y_data)
             X = receptor_density[non_nan_indices,:] #non parcelated data might contain a few NaNs from voxels with constant activation 
             y = y_data[non_nan_indices]
-        m = dominance_stats(X, y)
-        with open(os.path.join(output_dir, f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}.pickle'), 'wb') as f:
+            if MODEL_TYPE == 'lin+quad':
+                # Fit polynomial features to training data only
+                poly = PolynomialFeatures(degree=2, include_bias=False)
+                X = poly.fit_transform(X)
+
+                feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+
+                if MODEL_TYPE == 'lin+quad':
+                    # Linear + quadratic only (exclude interaction terms)
+                    mask = [
+                        (" " not in name) or ("^" in name)  # keep original features and squared terms
+                        for name in feature_names
+                    ]
+                X = X[:, mask]
+                filtered_feature_names = feature_names[mask]
+                m = dominance_stats(X, y, feature_names=filtered_feature_names)
+            elif MODEL_TYPE == 'linear':
+                m = dominance_stats(X, y)
+            else:
+                raise ValueError(f"Dominance analysis for '{MODEL_TYPE}' not possible!")
+
+        with open(os.path.join(output_dir, f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}_{MODEL_TYPE}.pickle'), 'wb') as f:
             pickle.dump(m, f)
         total_dominance_array = m["total_dominance"]
         results = pd.DataFrame([total_dominance_array], columns=rec.receptor_names)
@@ -196,4 +275,7 @@ if RUN_DOMINANCE:
                 results_df = pd.concat([results_df, results], ignore_index=True)
 
         # Save data
-        results_df.to_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj.pickle'))
+        if MODEL_TYPE == 'linear':
+            results_df.to_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj.pickle'))
+        else:
+            results_df.to_pickle(os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj_{MODEL_TYPE}.pickle'))
