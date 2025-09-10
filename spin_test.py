@@ -23,6 +23,8 @@ import glob
 import pickle
 import pandas as pd
 import nibabel as nib
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import Ridge
 
 paths = Paths()
 params = Params()
@@ -32,9 +34,10 @@ n_spins = 1000
 model_type = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
 EXPLORE_MODEL = 'noEntropy_noER'
 
-#tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
-tasks = ['lanA']
-latent_vars = ['S-N'] #['confidence', 'surprise'] 
+suffix = ''
+
+tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
+latent_vars = ['surprise', 'confidence'] 
 
 output_dir = os.path.join(paths.home_dir, 'variance_explained')
 os.makedirs(output_dir, exist_ok=True)
@@ -65,18 +68,19 @@ def process_task(task):
         beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level')    
         
     subjects = [subj for subj in mf.get_subjects(task, fmri_dir[task]) if subj not in ignore[task]]
+
     add_info = '_firstTrialsRemoved' if task == 'NAConf' else ''
     
     for latent_var in latent_vars:
         print(f"--- Spin test for {task} and {latent_var} ---")
-        if 'lanA':
+        if task == 'lanA':
             fmri_files = []
             for subj in subjects:
                 subj_id = f"{subj:03d}"  
                 pattern = os.path.join(beta_dir, 'subjects', subj_id, 'SPM', 'spmT_*.nii')
                 fmri_files.extend(glob.glob(pattern))
         else:
-            fmri_files = glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz'))        
+            fmri_files = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz')))        
 
         fmri_activity = []
         all_null = []
@@ -85,21 +89,63 @@ def process_task(task):
             effect_data = transforms.mni152_to_fsaverage(data_vol, fsavg_density='41k')
             data_gii = [img.agg_data().T for img in effect_data]
             fmri_activity.append(np.hstack(data_gii))
-        
+
         for s in range(spins.shape[1]):
             receptor_spin = receptor_data[spins[:, s], :]
             r2_scores = []
             
-            for i in range(len(subjects)):
-                X_train, y_train = [], []
+            skipped_subjects = []
+
+            for i, subj_id in enumerate(subjects):
+                X_train_blocks = []
+                y_train_blocks = []
+
                 for j in range(len(subjects)):
-                    if j != i:
-                        mask = ~np.logical_or(np.isnan(fmri_activity[j]), np.isclose(fmri_activity[j], 0)).flatten()
-                        X_train.append(receptor_spin[mask])
-                        y_train.append(zscore(fmri_activity[j].flatten()[mask]))
-                X_train, y_train = np.concatenate(X_train), np.concatenate(y_train)
-                mask_test = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i], 0)).flatten()
-                X_test, y_test = receptor_spin[mask_test], zscore(fmri_activity[i].flatten()[mask_test])
+                    if j == i:
+                        continue
+                    mask_j = ~np.logical_or(np.isnan(fmri_activity[j]), np.isclose(fmri_activity[j], 0)).flatten()
+                    valid_data = fmri_activity[j].flatten()[mask_j]
+
+                    if valid_data.size == 0: #safty check
+                        print(f"Skipping subject {subjects[j]} in training (no valid voxels)")
+                        skipped_subjects.append(subjects[j])
+                        continue
+
+                    X_train_blocks.append(receptor_spin[mask_j])
+                    y_train_blocks.append(valid_data)
+
+                if not X_train_blocks or not y_train_blocks: #safty check
+                    print(f"Skipping fold for test subject {subj_id} (no training data left)")
+                    skipped_subjects.append(subj_id)
+                    continue
+
+                # Concatenate training
+                X_train = np.concatenate(X_train_blocks, axis=0)
+                y_train = np.concatenate(y_train_blocks, axis=0)
+
+                # Scaling
+                X_scaler = StandardScaler().fit(X_train)
+                X_train_scaled = X_scaler.transform(X_train)
+                y_mean = np.nanmean(y_train)
+                y_std = np.nanstd(y_train)
+                y_train_scaled = (y_train - y_mean) / y_std
+
+                if y_std == 0:
+                    print(f"⚠️ y_train has zero variance for fold {i}, skipping...")
+                    continue
+
+                # Prepare test
+                mask_i = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i], 0)).flatten()
+                valid_test = fmri_activity[i].flatten()[mask_i]
+
+                if valid_test.size == 0: #safty check
+                    print(f"Skipping test subject {subj_id} (no valid voxels)")
+                    skipped_subjects.append(subj_id)
+                    continue
+
+                X_test = receptor_spin[mask_i]
+                y_test_scaled = (valid_test - y_mean) / y_std
+                X_test_scaled = X_scaler.transform(X_test)
 
                 if model_type == 'linear':
                     # Linear regression only
@@ -125,7 +171,7 @@ def process_task(task):
                             for name in feature_names
                         ]
 
-                    elif model_type == 'lin+interact':
+                    if model_type == 'lin+interact':
                         # Linear + interactions only (exclude squared terms)
                         mask = [
                             "^" not in name  # keep everything that is NOT quadratic
@@ -139,20 +185,22 @@ def process_task(task):
 
                     print(filtered_feature_names)
 
-                    # Fit model
                     model = LinearRegression()
 
-                model.fit(X_train, y_train)
-                y_pred = model.predict(X_test)
-                r2_scores.append(r2_score(y_test, y_pred))
-            
-            all_null.append(r2_scores)
+                #model fit and predict left out subject
+                model.fit(X_train_scaled, y_train_scaled)
+                y_pred_scaled = model.predict(X_test_scaled)
+                r2 = r2_score(y_test_scaled, y_pred_scaled)
+                all_null.append(r2)
+
+            if skipped_subjects:
+                print(f"\nSummary: skipped {len(set(skipped_subjects))} subjects: {sorted(set(skipped_subjects))}\n")
         
         if model_type == 'linear':
-            with open(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_null_cv_r2.pickle'), "wb") as fp:
+            with open(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_null_cv_r2{suffix}.pickle'), "wb") as fp:
                 pickle.dump(all_null, fp)
         else:
-            with open(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_null_cv_r2_{model_type}.pickle'), "wb") as fp:
+            with open(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_null_cv_r2_{model_type}{suffix}.pickle'), "wb") as fp:
                 pickle.dump(all_null, fp)
 
 with concurrent.futures.ProcessPoolExecutor() as executor:
