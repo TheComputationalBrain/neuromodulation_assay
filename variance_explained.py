@@ -23,15 +23,16 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
-from sklearn.preprocessing import StandardScaler
-from sklearn.linear_model import Ridge  
+from nilearn import plotting, surface
+from nilearn import datasets
+
 
 FROM_BETA = False
 FROM_RECEPTOR = True
 COMP_NULL = False
 COMPARE_LANG_LEARN = False
 COMPARE_EXPL_VAR = False
-PLOT_VAR_EXPLAINED = True
+PLOT_VAR_EXPLAINED = False
 PLOT_PERCENT_VAR_EXPLAINED = False
 
 model_type = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
@@ -54,8 +55,9 @@ if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 
 tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
+#tasks = ['NAConf']
 #tasks = ['lanA']
-latent_vars = ['confidence', 'surprise']
+latent_vars = ['surprise', 'confidence']
 #latent_vars = ['S-N']
 fmri_dir = {'NAConf': os.path.join('/neurospin/unicog/protocols/IRMf', 'MeynielMazancieux_NACONF_prob_2021', 'derivatives'),
             'EncodeProb': os.path.join('/neurospin/unicog/protocols/IRMf', 'EncodeProb_BounmyMeyniel_2020', 'derivatives'),
@@ -63,7 +65,7 @@ fmri_dir = {'NAConf': os.path.join('/neurospin/unicog/protocols/IRMf', 'MeynielM
             'PNAS': os.path.join('/neurospin/unicog/protocols/IRMf', 'Meyniel_MarkovGuess_2014', 'MRI_data/analyzed_data'),
             'lanA': '/home_local/alice_hodapp/language_localizer/'}
 
-ignore = {'NAConf': [3, 5, 6, 9, 36, 51],
+ignore = {'NAConf': [3, 5, 6, 9, 15, 30, 36, 40, 42, 43, 51, 59], #30 and 43 are removed because of their low coverage (also 15, 40, 42, 59)
             'EncodeProb': [1, 4, 12, 20],
             'Explore': [9, 17, 46],
             'PNAS': [],
@@ -71,6 +73,105 @@ ignore = {'NAConf': [3, 5, 6, 9, 36, 51],
 
 comparison_latent = 'language'
 comparison_task = 'lanA'
+
+fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
+def plot_coverage_direct(fmri_activity, task, latent_var, 
+                        lh_mesh="/home/ah278717/neuromaps-data/atlases/fsaverage/tpl-fsaverage_den-41k_hemi-L_inflated.surf.gii",
+                        rh_mesh="/home/ah278717/neuromaps-data/atlases/fsaverage/tpl-fsaverage_den-41k_hemi-R_inflated.surf.gii",
+                        output_dir=os.path.join(output_dir, 'checks_exclude')):
+    """
+    Plot per-vertex coverage map directly on fsaverage surface.
+    
+    fmri_activity: list of arrays (subjects), each shaped (n_vertices,)
+    task, latent_var: for labeling
+    """
+
+    n_vertices = fmri_activity[0].size
+
+    # --- 1. Coverage per subject ---
+    n_valid_vertices = []
+    masks = []
+    for subj_map in fmri_activity:
+        mask = ~np.isnan(subj_map.flatten()) & ~np.isclose(subj_map.flatten(), 0)
+        masks.append(mask)#
+        n_valid_vertices.append(mask.sum())
+
+    plt.figure(figsize=(6, 4))
+    plt.hist(n_valid_vertices, bins=20, edgecolor='k')
+    plt.xlabel("Number of valid vertices")
+    plt.ylabel("Number of subjects")
+    plt.title(f"{task} – {latent_var}\nValid vertices per subject")
+    plt.savefig(f"{output_dir}/{task}_{latent_var}_valid_by_subject.png", dpi=150)
+
+    # --- Save CSV ---
+    df = pd.DataFrame({'subject_id': subjects, 'n_valid_vertices': n_valid_vertices})
+    csv_path = os.path.join(output_dir, f"{task}_{latent_var}_valid_vertices.csv")
+    df.to_csv(csv_path, index=False)
+
+    low_coverage_subjs = df.loc[df['n_valid_vertices'] < 52000, 'subject_id'].tolist()
+    if low_coverage_subjs:
+        print(f"Subjects with <52000 valid vertices for {task} {latent_var}: {low_coverage_subjs}")
+    else:
+        print(f"All subjects have >=52000 valid vertices for {task} {latent_var}")
+
+    # --- Compute coverage across subjects ---
+    coverage = np.zeros(n_vertices, dtype=int)
+    for subj_map in fmri_activity:
+        mask = ~np.isnan(subj_map.flatten()) & ~np.isclose(subj_map.flatten(), 0)
+        coverage += mask.astype(int)
+
+    n_vertices = fmri_activity[0].size
+    n_lh = n_vertices // 2
+
+    # Compute coverage
+    coverage = np.zeros(n_vertices, dtype=int)
+    for subj_map in fmri_activity:
+        mask = ~np.isnan(subj_map.flatten()) & ~np.isclose(subj_map.flatten(), 0)
+        coverage += mask.astype(int)
+
+    n_subj = len(fmri_activity)
+    all_subjects_mask = (coverage == n_subj).astype(int)
+
+    # Split left/right hemispheres
+    coverage_lh = coverage[:n_lh]
+    coverage_rh = coverage[n_lh:]
+    mask_lh = all_subjects_mask[:n_lh]
+    mask_rh = all_subjects_mask[n_lh:]
+
+    # --- Plot coverage LH ---
+    fig = plt.figure(figsize=(10, 4))
+    plotting.plot_surf_stat_map(lh_mesh, coverage_lh,
+                                hemi='left', title=f'{task} {latent_var} LH coverage',
+                                colorbar=True, cmap='viridis', bg_map=None)
+    plt.savefig(f"{output_dir}/{task}_{latent_var}_LH_coverage.png", dpi=150)
+    plt.close(fig)
+
+    # --- Plot coverage RH ---
+    fig = plt.figure(figsize=(10, 4))
+    plotting.plot_surf_stat_map(rh_mesh, coverage_rh,
+                                hemi='right', title=f'{task} {latent_var} RH coverage',
+                                colorbar=True, cmap='viridis', bg_map=None)
+    plt.savefig(f"{output_dir}/{task}_{latent_var}_RH_coverage.png", dpi=150)
+    plt.close(fig)
+
+    # --- Plot all-subjects mask LH ---
+    fig = plt.figure(figsize=(10, 4))
+    plotting.plot_surf_stat_map(lh_mesh, mask_lh,
+                                hemi='left', title=f'{task} {latent_var} LH all-subjects mask',
+                                colorbar=True, cmap='viridis', bg_map=None)
+    plt.savefig(f"{output_dir}/{task}_{latent_var}_LH_all_subjects_mask.png", dpi=150)
+    plt.close(fig)
+
+    # --- Plot all-subjects mask RH ---
+    fig = plt.figure(figsize=(10, 4))
+    plotting.plot_surf_stat_map(rh_mesh, mask_rh,
+                                hemi='right', title=f'{task} {latent_var} RH all-subjects mask',
+                                colorbar=True, cmap='viridis', bg_map=None)
+    plt.savefig(f"{output_dir}/{task}_{latent_var}_RH_all_subjects_mask.png", dpi=150)
+    plt.close(fig)
+
+    return coverage, all_subjects_mask
+
 
 if FROM_BETA:
     for task in tasks: 
@@ -211,7 +312,14 @@ if FROM_RECEPTOR:
                             pattern = os.path.join(beta_dir, 'subjects', subj_id, 'SPM', 'spmT_*.nii')
                             fmri_files.extend(glob.glob(pattern))
                     else:
-                        fmri_files = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz')))
+                        fmri_files_all = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz')))
+                        fmri_files = []
+                        for file in fmri_files_all:
+                            basename = os.path.basename(file)
+                            subj_str = basename.split('_')[0]  # 'sub-XX'
+                            subj_id = int(subj_str.split('-')[1])  # XX as integer
+                            if subj_id in subjects:
+                                fmri_files.append(file)
                     fmri_activity = []
                     for file in fmri_files:
                         data_vol = nib.load(file)
@@ -234,89 +342,73 @@ if FROM_RECEPTOR:
                     for file in fmri_files:
                         with open(file, 'rb') as f:
                             fmri_activity.append(pickle.load(f))  
+                
+                #sanity checks for NAConf
+                #coverage, all_subjects_mask = plot_coverage_direct(fmri_activity, task, latent_var)
 
-                skipped_subjects = []
-
-                for i, subj_id in enumerate(subjects):
-                    X_train_blocks = []
-                    y_train_blocks = []
+                for i in range(len(subjects)):
+                    X_train, y_train = [], []
 
                     for j in range(len(subjects)):
-                        if j == i:
-                            continue
-                        mask_j = ~np.logical_or(np.isnan(fmri_activity[j]), np.isclose(fmri_activity[j], 0)).flatten()
-                        valid_data = fmri_activity[j].flatten()[mask_j]
+                        if j != i:
+                            mask_valid = ~np.logical_or(np.isnan(fmri_activity[j]), np.isclose(fmri_activity[j],0)).flatten()
+                            X_train.append(receptor_density[mask_valid])
+                            y_train.append(zscore(fmri_activity[j].flatten()[mask_valid]))
 
-                        if valid_data.size == 0: #safty check
-                            print(f"Skipping subject {subjects[j]} in training (no valid voxels)")
-                            skipped_subjects.append(subjects[j])
-                            continue
+                    # Concatenate training data
+                    X_train = np.concatenate(X_train)
+                    y_train = np.concatenate(y_train)
 
-                        X_train_blocks.append(receptor_density[mask_j])
-                        y_train_blocks.append(valid_data)
+                    # Test subject
+                    mask_valid_test = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i],0)).flatten()
+                    X_test = receptor_density[mask_valid_test]
+                    y_test = zscore(fmri_activity[i].flatten()[mask_valid_test])
 
-                    if not X_train_blocks or not y_train_blocks: #safty check
-                        print(f"Skipping fold for test subject {subj_id} (no training data left)")
-                        skipped_subjects.append(subj_id)
-                        continue
-
-                    # Concatenate training
-                    X_train = np.concatenate(X_train_blocks, axis=0)
-                    y_train = np.concatenate(y_train_blocks, axis=0)
-
-                    # Scaling
-                    X_scaler = StandardScaler().fit(X_train)
-                    X_train_scaled = X_scaler.transform(X_train)
-                    y_mean = np.nanmean(y_train)
-                    y_std = np.nanstd(y_train)
-                    y_train_scaled = (y_train - y_mean) / y_std
-
-                    if y_std < 1e-8:
-                        print(f"Skipping fold {subj_id} due to near-zero variance in y_train")
-                        continue
-
-                    # Prepare test
-                    mask_i = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i], 0)).flatten()
-                    valid_test = fmri_activity[i].flatten()[mask_i]
-
-                    if valid_test.size == 0: #safty check
-                        print(f"Skipping test subject {subj_id} (no valid voxels)")
-                        skipped_subjects.append(subj_id)
-                        continue
-
-                    X_test = receptor_density[mask_i]
-                    y_test_scaled = (valid_test - y_mean) / y_std
-                    X_test_scaled = X_scaler.transform(X_test)
-
-                    # Fit & predict
                     if model_type == 'linear':
+                        # Linear regression only
                         model = LinearRegression()
+
                     elif model_type == 'poly2':
+                        # Full second-degree polynomial (linear + quadratic + interactions)
                         poly = PolynomialFeatures(degree=2, include_bias=False)
                         model = make_pipeline(poly, LinearRegression())
+
                     else:
+                        # Fit polynomial features to training data only
                         poly = PolynomialFeatures(degree=2, include_bias=False)
                         X_train_poly = poly.fit_transform(X_train)
                         X_test_poly = poly.transform(X_test)
+
                         feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
 
                         if model_type == 'lin+quad':
-                            mask = [(" " not in name) or ("^" in name) for name in feature_names]
+                            # Linear + quadratic only (exclude interaction terms)
+                            mask = [
+                                (" " not in name) or ("^" in name)  # keep original features and squared terms
+                                for name in feature_names
+                            ]
+
                         elif model_type == 'lin+interact':
-                            mask = ["^" not in name for name in feature_names]
+                            # Linear + interactions only (exclude squared terms)
+                            mask = [
+                                "^" not in name  # keep everything that is NOT quadratic
+                                for name in feature_names
+                            ]
 
-                        X_train_poly = X_train_poly[:, mask]
-                        X_test_poly = X_test_poly[:, mask]
+                        # Apply mask to filter features
+                        X_train = X_train_poly[:, mask]
+                        X_test = X_test_poly[:, mask]
+                        filtered_feature_names = feature_names[mask]
+
+                        # Fit model
                         model = LinearRegression()
-                        X_train_scaled, X_test_scaled = X_train_poly, X_test_poly
 
-                    model.fit(X_train_scaled, y_train_scaled)
-                    y_pred_scaled = model.predict(X_test_scaled)
-                    r2 = r2_score(y_test_scaled, y_pred_scaled)
+                    model.fit(X_train, y_train)
+
+                    # Predict on the left-out subject
+                    y_pred = model.predict(X_test)
+                    r2 = r2_score(y_test, y_pred)
                     r2_scores.append(r2)
-
-                if skipped_subjects:
-                    print(f"\nSummary: skipped {len(set(skipped_subjects))} subjects: {sorted(set(skipped_subjects))}\n")
 
                 average_r2 = np.mean(r2_scores)
                 sem_r2 = sem(r2_scores)
@@ -324,7 +416,7 @@ if FROM_RECEPTOR:
                 df.loc[task, latent_var] = average_r2
 
                 if model_type == 'linear':
-                    with open(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2{proj}.pickle'), "wb") as fp:   
+                    with open(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2{proj}{suffix}.pickle'), "wb") as fp:   
                         pickle.dump(r2_scores, fp)
                 else:
                     with open(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2{proj}_{model_type}.pickle'), "wb") as fp:   
