@@ -28,12 +28,12 @@ from nilearn import datasets
 
 
 FROM_BETA = False
-FROM_RECEPTOR = True
-COMP_NULL = False
+FROM_RECEPTOR = False
+COMP_NULL = True
 COMPARE_LANG_LEARN = False
 COMPARE_EXPL_VAR = False
-PLOT_VAR_EXPLAINED = False
-PLOT_PERCENT_VAR_EXPLAINED = False
+PLOT_VAR_EXPLAINED = True
+PLOT_PERCENT_VAR_EXPLAINED = True
 
 model_type = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
 
@@ -257,10 +257,7 @@ if FROM_BETA:
 
 if FROM_RECEPTOR:
     df = pd.DataFrame(index=tasks, columns=latent_vars)
-
     for task in tasks: 
-        print(f'running cv for task: {task}')
-
         if task == 'Explore':
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
         elif task == 'lanA':
@@ -345,67 +342,50 @@ if FROM_RECEPTOR:
                 
                 #sanity checks for NAConf
                 #coverage, all_subjects_mask = plot_coverage_direct(fmri_activity, task, latent_var)
+                    
+                all_valid_masks = [
+                    ~np.logical_or(np.isnan(arr), np.isclose(arr, 0)).flatten()
+                    for arr in fmri_activity
+                ]
+                common_mask = np.logical_and.reduce(all_valid_masks)
+
+                # Apply the mask to all subjects and receptor density
+                fmri_activity_masked = [arr.flatten()[common_mask] for arr in fmri_activity]
+                receptor_density_masked = receptor_density[common_mask]
+
+                print(f"Common mask retains {common_mask.sum()} voxels")
 
                 for i in range(len(subjects)):
-                    X_train, y_train = [], []
+                    X_train, y_train, weights = [], [], []
 
                     for j in range(len(subjects)):
-                        if j != i:
-                            mask_valid = ~np.logical_or(np.isnan(fmri_activity[j]), np.isclose(fmri_activity[j],0)).flatten()
-                            X_train.append(receptor_density[mask_valid])
-                            y_train.append(zscore(fmri_activity[j].flatten()[mask_valid]))
+                        if j == i:
+                            continue
+                        mask_j = ~np.logical_or(np.isnan(fmri_activity[j]), np.isclose(fmri_activity[j], 0)).flatten()
+                        valid_data = fmri_activity[j].flatten()[mask_j]
+                        Xj = receptor_density[mask_j]
+                        yj = zscore(valid_data)
 
-                    # Concatenate training data
+                        # weight = 1 / n_voxels for this subject
+                        subj_weight = np.ones(len(yj)) / len(yj)
+
+                        X_train.append(Xj)
+                        y_train.append(yj)
+                        weights.append(subj_weight)
+
+                    # Concatenate everything
                     X_train = np.concatenate(X_train)
                     y_train = np.concatenate(y_train)
+                    weights = np.concatenate(weights)
 
                     # Test subject
-                    mask_valid_test = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i],0)).flatten()
-                    X_test = receptor_density[mask_valid_test]
-                    y_test = zscore(fmri_activity[i].flatten()[mask_valid_test])
+                    mask_i = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i], 0)).flatten()
+                    X_test = receptor_density[mask_i]
+                    y_test = zscore(fmri_activity[i].flatten()[mask_i])
 
-                    if model_type == 'linear':
-                        # Linear regression only
-                        model = LinearRegression()
-
-                    elif model_type == 'poly2':
-                        # Full second-degree polynomial (linear + quadratic + interactions)
-                        poly = PolynomialFeatures(degree=2, include_bias=False)
-                        model = make_pipeline(poly, LinearRegression())
-
-                    else:
-                        # Fit polynomial features to training data only
-                        poly = PolynomialFeatures(degree=2, include_bias=False)
-                        X_train_poly = poly.fit_transform(X_train)
-                        X_test_poly = poly.transform(X_test)
-
-                        feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
-
-                        if model_type == 'lin+quad':
-                            # Linear + quadratic only (exclude interaction terms)
-                            mask = [
-                                (" " not in name) or ("^" in name)  # keep original features and squared terms
-                                for name in feature_names
-                            ]
-
-                        elif model_type == 'lin+interact':
-                            # Linear + interactions only (exclude squared terms)
-                            mask = [
-                                "^" not in name  # keep everything that is NOT quadratic
-                                for name in feature_names
-                            ]
-
-                        # Apply mask to filter features
-                        X_train = X_train_poly[:, mask]
-                        X_test = X_test_poly[:, mask]
-                        filtered_feature_names = feature_names[mask]
-
-                        # Fit model
-                        model = LinearRegression()
-
-                    model.fit(X_train, y_train)
-
-                    # Predict on the left-out subject
+                    # Fit with sample weights
+                    model = LinearRegression()
+                    model.fit(X_train, y_train, sample_weight=weights)
                     y_pred = model.predict(X_test)
                     r2 = r2_score(y_test, y_pred)
                     r2_scores.append(r2)
@@ -424,9 +404,9 @@ if FROM_RECEPTOR:
 
             outfile.write('\n\n')
     if model_type == 'linear':
-        df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}.csv'))
+        df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}_weighted.csv'))
     else:
-        df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}_{model_type}.csv'))
+        df.to_csv(os.path.join(output_dir,f'overview_regression_cv{proj}_{model_type}_weighted.csv'))
 
 if COMP_NULL:
     #latent_vars = ['S-N'] 
@@ -625,7 +605,7 @@ if PLOT_PERCENT_VAR_EXPLAINED:
             rec_var = np.asarray(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2{proj}.pickle'), allow_pickle=True))
             expl_var = np.asarray(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2{proj}.pickle'), allow_pickle=True))
 
-            # Optional: remove NaNs and clip negatives if needed
+            #! remove NaNs and clip negatives if needed
             mask = (~np.isnan(rec_var)) & (~np.isnan(expl_var)) & (expl_var > 0)
             rec_var = rec_var[mask]
             expl_var = expl_var[mask]
