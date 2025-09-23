@@ -28,16 +28,19 @@ from nilearn import datasets
 
 
 FROM_BETA = False
-FROM_RECEPTOR = False
-COMP_NULL = True
+FROM_RECEPTOR = True
+COMP_NULL = False
 COMPARE_LANG_LEARN = False
 COMPARE_EXPL_VAR = False
-PLOT_VAR_EXPLAINED = True
-PLOT_PERCENT_VAR_EXPLAINED = True
+PLOT_VAR_EXPLAINED = False
+PLOT_REL_VAR_EXPLAINED = False
+PLOT_PERCENT_VAR_EXPLAINED = False
 
 model_type = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
 
 ON_SURFACE = True
+WEIGHT_MODE = "subjects"   # options: "voxels" or "subjects" 
+
 
 if ON_SURFACE:
     proj = '_on_surf'
@@ -342,19 +345,6 @@ if FROM_RECEPTOR:
                 
                 #sanity checks for NAConf
                 #coverage, all_subjects_mask = plot_coverage_direct(fmri_activity, task, latent_var)
-                    
-                all_valid_masks = [
-                    ~np.logical_or(np.isnan(arr), np.isclose(arr, 0)).flatten()
-                    for arr in fmri_activity
-                ]
-                common_mask = np.logical_and.reduce(all_valid_masks)
-
-                # Apply the mask to all subjects and receptor density
-                fmri_activity_masked = [arr.flatten()[common_mask] for arr in fmri_activity]
-                receptor_density_masked = receptor_density[common_mask]
-
-                print(f"Common mask retains {common_mask.sum()} voxels")
-
                 for i in range(len(subjects)):
                     X_train, y_train, weights = [], [], []
 
@@ -371,12 +361,17 @@ if FROM_RECEPTOR:
 
                         X_train.append(Xj)
                         y_train.append(yj)
-                        weights.append(subj_weight)
+                        if WEIGHT_MODE == "subjects":
+                            subj_weight = np.ones(len(yj)) / len(yj)   # scale subject to weight=1
+                            weights.append(subj_weight)
 
                     # Concatenate everything
                     X_train = np.concatenate(X_train)
                     y_train = np.concatenate(y_train)
-                    weights = np.concatenate(weights)
+                    if WEIGHT_MODE == "subjects":
+                        weights = np.concatenate(weights)
+                    else:
+                        weights = None
 
                     # Test subject
                     mask_i = ~np.logical_or(np.isnan(fmri_activity[i]), np.isclose(fmri_activity[i], 0)).flatten()
@@ -586,6 +581,104 @@ if PLOT_VAR_EXPLAINED:
         text.set_fontsize(18)
     fig.tight_layout()
     fig.savefig(os.path.join(output_dir, 'barplot_explained_variance.svg'), bbox_inches="tight")
+
+# plot relative variance explained (empirical - null)
+if PLOT_REL_VAR_EXPLAINED:
+    stats = {}
+    for latent_var in latent_vars:
+        for task in tasks: 
+            emp = np.asarray(np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2_on_surf.pickle'), allow_pickle=True))
+            null = np.asarray(np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_null_cv_r2.pickle'), allow_pickle=True))
+            
+            mean_emp = np.nanmean(emp)
+            sem_emp = np.nanstd(emp, ddof=1) / np.sqrt(np.sum(~np.isnan(emp)))
+            mean_null = np.nanmean(null)
+
+            stats[(latent_var, task)] = {
+                "mean_emp": mean_emp,
+                "sem_emp": sem_emp,
+                "mean_null": mean_null,
+                "rel_emp": mean_emp - mean_null   # relative to null
+            }
+    
+    # add the language network 
+    emp = np.asarray(np.load(os.path.join(output_dir, f'lanA_S-N_all_regression_cv_r2_on_surf_2.pickle'), allow_pickle=True))
+    null = np.asarray(np.load(os.path.join(output_dir, f'lanA_S-N_all_regression_null_cv_r2_2.pickle'), allow_pickle=True))
+    stats[('language','lanA')] = {
+        "mean_emp": np.nanmean(emp),
+        "sem_emp": np.nanstd(emp, ddof=1) / np.sqrt(np.sum(~np.isnan(emp))),
+        "mean_null": np.nanmean(null),
+        "rel_emp": np.nanmean(emp) - np.nanmean(null)
+    }
+
+    all_latents = latent_vars + [comparison_latent]
+
+    n_latents = len(latent_vars)
+    n_tasks = len(tasks)
+
+    x_positions = []
+    group_centers = []
+
+    # spacing and width parameters (same as before)
+    group_width = 0.8
+    inner_pad = 0.2
+    slot_width = group_width / n_tasks
+    bar_width  = slot_width * (1 - inner_pad)
+
+    # start cursor at x=0
+    cursor = 0
+
+    # Process first two groups
+    for latent in latent_vars:
+        group_left = cursor
+        group_right = group_left + group_width
+        group_center = (group_left + group_right) / 2
+        group_centers.append(group_center)
+        for ti, task in enumerate(tasks):
+            slot_center = group_left + (ti + 0.5) * slot_width
+            x_positions.append((latent, task, slot_center))
+        cursor = group_right + 0.3  # inter-group spacing
+
+    # Process last group ('S-N') separately:
+    bar_center = cursor + bar_width / 2
+    group_centers.append(bar_center)
+    x_positions.append(('language', 'lanA', bar_center))
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    task_colors = ["#B32E25", "#E06D38", "#4460AB", "#80C0F7"]
+
+    for latent, task, x in x_positions:
+        s = stats[(latent, task)]
+        color = "gray" if latent == "language" else task_colors[tasks.index(task)]
+        ax.bar(
+            x,
+            s["rel_emp"],   # plot relative explained variance
+            width=bar_width,
+            yerr=s["sem_emp"], capsize=3,
+            color=color, edgecolor="black", linewidth=1, alpha=0.8
+        )
+
+        # nice margins around the outer groups
+        ax.margins(x=0.06)
+
+    # X-axis labels = latent variables
+    ax.set_xticks(group_centers)
+    ax.set_xticklabels(all_latents)
+    ax.set_ylabel("Relative R2 (emp - null)")
+    ax.axhline(0, color="gray", linewidth=0.8)
+
+    # Legend for tasks
+    comparison_patch = Patch(facecolor="gray", edgecolor="black", label="Language network")
+    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(tasks)]
+    ax.legend(handles=task_handles + [comparison_patch], 
+            frameon=False,
+            bbox_to_anchor=(1.05, 1),  
+            loc='upper left')
+
+    for text in ax.get_figure().findobj(plt.Text):
+        text.set_fontsize(18)
+    fig.tight_layout()
+    fig.savefig(os.path.join(output_dir, 'barplot_relative_variance_explained.svg'), bbox_inches="tight")
 
 
 if PLOT_PERCENT_VAR_EXPLAINED:
