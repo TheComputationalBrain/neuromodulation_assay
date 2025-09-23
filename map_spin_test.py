@@ -14,6 +14,8 @@ import pandas as pd
 import nibabel as nib
 from nilearn.surface import SurfaceImage
 from params_and_paths import Paths, Params
+from statsmodels.stats.multitest import multipletests
+
 
 #load debugged local version --> see pull request on neuromaps github
 sys.path.insert(0, os.path.abspath("."))
@@ -27,7 +29,7 @@ params = Params()
 tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
 contrasts = ['surprise', 'confidence']
 
-CORR_WITHIN = False  #False=get correlations between confidence and suprise maps instead (seperated)
+CORR_WITHIN = True  #False=get correlations between confidence and suprise maps instead (seperated)
 EXPLORE_MODEL = 'noEntropy_noER'
 spin_results = []
 
@@ -87,6 +89,8 @@ if CORR_WITHIN:
             })
 
     spin_results = pd.DataFrame(spin_results)
+    reject, pvals_fdr, _, _ = multipletests(spin_results["pval"], method="fdr_bh")
+    spin_results["pval_fdr"] = pvals_fdr
     spin_results.to_csv(os.path.join(output_dir, 'results_map_spin.csv'), index = False)
 else:
     surf_maps = {}
@@ -160,4 +164,6 @@ else:
 
     # Save to CSV
     spin_results_df = pd.DataFrame(spin_results)
+    reject, pvals_fdr, _, _ = multipletests(spin_results["pval"], method="fdr_bh")
+    spin_results["pval_fdr"] = pvals_fdr
     spin_results_df.to_csv(os.path.join(output_dir, 'results_map_spin_across.csv'), index = False)
