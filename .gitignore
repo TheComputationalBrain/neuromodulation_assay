@@ -171,6 +171,19 @@ receptor_density_autorad_zilles44.py
 spin_test_old.py
 spin_test.py
 variance_test.py
+null_variogram.pyvtk/
+
+behaviour_group_level.py
+behaviour_subject_level.py
+check_EncodeProb_plots.py
+EncodeProb_normalize.py
+fix_old_pickles.py
+receptor_correlation.py
+receptor_density_AHBA.py
+receptor_density_autorad_zilles44.py
+spin_test_old.py
+spin_test.py
+variance_test.py
 null_variogram.py
 
 abagen/
