@@ -1,29 +1,20 @@
 import os
-os.environ["OMP_NUM_THREADS"] = "1" 
-os.environ["OPENBLAS_NUM_THREADS"] = "1"  
-os.environ["MKL_NUM_THREADS"] = "1" 
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1" 
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import glob
 import numpy as np
 import pandas as pd
 import pickle
 import nibabel as nib
 from neuromaps import transforms
-from math import log
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 from sklearn.preprocessing import PolynomialFeatures
-from sklearn.pipeline import make_pipeline
-from scipy.stats import zscore, sem, ttest_rel, ttest_ind
-from scipy.stats import ttest_ind
+from scipy.stats import zscore, sem, ttest_rel
 import main_funcs as mf
-from params_and_paths import Paths, Params, Receptors
+from params_and_paths_analysis import Paths, Params, Receptors
 import matplotlib.pyplot as plt 
 from matplotlib import cm
 from matplotlib.patches import Patch
 from matplotlib.lines import Line2D
-from nilearn import plotting, surface
 from nilearn import datasets
 
 
@@ -57,132 +48,18 @@ output_dir = os.path.join(paths.home_dir, 'variance_explained')
 if not os.path.exists(output_dir):
         os.makedirs(output_dir) 
 
-tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
-#tasks = ['NAConf']
-#tasks = ['lanA']
-latent_vars = ['surprise', 'confidence']
-#latent_vars = ['S-N']
-fmri_dir = {'NAConf': os.path.join('/neurospin/unicog/protocols/IRMf', 'MeynielMazancieux_NACONF_prob_2021', 'derivatives'),
-            'EncodeProb': os.path.join('/neurospin/unicog/protocols/IRMf', 'EncodeProb_BounmyMeyniel_2020', 'derivatives'),
-            'Explore': os.path.join('/neurospin/unicog/protocols/IRMf', 'Explore_Meyniel_Paunov_2021', 'bids/derivatives/fmriprep-23.1.3_MAIN'),
-            'PNAS': os.path.join('/neurospin/unicog/protocols/IRMf', 'Meyniel_MarkovGuess_2014', 'MRI_data/analyzed_data'),
-            'lanA': '/home_local/alice_hodapp/language_localizer/'}
-
-ignore = {'NAConf': [3, 5, 6, 9, 15, 30, 36, 40, 42, 43, 51, 59], #30 and 43 are removed because of their low coverage (also 15, 40, 42, 59)
-            'EncodeProb': [1, 4, 12, 20],
-            'Explore': [9, 17, 46],
-            'PNAS': [],
-            'lanA' : [88]}
-
 comparison_latent = 'language'
 comparison_task = 'lanA'
 
 fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
-def plot_coverage_direct(fmri_activity, task, latent_var, 
-                        lh_mesh="/home/ah278717/neuromaps-data/atlases/fsaverage/tpl-fsaverage_den-41k_hemi-L_inflated.surf.gii",
-                        rh_mesh="/home/ah278717/neuromaps-data/atlases/fsaverage/tpl-fsaverage_den-41k_hemi-R_inflated.surf.gii",
-                        output_dir=os.path.join(output_dir, 'checks_exclude')):
-    """
-    Plot per-vertex coverage map directly on fsaverage surface.
-    
-    fmri_activity: list of arrays (subjects), each shaped (n_vertices,)
-    task, latent_var: for labeling
-    """
-
-    n_vertices = fmri_activity[0].size
-
-    # --- 1. Coverage per subject ---
-    n_valid_vertices = []
-    masks = []
-    for subj_map in fmri_activity:
-        mask = ~np.isnan(subj_map.flatten()) & ~np.isclose(subj_map.flatten(), 0)
-        masks.append(mask)#
-        n_valid_vertices.append(mask.sum())
-
-    plt.figure(figsize=(6, 4))
-    plt.hist(n_valid_vertices, bins=20, edgecolor='k')
-    plt.xlabel("Number of valid vertices")
-    plt.ylabel("Number of subjects")
-    plt.title(f"{task} – {latent_var}\nValid vertices per subject")
-    plt.savefig(f"{output_dir}/{task}_{latent_var}_valid_by_subject.png", dpi=150)
-
-    # --- Save CSV ---
-    df = pd.DataFrame({'subject_id': subjects, 'n_valid_vertices': n_valid_vertices})
-    csv_path = os.path.join(output_dir, f"{task}_{latent_var}_valid_vertices.csv")
-    df.to_csv(csv_path, index=False)
-
-    low_coverage_subjs = df.loc[df['n_valid_vertices'] < 52000, 'subject_id'].tolist()
-    if low_coverage_subjs:
-        print(f"Subjects with <52000 valid vertices for {task} {latent_var}: {low_coverage_subjs}")
-    else:
-        print(f"All subjects have >=52000 valid vertices for {task} {latent_var}")
-
-    # --- Compute coverage across subjects ---
-    coverage = np.zeros(n_vertices, dtype=int)
-    for subj_map in fmri_activity:
-        mask = ~np.isnan(subj_map.flatten()) & ~np.isclose(subj_map.flatten(), 0)
-        coverage += mask.astype(int)
-
-    n_vertices = fmri_activity[0].size
-    n_lh = n_vertices // 2
-
-    # Compute coverage
-    coverage = np.zeros(n_vertices, dtype=int)
-    for subj_map in fmri_activity:
-        mask = ~np.isnan(subj_map.flatten()) & ~np.isclose(subj_map.flatten(), 0)
-        coverage += mask.astype(int)
-
-    n_subj = len(fmri_activity)
-    all_subjects_mask = (coverage == n_subj).astype(int)
-
-    # Split left/right hemispheres
-    coverage_lh = coverage[:n_lh]
-    coverage_rh = coverage[n_lh:]
-    mask_lh = all_subjects_mask[:n_lh]
-    mask_rh = all_subjects_mask[n_lh:]
-
-    # --- Plot coverage LH ---
-    fig = plt.figure(figsize=(10, 4))
-    plotting.plot_surf_stat_map(lh_mesh, coverage_lh,
-                                hemi='left', title=f'{task} {latent_var} LH coverage',
-                                colorbar=True, cmap='viridis', bg_map=None)
-    plt.savefig(f"{output_dir}/{task}_{latent_var}_LH_coverage.png", dpi=150)
-    plt.close(fig)
-
-    # --- Plot coverage RH ---
-    fig = plt.figure(figsize=(10, 4))
-    plotting.plot_surf_stat_map(rh_mesh, coverage_rh,
-                                hemi='right', title=f'{task} {latent_var} RH coverage',
-                                colorbar=True, cmap='viridis', bg_map=None)
-    plt.savefig(f"{output_dir}/{task}_{latent_var}_RH_coverage.png", dpi=150)
-    plt.close(fig)
-
-    # --- Plot all-subjects mask LH ---
-    fig = plt.figure(figsize=(10, 4))
-    plotting.plot_surf_stat_map(lh_mesh, mask_lh,
-                                hemi='left', title=f'{task} {latent_var} LH all-subjects mask',
-                                colorbar=True, cmap='viridis', bg_map=None)
-    plt.savefig(f"{output_dir}/{task}_{latent_var}_LH_all_subjects_mask.png", dpi=150)
-    plt.close(fig)
-
-    # --- Plot all-subjects mask RH ---
-    fig = plt.figure(figsize=(10, 4))
-    plotting.plot_surf_stat_map(rh_mesh, mask_rh,
-                                hemi='right', title=f'{task} {latent_var} RH all-subjects mask',
-                                colorbar=True, cmap='viridis', bg_map=None)
-    plt.savefig(f"{output_dir}/{task}_{latent_var}_RH_all_subjects_mask.png", dpi=150)
-    plt.close(fig)
-
-    return coverage, all_subjects_mask
-
 
 if FROM_BETA:
-    for task in tasks: 
+    for task in params.tasks: 
 
         if task == 'Explore':
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
         elif task == 'lanA':
-            beta_dir = fmri_dir['lanA']
+            beta_dir = os.path.join(paths.home_dir, paths.fmri_dir['lanA'])
         else:
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level')
 
@@ -193,16 +70,14 @@ if FROM_BETA:
         else:
             add_info = ""
 
-        subjects = mf.get_subjects(task, fmri_dir[task])
-        subjects = [subj for subj in subjects if subj not in ignore[task]] 
-
-        mask_comb = params.mask 
-        text = 'by voxel'
+        subject_paths = params.home_dir if task == "lanA" else params.root_dir
+        subjects = mf.get_subjects(task, os.path.join(subject_paths, paths.fmri_dir[task]))
+        subjects = [subj for subj in subjects if subj not in params.ignore[task]] 
 
         with open(os.path.join(output_dir,f'predict_from_beta{proj}.txt'), "a") as outfile:
             outfile.write(f'{task}: variance explained in analysis:\n\n')
             
-            for latent_var in latent_vars:
+            for latent_var in params.latent_vars:
                 all_data = []
 
                 #load all data
@@ -211,7 +86,7 @@ if FROM_BETA:
                         if task == 'lanA':
                             file = nib.load(os.path.join(beta_dir,'subjects', f'{sub:03d}', 'SPM', 'spmT_S-N.nii'))
                         else:
-                            file = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz'))
+                            file = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz'))
                         effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
                         data_gii = []
                         for img in effect_data:
@@ -220,7 +95,7 @@ if FROM_BETA:
                         effect_array = np.hstack(data_gii)
                         all_data.append(effect_array)
                     else:
-                        sub_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{mask_comb}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
+                        sub_data = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
                         all_data.append(sub_data)
 
                 all_rsquared = []
@@ -259,17 +134,18 @@ if FROM_BETA:
 
 
 if FROM_RECEPTOR:
-    df = pd.DataFrame(index=tasks, columns=latent_vars)
-    for task in tasks: 
+    df = pd.DataFrame(index=params.tasks, columns=params.latent_vars)
+    for task in params.tasks: 
         if task == 'Explore':
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
         elif task == 'lanA':
-            beta_dir = fmri_dir['lanA']
+            beta_dir = os.path.join(paths.home_dir, paths.fmri_dir['lanA'])
         else:
             beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level')
 
-        subjects =  mf.get_subjects(task, fmri_dir[task])
-        subjects = [subj for subj in subjects if subj not in ignore[task]] 
+        subject_paths = params.home_dir if task == "lanA" else params.root_dir
+        subjects = mf.get_subjects(task, os.path.join(subject_paths, paths.fmri_dir[task]))
+        subjects = [subj for subj in subjects if subj not in params.ignore[task]] 
 
         if task in ['NAConf']:
             add_info = '_firstTrialsRemoved'
@@ -281,17 +157,17 @@ if FROM_RECEPTOR:
         if ON_SURFACE: 
             receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source) 
             receptor_density =zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}_surf.pickle'), allow_pickle=True))
-            mask_comb = params.mask 
+            params.mask = params.mask 
         else:                                            
             if params.parcelated:
                 receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)  
-                mask_comb = params.mask + '_' + params.mask_details 
-                receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{mask_comb}.pickle'), allow_pickle=True), nan_policy='omit') 
+                params.mask = params.mask + '_' + params.mask_details 
+                receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True), nan_policy='omit') 
                 text = 'by region'
             else:
                 receptor_dir = os.path.join(paths.home_dir, 'receptors', 'PET2') #vertex level analyis can only be run on PET data densities 
                 receptor_density = zscore(np.load(os.path.join(receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
-                mask_comb = params.mask 
+                params.mask = params.mask 
                 text = 'by voxel'
 
             if rec.source == 'autorad_zilles44':
@@ -301,7 +177,7 @@ if FROM_RECEPTOR:
         with open(os.path.join(output_dir,f'predict_from_receptor{proj}.txt'), "a") as outfile:
             outfile.write(f'{task}: variance explained in analysis with {rec.source} as predictor:\n\n')
             n_features = receptor_density.shape[1]
-            for latent_var in latent_vars:
+            for latent_var in params.latent_vars:
                 print(f'latent variable: {latent_var}')
                 r2_scores = [] 
                 if ON_SURFACE:
@@ -312,7 +188,7 @@ if FROM_RECEPTOR:
                             pattern = os.path.join(beta_dir, 'subjects', subj_id, 'SPM', 'spmT_*.nii')
                             fmri_files.extend(glob.glob(pattern))
                     else:
-                        fmri_files_all = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{mask_comb}_effect_size_map{add_info}.nii.gz')))
+                        fmri_files_all = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz')))
                         fmri_files = []
                         for file in fmri_files_all:
                             basename = os.path.basename(file)
@@ -337,14 +213,12 @@ if FROM_RECEPTOR:
                         n_valid = np.sum(mask_valid)
                         valid_counts.append(n_valid)
                 else:    
-                    fmri_files = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{mask_comb}_effect_size{add_info}.pickle')))
+                    fmri_files = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{params.mask}_effect_size{add_info}.pickle')))
                     fmri_activity = []
                     for file in fmri_files:
                         with open(file, 'rb') as f:
                             fmri_activity.append(pickle.load(f))  
                 
-                #sanity checks for NAConf
-                #coverage, all_subjects_mask = plot_coverage_direct(fmri_activity, task, latent_var)
                 for i in range(len(subjects)):
                     X_train, y_train, weights = [], [], []
 
@@ -405,11 +279,11 @@ if FROM_RECEPTOR:
 
 if COMP_NULL:
     #latent_vars = ['S-N'] 
-    df = pd.DataFrame(index=tasks, columns=latent_vars)
+    df = pd.DataFrame(index=params.tasks, columns=params.latent_vars)
 
     with open(os.path.join(output_dir,f'compare_emp_null_cv_{proj}_{model_type}.txt'), "a") as outfile:
-        for task in tasks: 
-            for latent_var in latent_vars:
+        for task in params.tasks: 
+            for latent_var in params.latent_vars:
                 outfile.write(f'{task} and {latent_var}:\n')
                 #get the empirical r2 (on surf)
                 emp = np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2_on_surf{suffix}.pickle'), allow_pickle=True)
@@ -456,8 +330,8 @@ if COMPARE_EXPL_VAR:
 
     # Write results
     with open(os.path.join(output_dir, f'compare_explained_variance_cv_{proj}_group_ratio.txt'), "w") as outfile:
-        for task in tasks:
-            for latent_var in latent_vars:
+        for task in params.tasks:
+            for latent_var in params.latent_vars:
                 outfile.write(f'{task} and {latent_var}:\n')
 
                 # Load task data
@@ -488,8 +362,8 @@ if COMPARE_EXPL_VAR:
 #plot variance explained and null model 
 if PLOT_VAR_EXPLAINED:
     stats = {}
-    for latent_var in latent_vars:
-        for task in tasks: 
+    for latent_var in params.latent_vars:
+        for task in params.tasks: 
             emp = np.asarray(np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2_on_surf.pickle'), allow_pickle=True))
             null = np.asarray(np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_null_cv_r2.pickle'), allow_pickle=True))
             mean_emp = np.nanmean(emp)
@@ -510,10 +384,10 @@ if PLOT_VAR_EXPLAINED:
         "mean_null": np.nanmean(null)
     }
 
-    all_latents = latent_vars + [comparison_latent]
+    all_latents = params.latent_vars + [comparison_latent]
 
-    n_latents = len(latent_vars)
-    n_tasks = len(tasks)
+    n_latents = len(params.latent_vars)
+    n_tasks = len(params.tasks)
 
     x_positions = []
     group_centers = []
@@ -528,12 +402,12 @@ if PLOT_VAR_EXPLAINED:
     cursor = 0
 
     # Process first two groups
-    for latent in latent_vars:
+    for latent in params.latent_vars:
         group_left = cursor
         group_right = group_left + group_width
         group_center = (group_left + group_right) / 2
         group_centers.append(group_center)
-        for ti, task in enumerate(tasks):
+        for ti, task in enumerate(params.tasks):
             slot_center = group_left + (ti + 0.5) * slot_width
             x_positions.append((latent, task, slot_center))
         cursor = group_right + 0.3  # inter-group spacing: adjust 0.3 as needed
@@ -548,7 +422,7 @@ if PLOT_VAR_EXPLAINED:
 
     for latent, task, x in x_positions:
         s = stats[(latent, task)]
-        color = "gray" if latent == "language" else task_colors[tasks.index(task)]
+        color = "gray" if latent == "language" else task_colors[params.tasks.index(task)]
         ax.bar(
             x,
             s["mean_emp"],
@@ -571,7 +445,7 @@ if PLOT_VAR_EXPLAINED:
 
     # Legend for tasks
     comparison_patch = Patch(facecolor="gray", edgecolor="black", label="Language network")
-    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(tasks)]
+    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(params.tasks)]
     null_line = Line2D([0], [0], color="black", lw=2, label="Null mean")
     ax.legend(handles=task_handles + [comparison_patch, null_line], 
             frameon=False,
@@ -585,8 +459,8 @@ if PLOT_VAR_EXPLAINED:
 # plot relative variance explained (empirical - null)
 if PLOT_REL_VAR_EXPLAINED:
     stats = {}
-    for latent_var in latent_vars:
-        for task in tasks: 
+    for latent_var in params.latent_vars:
+        for task in params.tasks: 
             emp = np.asarray(np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_cv_r2_on_surf.pickle'), allow_pickle=True))
             null = np.asarray(np.load(os.path.join(output_dir,f'{task}_{latent_var}_all_regression_null_cv_r2.pickle'), allow_pickle=True))
             
@@ -611,10 +485,10 @@ if PLOT_REL_VAR_EXPLAINED:
         "rel_emp": np.nanmean(emp) - np.nanmean(null)
     }
 
-    all_latents = latent_vars + [comparison_latent]
+    all_latents = params.latent_vars + [comparison_latent]
 
-    n_latents = len(latent_vars)
-    n_tasks = len(tasks)
+    n_latents = len(params.latent_vars)
+    n_tasks = len(params.tasks)
 
     x_positions = []
     group_centers = []
@@ -629,12 +503,12 @@ if PLOT_REL_VAR_EXPLAINED:
     cursor = 0
 
     # Process first two groups
-    for latent in latent_vars:
+    for latent in params.latent_vars:
         group_left = cursor
         group_right = group_left + group_width
         group_center = (group_left + group_right) / 2
         group_centers.append(group_center)
-        for ti, task in enumerate(tasks):
+        for ti, task in enumerate(params.tasks):
             slot_center = group_left + (ti + 0.5) * slot_width
             x_positions.append((latent, task, slot_center))
         cursor = group_right + 0.3  # inter-group spacing
@@ -649,7 +523,7 @@ if PLOT_REL_VAR_EXPLAINED:
 
     for latent, task, x in x_positions:
         s = stats[(latent, task)]
-        color = "gray" if latent == "language" else task_colors[tasks.index(task)]
+        color = "gray" if latent == "language" else task_colors[params.tasks.index(task)]
         ax.bar(
             x,
             s["rel_emp"],   # plot relative explained variance
@@ -669,7 +543,7 @@ if PLOT_REL_VAR_EXPLAINED:
 
     # Legend for tasks
     comparison_patch = Patch(facecolor="gray", edgecolor="black", label="Language network")
-    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(tasks)]
+    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(params.tasks)]
     ax.legend(handles=task_handles + [comparison_patch], 
             frameon=False,
             bbox_to_anchor=(1.05, 1),  
@@ -693,8 +567,8 @@ if PLOT_PERCENT_VAR_EXPLAINED:
             for _ in range(n_boot)
         ])
     stats = {}
-    for latent_var in latent_vars:
-        for task in tasks:
+    for latent_var in params.latent_vars:
+        for task in params.tasks:
             rec_var = np.asarray(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2{proj}.pickle'), allow_pickle=True))
             expl_var = np.asarray(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2{proj}.pickle'), allow_pickle=True))
 
@@ -736,10 +610,10 @@ if PLOT_PERCENT_VAR_EXPLAINED:
         "ci": (ci_lower, ci_upper)
     }
 
-    all_latents = latent_vars + [comparison_latent]
+    all_latents = params.latent_vars + [comparison_latent]
 
-    n_latents = len(latent_vars)
-    n_tasks = len(tasks)
+    n_latents = len(params.latent_vars)
+    n_tasks = len(params.tasks)
 
     x_positions = []
     group_centers = []
@@ -754,12 +628,12 @@ if PLOT_PERCENT_VAR_EXPLAINED:
     cursor = 0
 
     # Process first two groups
-    for latent in latent_vars:
+    for latent in params.latent_vars:
         group_left = cursor
         group_right = group_left + group_width
         group_center = (group_left + group_right) / 2
         group_centers.append(group_center)
-        for ti, task in enumerate(tasks):
+        for ti, task in enumerate(params.tasks):
             slot_center = group_left + (ti + 0.5) * slot_width
             x_positions.append((latent, task, slot_center))
         cursor = group_right + 0.3  # inter-group spacing: adjust 0.3 as needed
@@ -796,7 +670,7 @@ if PLOT_PERCENT_VAR_EXPLAINED:
 
     # Legend for tasks
     comparison_patch = Patch(facecolor="gray", edgecolor="black", label="Language network")
-    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(tasks)]
+    task_handles = [Patch(facecolor=task_colors[i], edgecolor="black", label=t) for i, t in enumerate(params.tasks)]
     ax.legend(
         handles=task_handles + [comparison_patch],
         frameon=False,

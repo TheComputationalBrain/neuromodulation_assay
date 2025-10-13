@@ -8,10 +8,10 @@ Created on Mon Apr 15 09:59:22 2024
 
 #----------------------------------------------------
 #  PARAMS TO CHANGE   #
-DB_NAME = 'Explore' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
-MASK_NAME =  'schaefer' #'spm_noCereb','harvard_oxford_cortical'; 'schaefer', 'desikan'
+DB_NAME = 'EncodeProb' # other options: 'EncodeProb','NAConf', 'Explore', 'PNAS'
+MASK_NAME =  'schaefer' 
 PARCELATED = False
-RECEPTOR_SOURCE = 'PET2' #,'PET', 'PET2' or 'autorad_zilles44', 'AHBA', #PET2 is the dataset including alpha2
+RECEPTOR_SOURCE = 'PET2' #PET2 is the dataset including alpha2
 REDO_MASK = False #if False, the masking step will be skipped and the numpy datata array will be used instead except if smoothing/mask name have changed
 
 #fixed at best setting:
@@ -68,15 +68,9 @@ class Params:
         elif db == 'Explore':
             self.ignore = [9, 17, 46]
             self.session = []
-            #subject numbers are corrected in the formatted folder 
-            # self.subnums_explore = {4: 6,
-            #                         6: 4,
-            #                         25: 28,
-            #                         28: 25}
-            self.split = False #split free and forced for the design matrix?
+            self.split = False 
             self.reward = False 
-            self.model = 'noEntropy_noER'   #'noEntropy',''noEntropy_reducedDM'; 'previously: US_reward'
-            #self.io_variables = ['US', 'EU_chosen', 'ER_chosen', 'entropy_chosen'] 
+            self.model = 'noEntropy_noER'  
             self.io_variables = ['US', 'EC_chosen'] 
 
         elif db == 'PNAS':
@@ -110,7 +104,23 @@ class Receptors:
     def __init__(self, source=RECEPTOR_SOURCE):
         self.source = RECEPTOR_SOURCE
 
-        if source in ['PET', 'PET2']:
+        if source == 'PET':
+            self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
+                                "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
+                                "MOR", "NET", "NMDA", "VAChT"]
+            self.serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
+            self.acetylcholine = ["A4B2", "M1", "VAChT"]
+            self.noradrenaline = ["NET", "A2"]
+            self.opioid = ["MOR"]
+            self.glutamate = ["mGluR5", 'NMDA']
+            self.histamine = ["H3"]
+            self.gaba = ["GABAa"]
+            self.dopamine = ["D1", "D2", "DAT"]
+            self.cannabinnoid = ["CB1"]
+            self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
+            self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
+
+        if source == 'PET2':
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                                 "MOR", "NET", "NMDA", "VAChT", "A2"]
@@ -125,29 +135,6 @@ class Receptors:
             self.cannabinnoid = ["CB1"]
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'A2']
-
-        if source == 'autorad_zilles44':
-            self.receptor_names = ['AMPA', 'NMDA', 'kainate', 'GABAa', 'GABAa-BZ', 'GABAb', 'm1', 'm2', 'm3', 'a4b2',
-                                'a1', 'a2', '5-HT1a', '5-HT2', 'D1'] 
-            self.serotonin = ['5-HT1a', '5-HT2']
-            self.acetylcholine = ['m1', 'm2', 'm3', 'a4b2']
-            self.noradrenaline = ['a1', 'a2']
-            self.glutamate = ['AMPA', 'NMDA', 'kainate']
-            self.gaba = ['GABAa', 'GABAa-BZ', 'GABAb']
-            self.dopamine = ['D1']
-            self.exc = ['AMPA', 'NMDA', 'kainate', 'm1', 'm3', 'a4b2', 'a1', '5-HT2', 'D1']
-            self.inh = ['GABAa', 'GABAa-BZ', 'GABAb', 'm2', 'a2', '5-HT1a']
-
-        if source == 'AHBA':
-            self.receptor_names = ['ADRA1A', 'ADRA1B', 'ADRA1D', 'ADRA2A', 'ADRA2C', 'ADRB1', 'ADRB2',
-                                   'HTR1A', 'HTR1E', 'HTR2A', 'HTR3', 'HTR4','HTR7',
-                                   'CHRM1', 'CHRM2', 'CHRM4', 'CHRNB2',
-                                   'DRD1', 'DRD2', 'DRD4']
-            self.noradrenaline = ['ADRA1A', 'ADRA1B', 'ADRA1D', 'ADRA2A', 'ADRA2C', 'ADRB1', 'ADRB2']
-            self.serotonin = ['HTR1A', 'HTR1E', 'HTR2A', 'HTR3', 'HTR4','HTR7'] 
-            self.acetylcholine = ['CHRM1', 'CHRM2', 'CHRM4', 'CHRNB2']
-            self.dopamine = ['DRD1', 'DRD2', 'DRD4']
-            self.exc = ['ADRA1A', 'ADRA1B', 'ADRA1D','ADRB1', 'ADRB2','HTR2A','HTR3','HTR4','HTR7','CHRM1','CHRNB2','DRD1']
-            self.inh = ['ADRA2A', 'ADRA2C','HTR1A', 'HTR1E','CHRM2', 'CHRM4','DRD2', 'DRD4']
+\
 
 
