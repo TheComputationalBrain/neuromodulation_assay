@@ -5,7 +5,8 @@ Created on Mon Apr 15 09:49:30 2024
 
 @author: Alice Hodapp, Maëva L'Hôtellier
 """
-
+import sys
+from pathlib import Path
 import glob
 import numpy as np
 import os.path as op
@@ -14,7 +15,11 @@ import abagen
 from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_2018
 from nilearn import image
 from nilearn.input_data import NiftiMasker, MultiNiftiMasker 
+# Add parent directory to sys.path
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
 from main_funcs import *
+
 from params_and_paths import Params, Paths
 
 params = Params()

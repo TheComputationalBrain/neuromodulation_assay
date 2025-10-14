@@ -26,18 +26,27 @@ def group_linear_and_squared(feature_names):
     groups = []
 
     for i, name in enumerate(feature_names):
-        if name.endswith("^2"):
+        if name in used:
+            continue
+        # Handle only the base (linear) term or stand-alone squared terms
+        if not name.endswith("^2"):
+            sq_name = f"{name}^2"
+            if sq_name in name_to_idx:
+                sq_idx = name_to_idx[sq_name]
+                groups.append((i, sq_idx))
+                used.update([i, sq_idx])
+            else:
+                groups.append((i,))
+                used.add(i)
+        else:
+            # Handle orphan squared terms (no matching linear)
             base = name[:-2]
-            if base in name_to_idx:
-                lin_idx = name_to_idx[base]
-                if lin_idx not in used:
-                    groups.append((lin_idx, i))
-                    used.update([lin_idx, i])
-        elif name not in used:
-            groups.append((i,))
-            used.add(i)
+            if base not in name_to_idx:
+                groups.append((i,))
+                used.add(i)
 
     return groups
+
 
 def dominance_stats(X, y, feature_names=None):
     """

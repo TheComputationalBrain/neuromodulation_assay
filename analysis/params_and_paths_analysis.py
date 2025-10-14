@@ -26,6 +26,8 @@ class Params:
             'lanA' : []} # random selection of subjects
         self.mask = 'schaefer'
 
+        self.zscore_per_session = True 
+
 class Paths:
     def __init__(self):
 

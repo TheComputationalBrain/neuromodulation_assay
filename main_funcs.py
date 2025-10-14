@@ -14,6 +14,14 @@ import numpy as np
 import pandas as pd
 import os.path as op
 from scipy.io import loadmat
+import nibabel as nib
+from neuromaps import transforms
+from scipy.stats import zscore
+from scipy.stats import pearsonr
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+
+
 from initialize_subject import initialize_subject
 from params_and_paths import Params, Paths
 
@@ -680,5 +688,83 @@ def get_mvt_reg(db_name, sub, sess):
 
     return mvt_data
 
+def get_beta_dir_and_info(task):
+    if task == 'Explore':
+        beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
+    elif task == 'lanA':
+        beta_dir = os.path.join(paths.home_dir, paths.fmri_dir['lanA'])
+    else:
+        beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level') 
+
+    if task == 'NAConf':
+        add_info = '_firstTrialsRemoved'
+    elif not params.zscore_per_session:
+        add_info = '_zscoreAll'
+    else:
+        add_info = ""
+
+    return beta_dir, add_info
+
+def load_effect_map_array(sub, task, latent_var):
+    beta_dir, add_info = get_beta_dir_and_info(task)
+
+    map = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
+
+    return map
+
+def load_receptor_array(on_surface=False):
+    if on_surface:
+        receptor_data =zscore(np.load(os.path.join(paths.receptor_dir,f'receptor_density_{params.mask}_surf.pickle'), allow_pickle=True))
+    else:
+        receptor_data = zscore(np.load(os.path.join(paths.receptor_dir,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
+
+    return receptor_data
+
+def load_surface_effect_maps_for_cv(subjects, task, latent_var):
+    beta_dir, add_info = get_beta_dir_and_info(task)
+
+    if task == 'lanA':
+        fmri_files = []
+        for subj in subjects:
+            subj_id = f"{subj:03d}"  
+            pattern = os.path.join(beta_dir, 'subjects', subj_id, 'SPM', 'spmT_*.nii')
+            fmri_files.extend(glob.glob(pattern))
+    else:
+        fmri_files_all = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz')))
+        fmri_files = []
+        for file in fmri_files_all:
+            basename = os.path.basename(file)
+            subj_str = basename.split('_')[0]  # 'sub-XX'
+            subj_id = int(subj_str.split('-')[1])  # XX as integer
+            if subj_id in subjects:
+                fmri_files.append(file)
+    fmri_activity = []
+    for file in fmri_files:
+        data_vol = nib.load(file)
+        effect_data = transforms.mni152_to_fsaverage(data_vol, fsavg_density='41k')
+        data_gii = []
+        for img in effect_data:
+            data_hemi = img.agg_data()
+            data_hemi = np.asarray(data_hemi).T
+            data_gii += [data_hemi]
+        effect_array = np.hstack(data_gii)    
+        fmri_activity.append(effect_array) 
+
+    return fmri_activity
+
+def variance_explained(X, y, score):
+
+    lin_reg = LinearRegression()
+    lin_reg.fit(X, y)
+    y_pred = lin_reg.predict(X)
+
+    if score == 'determination':
+        rsquared = r2_score(y, y_pred)
+
+    elif score == 'corr':
+        r, _ = pearsonr(y, y_pred) 
+        rsquared = r**2
+
+    return rsquared
 
 

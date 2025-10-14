@@ -135,6 +135,6 @@ class Receptors:
             self.cannabinnoid = ["CB1"]
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'A2']
-\
+
 
 

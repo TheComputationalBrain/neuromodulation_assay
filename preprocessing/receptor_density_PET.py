@@ -28,6 +28,7 @@ from neuromaps import transforms
 
 PLOT_RECEPTORS=False
 PLOT_RECEPTORS_INFLATED=False
+PLOT_CORR = False
 
 paths = Paths()
 params = Params()
@@ -92,8 +93,8 @@ for proj in ['vol', 'surf']:    #['vol', 'surf']:
             for img in data_surf:
                 data_hemi = img.agg_data()
                 data_hemi = np.asarray(data_hemi).T
-                data_gii += [data_hemi]
-                receptor_array = np.hstack(data_gii).reshape(1,-1)
+                data_gii.append(data_hemi)
+            receptor_array = np.hstack(data_gii).reshape(1,-1)
             masked.append(receptor_array) 
         
     r = np.zeros([masked[0].shape[1], len(masked)])
@@ -174,45 +175,46 @@ if PLOT_RECEPTORS_INFLATED:
         plt.savefig(os.path.join(plot_path, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
         plt.close()
 
-#### correlation matrix
-serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
-acetylcholine = ["A4B2", "M1", "VAChT"]
-noradrenaline = ["NET", "A2"]
-opioid = ["MOR"]
-glutamate = ["mGluR5", "NMDA"]
-histamine = ["H3"]
-gaba = ["GABAa"]
-dopamine = ["D1", "D2", "DAT"]
-cannabinnoid = ["CB1"]
-receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
+if PLOT_CORR:
+    #### correlation matrix
+    serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
+    acetylcholine = ["A4B2", "M1", "VAChT"]
+    noradrenaline = ["NET", "A2"]
+    opioid = ["MOR"]
+    glutamate = ["mGluR5", "NMDA"]
+    histamine = ["H3"]
+    gaba = ["GABAa"]
+    dopamine = ["D1", "D2", "DAT"]
+    cannabinnoid = ["CB1"]
+    receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
 
-cmap = np.genfromtxt('../hansen_receptors/data/colourmap.csv', delimiter=',')
-cmap_div = ListedColormap(cmap)
-plt.rcParams.update({'font.size': 20})
+    cmap = np.genfromtxt('../hansen_receptors/data/colourmap.csv', delimiter=',')
+    cmap_div = ListedColormap(cmap)
+    plt.rcParams.update({'font.size': 20})
 
-#receptor_data = np.load(os.path.join(output_dir, f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True)
-ordered_receptors = [receptor for group in receptor_groups for receptor in group]
-df = pd.DataFrame(receptor_data, columns=receptor_names)
-df = df.apply(zscore)
-df = df[ordered_receptors]
-corr_matrix = df.corr()
-plt.figure(figsize=(10, 8))
-sns.heatmap(corr_matrix, annot=False, cmap=cmap_div, vmin=-1, vmax=1, linewidths=0.6, square=True)
-current_pos = 0
-for group in receptor_groups:
-    group_size = len(group)
-    plt.gca().add_patch(Rectangle((current_pos, current_pos), group_size, group_size, fill=False, edgecolor='black', lw=2))
-    current_pos += group_size
+    #receptor_data = np.load(os.path.join(output_dir, f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True)
+    ordered_receptors = [receptor for group in receptor_groups for receptor in group]
+    df = pd.DataFrame(receptor_data, columns=receptor_names)
+    df = df.apply(zscore)
+    df = df[ordered_receptors]
+    corr_matrix = df.corr()
+    plt.figure(figsize=(10, 8))
+    sns.heatmap(corr_matrix, annot=False, cmap=cmap_div, vmin=-1, vmax=1, linewidths=0.6, square=True)
+    current_pos = 0
+    for group in receptor_groups:
+        group_size = len(group)
+        plt.gca().add_patch(Rectangle((current_pos, current_pos), group_size, group_size, fill=False, edgecolor='black', lw=2))
+        current_pos += group_size
 
-plot_path = os.path.join(output_dir,'figures_inflated') 
-if params.parcelated:
-    fig_fname = f'receptor_corr_matrix_{params.mask}_{params.mask_details}.png'
-    plt.savefig(os.path.join(plot_path, fig_fname))
-else:
-    fig_fname = f'receptor_corr_matrix_{params.mask}.png'
-    plt.savefig(os.path.join(plot_path, fig_fname))
-    output_dir = '/home/ah278717/neuromodulation_assay/figures/' #for poster
-    plt.savefig(os.path.join(output_dir, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
+    plot_path = os.path.join(output_dir,'figures_inflated') 
+    if params.parcelated:
+        fig_fname = f'receptor_corr_matrix_{params.mask}_{params.mask_details}.png'
+        plt.savefig(os.path.join(plot_path, fig_fname))
+    else:
+        fig_fname = f'receptor_corr_matrix_{params.mask}.png'
+        plt.savefig(os.path.join(plot_path, fig_fname))
+        output_dir = '/home/ah278717/neuromodulation_assay/figures/' #for poster
+        plt.savefig(os.path.join(output_dir, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
 
 
 
