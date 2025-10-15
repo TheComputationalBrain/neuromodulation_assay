@@ -8,7 +8,7 @@ import matplotlib.lines as mlines
 from scipy.stats import ttest_1samp
 from statsmodels.stats.multitest import fdrcorrection
 from matplotlib.legend_handler import HandlerTuple
-from params_and_paths import Paths, Params, Receptors
+from params_and_paths_analysis import Paths, Params, Receptors
 
 PLOT_COEFS = False
 PLOT_DOMINANCE = True 

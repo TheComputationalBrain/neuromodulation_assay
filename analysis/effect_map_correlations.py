@@ -1,169 +1,147 @@
-# compare the correlation between each of the group level map comparisons to a null model of 1000 random spins
-#this supplements the overlap plots across studies for each of the latent varibales in fig. 3 of the manuscript
-
 import os
-os.environ["OMP_NUM_THREADS"] = "1" 
-os.environ["OPENBLAS_NUM_THREADS"] = "1"  
-os.environ["MKL_NUM_THREADS"] = "1" 
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1" 
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import sys
 import itertools
 import numpy as np
 import pandas as pd
 import nibabel as nib
 from nilearn.surface import SurfaceImage
-from params_and_paths import Paths, Params
 from statsmodels.stats.multitest import multipletests
 
+# Local imports
+from params_and_paths import Paths, Params
 
-#load debugged local version --> see pull request on neuromaps github
+# Load local debugged version of neuromaps
 sys.path.insert(0, os.path.abspath("."))
-from neuromaps import nulls, transforms
-from neuromaps import stats
+from neuromaps import nulls, transforms, stats
 
-paths = Paths()
-params = Params()
+# Data loading and preprocessing
+def load_group_surface_map(task, contrast, paths, explore_model="noEntropy_noER"):
+    """Load a group-level NIfTI map and project it onto fsaverage surface."""
+    add_info = "_firstTrialsRemoved" if task == "NAConf" else ""
+    if task == "Explore":
+        group_dir = os.path.join(paths.home_dir, task, "schaefer", "second_level", explore_model)
+    else:
+        group_dir = os.path.join(paths.home_dir, task, "schaefer", "second_level")
 
-#loop over surpise and confidence
-tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
-contrasts = ['surprise', 'confidence']
+    img_path = os.path.join(group_dir, f"{contrast}_schaefer_effect_map{add_info}.nii.gz")
+    img = nib.load(img_path)
 
-CORR_WITHIN = True  #False=get correlations between confidence and suprise maps instead (seperated)
-EXPLORE_MODEL = 'noEntropy_noER'
-spin_results = []
+    surf_data = transforms.mni152_to_fsaverage(img, fsavg_density="41k")
+    data_gii = [surf_img.agg_data().T for surf_img in surf_data]
+    surf_map = np.hstack(data_gii)
+    return surf_map
 
-output_dir = os.path.join(paths.home_dir, 'domain_general')
-if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+# Null model generation
+def generate_null_model(surf_map, n_perm=1000, seed=1234):
+    """Generate a random-spin null model for one surface map."""
+    return nulls.alexander_bloch([surf_map], atlas="fsaverage", density="41k", n_perm=n_perm, seed=seed)
 
-import itertools
 
-spin_results = []
+# Within-contrast spin tests (confidence-confidence, surprise-surprise)
+def run_spin_test_within(tasks, contrasts, paths, explore_model="noEntropy_noER", n_perm=1000, seed=1234):
+    """Run spin tests between all task pairs for each contrast separately."""
+    spin_results = []
 
-if CORR_WITHIN:
     for contrast in contrasts:
-        #process all maps and null models for each dataset
-        surf_maps = {}
-        null_models = {}
+        surf_maps, null_models = {}, {}
 
+        # Prepare surface maps and nulls
         for task in tasks:
-            add_info = '_firstTrialsRemoved' if task == 'NAConf' else ""
-
-            if task == 'Explore':
-                group_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
-            else:
-                group_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
-            
-            img_path = os.path.join(group_dir, f'{contrast}_schaefer_effect_map{add_info}.nii.gz')
-            img = nib.load(img_path)
-
-            # surface projection
-            surf_data = transforms.mni152_to_fsaverage(img, fsavg_density='41k')
-            data_gii = [img.agg_data().T for img in surf_data]
-            surf_map = np.hstack(data_gii)
+            surf_map = load_group_surface_map(task, contrast, paths, explore_model)
             surf_maps[task] = surf_map
+            null_models[task] = generate_null_model(surf_map, n_perm, seed)
 
-            # null model for each map
-            surf_map_list = [surf_map]
-            rotated = nulls.alexander_bloch(
-                surf_map_list, atlas='fsaverage', density='41k',
-                n_perm=1000, seed=1234
-            )
-            null_models[task] = rotated
-
+        # Pairwise comparisons
         for task1, task2 in itertools.combinations(tasks, 2):
-            print(f"--- Spin test for {contrast}: {task1} and {task2} ---")
-            surf_map1 = [surf_maps[task1]]
-            surf_map2 = [surf_maps[task2]]
-            rotated = null_models[task1]  # use task1's null model
+            print(f"--- Spin test for {contrast}: {task1} vs {task2} ---")
+            surf_map1, surf_map2 = [surf_maps[task1]], [surf_maps[task2]]
+            rotated = null_models[task1]
+            corr, pval = stats.compare_images(surf_map1, surf_map2, nulls=rotated)
+            spin_results.append({
+                "task1": task1,
+                "task2": task2,
+                "contrast": contrast,
+                "corr": corr,
+                "pval": pval,
+            })
 
+    results_df = pd.DataFrame(spin_results)
+    reject, pvals_fdr, _, _ = multipletests(results_df["pval"], method="fdr_bh")
+    results_df["pval_fdr"] = pvals_fdr
+    return results_df
+
+# 4. Cross-contrast spin tests (confidence-surprise and vice versa)
+def run_spin_test_across(tasks, contrasts, paths, explore_model="noEntropy_noER", n_perm=1000, seed=1234):
+    """Run spin tests between confidence and surprise maps across all tasks."""
+    surf_maps, null_models = {}, {}
+
+    # Load all maps and generate nulls
+    for task in tasks:
+        for contrast in contrasts:
+            surf_map = load_group_surface_map(task, contrast, paths, explore_model)
+            key = f"{task}_{contrast}"
+            surf_maps[key] = surf_map
+            null_models[key] = generate_null_model(surf_map, n_perm, seed)
+
+    # Compare across contrasts
+    spin_results = []
+    for task1, task2 in itertools.product(tasks, repeat=2):
+        # confidence(task1) vs surprise(task2)
+        for c1, c2 in [("confidence", "surprise"), ("surprise", "confidence")]:
+            map1_key, map2_key = f"{task1}_{c1}", f"{task2}_{c2}"
+            surf_map1, surf_map2 = [surf_maps[map1_key]], [surf_maps[map2_key]]
+            rotated = null_models[map1_key]
             corr, pval = stats.compare_images(surf_map1, surf_map2, nulls=rotated)
 
             spin_results.append({
-                'task1': task1,
-                'task2': task2,
-                'contrast': contrast,
-                'corr': corr,
-                'pval': pval
+                "task1": task1, "contrast1": c1,
+                "task2": task2, "contrast2": c2,
+                "corr": corr, "pval": pval,
             })
 
-    spin_results = pd.DataFrame(spin_results)
-    reject, pvals_fdr, _, _ = multipletests(spin_results["pval"], method="fdr_bh")
-    spin_results["pval_fdr"] = pvals_fdr
-    spin_results.to_csv(os.path.join(output_dir, 'results_map_spin.csv'), index = False)
-else:
-    surf_maps = {}
-    null_models = {}
+    results_df = pd.DataFrame(spin_results)
+    reject, pvals_fdr, _, _ = multipletests(results_df["pval"], method="fdr_bh")
+    results_df["pval_fdr"] = pvals_fdr
+    return results_df
 
-    for task in tasks:
-        add_info = '_firstTrialsRemoved' if task == 'NAConf' else ""
 
-        for contrast in contrasts:
-            if task == 'Explore':
-                group_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
-            else:
-                group_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
+# Main controller
+def run_all_spin_tests(
+    within=True,
+    output_dir=None,
+    tasks=None,
+    contrasts=None,
+    explore_model="noEntropy_noER",
+    n_perm=1000,
+    seed=1234,
+):
+    """wrapper to run spin tests (within or across contrasts)."""
+    paths = Paths()
+    params = Params()
 
-            img_path = os.path.join(group_dir, f'{contrast}_schaefer_effect_map{add_info}.nii.gz')
-            img = nib.load(img_path)
+    if tasks is None:
+        tasks = ["EncodeProb", "NAConf", "PNAS", "Explore"]
+    if contrasts is None:
+        contrasts = ["surprise", "confidence"]
 
-            # Surface projection
-            surf_data = transforms.mni152_to_fsaverage(img, fsavg_density='41k')
-            data_gii = [img.agg_data().T for img in surf_data]
-            surf_map = np.hstack(data_gii)
+    if output_dir is None:
+        output_dir = os.path.join(paths.home_dir, "domain_general")
+    os.makedirs(output_dir, exist_ok=True)
 
-            # Store map and null model using task+contrast as key
-            key = f'{task}_{contrast}'
-            surf_maps[key] = surf_map
+    if within:
+        results_df = run_spin_test_within(tasks, contrasts, paths, explore_model, n_perm, seed)
+        fname = "results_map_spin_within.csv"
+    else:
+        results_df = run_spin_test_across(tasks, contrasts, paths, explore_model, n_perm, seed)
+        fname = "results_map_spin_across.csv"
 
-            # Generate null model for this specific map
-            rotated = nulls.alexander_bloch(
-                [surf_map], atlas='fsaverage', density='41k',
-                n_perm=1000, seed=1234
-            )
-            null_models[key] = rotated
+    results_df.to_csv(os.path.join(output_dir, fname), index=False)
+    return results_df
 
-    # Run all comparisons
-    spin_results = []
 
-    for task1, task2 in itertools.product(tasks, repeat=2):
-        # 1. confidence(task1) vs surprise(task2)
-        map1_key = f'{task1}_confidence'
-        map2_key = f'{task2}_surprise'
-        surf_map1 = [surf_maps[map1_key]]
-        surf_map2 = [surf_maps[map2_key]]
-        rotated = null_models[map1_key]  # Use null model of map1
-        corr, pval = stats.compare_images(surf_map1, surf_map2, nulls=rotated)
+if __name__ == "__main__":
+    # Run within-contrast correlations (surprise-surprise, confidence-confidence)
+    run_all_spin_tests(within=True)
 
-        spin_results.append({
-            'task1': task1,
-            'contrast1': 'confidence',
-            'task2': task2,
-            'contrast2': 'surprise',
-            'corr': corr,
-            'pval': pval
-        })
-
-        # 2. surprise(task1) vs confidence(task2)
-        map1_key = f'{task1}_surprise'
-        map2_key = f'{task2}_confidence'
-        surf_map1 = [surf_maps[map1_key]]
-        surf_map2 = [surf_maps[map2_key]]
-        rotated = null_models[map1_key]
-        corr, pval = stats.compare_images(surf_map1, surf_map2, nulls=rotated)
-
-        spin_results.append({
-            'task1': task1,
-            'contrast1': 'surprise',
-            'task2': task2,
-            'contrast2': 'confidence',
-            'corr': corr,
-            'pval': pval
-        })
-
-    # Save to CSV
-    spin_results_df = pd.DataFrame(spin_results)
-    reject, pvals_fdr, _, _ = multipletests(spin_results["pval"], method="fdr_bh")
-    spin_results["pval_fdr"] = pvals_fdr
-    spin_results_df.to_csv(os.path.join(output_dir, 'results_map_spin_across.csv'), index = False)
+    # Run cross-contrast correlations (confidence-surprise)
+    run_all_spin_tests(within=False)
