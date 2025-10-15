@@ -45,170 +45,197 @@ rec = Receptors()
 fmri_dir = mf.get_fmri_dir(params.db)
 subjects = [s for s in mf.get_subjects(params.db, fmri_dir) if s not in params.ignore]
 
-def plot_regression_coefficients(rec, params, paths, mask_comb, proj='', model_type='linear'):
+
+def plot_regression_coefficients(rec, params, paths, mask_comb, model_type='linear'):
     """Plot regression coefficients across subjects with FDR-corrected significance."""
-    import matplotlib.pyplot as plt
-    import seaborn as sns
-    from scipy.stats import ttest_1samp
-    from statsmodels.stats.multitest import fdrcorrection
+    
+    for task in params.task:
 
-    beta_dir = os.path.join(paths.home_dir, params.db, params.mask, 'first_level')
-    output_dir = os.path.join(beta_dir, 'regressions', rec.source)
-    os.makedirs(output_dir, exist_ok=True)
+        beta_dir, _ = mf.get_beta_dir_and_info(task)
+        output_dir = os.path.join(beta_dir, 'regressions', rec.source)
+        os.makedirs(output_dir, exist_ok=True)
 
-    if params.db == 'Explore':
-        variables = ['surprise', 'confidence']
-    else:
-        variables = params.latent_vars
 
-    # Grouping and color setup
-    if rec.source in ['PET', 'PET2']:
-        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline,
-                           rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.cannabinnoid]
-    elif rec.source == 'autorad_zilles44':
-        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline,
-                           rec.glutamate, rec.gaba, rec.dopamine]
-    elif rec.source == 'AHBA':
-        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.dopamine]
-    receptor_class = [rec.exc, rec.inh]
+        base_colors = sns.color_palette('husl', len(receptor_groups))
+        plt.rcParams.update({'font.size': 18})
 
-    base_colors = sns.color_palette('husl', len(receptor_groups))
-    plt.rcParams.update({'font.size': 18})
+        for latent_var in params.latent_vars:
+            fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all_{model_type}.csv'
+            file_path = os.path.join(output_dir, fname)
+            if not os.path.exists(file_path):
+                print(f"Skipping {latent_var} — no file found.")
+                continue
 
-    receptor_label_formatted = [
-        '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
-        '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
-        '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$', '$5\\text{-}\\mathrm{HTT}$',
-        '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$', '$\\mathrm{M}_{\\mathrm{1}}$',
-        '$\\mathrm{VAChT}$', '$\\mathrm{NET}$', '$\\mathrm{A}_{\\mathrm{2}}$',
-        '$\\mathrm{MOR}$', '$\\mathrm{mGluR}_{\\mathrm{5}}$', '$\\mathrm{NMDA}$',
-        '$\\mathrm{H}_{\\mathrm{3}}$', '$\\mathrm{GABA}_{\\mathrm{a}}$', '$\\mathrm{D}_{\\mathrm{1}}$',
-        '$\\mathrm{D}_{\\mathrm{2}}$', '$\\mathrm{DAT}$', '$\\mathrm{CB}_{\\mathrm{1}}$'
-    ]
+            results_df = pd.read_csv(file_path)
+            if 'a2' in results_df.columns:
+                results_df.rename(columns={'a2': 'A2'}, inplace=True)
 
-    for latent_var in variables:
-        fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all{proj}_{model_type}.csv'
-        file_path = os.path.join(output_dir, fname)
-        if not os.path.exists(file_path):
-            print(f"Skipping {latent_var} — no file found.")
-            continue
+            # --- T-tests per receptor ---
+            t_values, p_values = [], []
+            for receptor in rec.receptor_names:
+                t, p = ttest_1samp(results_df[receptor], 0)
+                t_values.append(t)
+                p_values.append(p)
 
-        results_df = pd.read_csv(file_path)
-        if 'a2' in results_df.columns:
-            results_df.rename(columns={'a2': 'A2'}, inplace=True)
+            _, p_corr = fdrcorrection(p_values, alpha=0.05)
+            sig_receptors = [r for r, pc in zip(rec.receptor_names, p_corr) if pc < 0.05]
+            sig_signs = [np.sign(t) for t, pc in zip(t_values, p_corr) if pc < 0.05]
 
-        # --- T-tests per receptor ---
-        t_values, p_values = [], []
-        for receptor in rec.receptor_names:
-            t, p = ttest_1samp(results_df[receptor], 0)
-            t_values.append(t)
-            p_values.append(p)
+            # --- Group color logic ---
+            receptor_to_group = {r: i for i, grp in enumerate(params.receptor_groups) for r in grp}
+            receptor_to_class = {r: i for i, grp in enumerate(params.receptor_class) for r in grp}
+            ordered = [r for grp in receptor_groups for r in grp]
 
-        _, p_corr = fdrcorrection(p_values, alpha=0.05)
-        sig_receptors = [r for r, pc in zip(rec.receptor_names, p_corr) if pc < 0.05]
-        sig_signs = [np.sign(t) for t, pc in zip(t_values, p_corr) if pc < 0.05]
+            colors = []
+            for receptor in ordered:
+                g = receptor_to_group.get(receptor, -1)
+                c = receptor_to_class.get(receptor, -1)
+                if c == 0:  # Excitatory
+                    col = sns.dark_palette(base_colors[g], n_colors=3)[1]
+                elif c == 1:  # Inhibitory
+                    col = sns.light_palette(base_colors[g], n_colors=3)[1]
+                else:
+                    col = sns.light_palette(base_colors[g], n_colors=3)[0]
+                colors.append(col)
 
-        mean_R2 = results_df['R2'].mean()
-        mean_BIC = results_df['BIC'].mean()
+            # --- Plot ---
+            fig, ax = plt.subplots(figsize=(12, 8))
+            sns.boxplot(data=results_df[ordered], ax=ax, palette=colors)
+            for i, receptor in enumerate(ordered):
+                if receptor in sig_receptors:
+                    idx = sig_receptors.index(receptor)
+                    color = '#C96868' if sig_signs[idx] > 0 else '#7EACB5'
+                    ax.scatter(i, results_df[receptor].median(), color=color, zorder=5)
 
-        # --- Group color logic ---
-        receptor_to_group = {r: i for i, grp in enumerate(receptor_groups) for r in grp}
-        receptor_to_class = {r: i for i, grp in enumerate(receptor_class) for r in grp}
-        ordered = [r for grp in receptor_groups for r in grp]
+            ax.set_xticklabels(params.receptor_label_formatted, rotation=90)
+            ax.set_xlabel('Receptor')
+            ax.set_ylabel('Coefficient')
+            ax.set_title(f'{latent_var} regression coefficients ({rec.source})')
 
-        colors = []
-        for receptor in ordered:
-            g = receptor_to_group.get(receptor, -1)
-            c = receptor_to_class.get(receptor, -1)
-            if c == 0:  # Excitatory
-                col = sns.dark_palette(base_colors[g], n_colors=3)[1]
-            elif c == 1:  # Inhibitory
-                col = sns.light_palette(base_colors[g], n_colors=3)[1]
-            else:
-                col = sns.light_palette(base_colors[g], n_colors=3)[0]
-            colors.append(col)
+            ax.text(0.95, 0.95, textstr, transform=ax.transAxes,
+                    ha='right', va='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
 
-        # --- Plot ---
-        fig, ax = plt.subplots(figsize=(12, 8))
-        sns.boxplot(data=results_df[ordered], ax=ax, palette=colors)
-        for i, receptor in enumerate(ordered):
-            if receptor in sig_receptors:
-                idx = sig_receptors.index(receptor)
-                color = '#C96868' if sig_signs[idx] > 0 else '#7EACB5'
-                ax.scatter(i, results_df[receptor].median(), color=color, zorder=5)
+            plt.tight_layout()
+            fig_dir = os.path.join(output_dir, 'plots')
+            os.makedirs(fig_dir, exist_ok=True)
+            plt.savefig(os.path.join(fig_dir, f'{latent_var}_coefficients_{model_type}.png'), dpi=300)
+            plt.close()
 
-        ax.set_xticklabels(receptor_label_formatted, rotation=90)
-        ax.set_xlabel('Receptor')
-        ax.set_ylabel('Coefficient')
-        ax.set_title(f'{latent_var} regression coefficients ({rec.source})')
+# ---------- Data loading ----------
+def load_dominance_data(experiments, latent_var, paths, params, mask="schaefer", model_type="linear"):
+    """
+    Loads and standardizes dominance results for given experiments.
+    Returns a dictionary {exp_name: standardized_df}
+    """
+    results = {}
+    model_suffix = "" if model_type == "linear" else "_lin+quad"
 
-        textstr = f'Mean R²: {mean_R2:.2f}\nMean BIC: {mean_BIC:.2f}'
-        ax.text(0.95, 0.95, textstr, transform=ax.transAxes,
-                ha='right', va='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+    for exp in experiments:
+        beta_dir = os.path.join(paths.home_dir, exp, params.mask, "first_level")
+        input_dir = os.path.join(beta_dir, "regressions", "PET2")
+        fname = f"{latent_var}_{mask}_dominance_allsubj{model_suffix}.pickle"
+        df = pd.read_pickle(os.path.join(input_dir, fname))
+        if "a2" in df.columns:
+            df.rename(columns={"a2": "A2"}, inplace=True)
+        standardized_df = df.div(df.sum(axis=1), axis=0)
+        results[exp] = standardized_df
+    return results
 
-        plt.tight_layout()
-        fig_dir = os.path.join(output_dir, 'plots')
-        os.makedirs(fig_dir, exist_ok=True)
-        plt.savefig(os.path.join(fig_dir, f'{latent_var}_coefficients_{model_type}.png'), dpi=300)
-        plt.close()
 
-def plot_dominance_results(rec, params, paths, mask_comb, model_type='lin+quad'):
-    """Plot mean dominance contributions across receptors with group colors."""
-    import seaborn as sns
-    import matplotlib.pyplot as plt
+# ---------- Aggregation ----------
+def aggregate_dominance(results_dict, exclude_explore=True):
+    """
+    Aggregates dominance data across experiments.
+    Returns a combined DataFrame (concatenated subjects across studies)
+    and a mean per-study DataFrame for heatmaps.
+    """
+    if exclude_explore:
+        results_dict = {k: v for k, v in results_dict.items() if k != "Explore"}
 
-    beta_dir = os.path.join(paths.home_dir, params.db, params.mask, 'first_level')
-    output_dir = os.path.join(beta_dir, 'regressions', rec.source)
-    os.makedirs(output_dir, exist_ok=True)
+    combined = pd.concat(results_dict.values(), ignore_index=True)
+    per_study_means = {k: v.mean() for k, v in results_dict.items()}
+    return combined, pd.DataFrame(per_study_means).T
 
-    variables = ['surprise', 'confidence'] if params.db == 'Explore' else params.latent_vars
 
-    if rec.source in ['PET', 'PET2']:
-        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline,
-                           rec.opioid, rec.glutamate, rec.histamine, rec.gaba, rec.cannabinnoid]
-    elif rec.source == 'autorad_zilles44':
-        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline,
-                           rec.glutamate, rec.gaba, rec.dopamine]
-    elif rec.source == 'AHBA':
-        receptor_groups = [rec.serotonin, rec.acetylcholine, rec.noradrenaline, rec.dopamine]
-    receptor_class = [rec.exc, rec.inh]
+# ---------- Plotting ----------
+def plot_dominance_bars(
+    df, receptor_groups, receptor_class, 
+    title=None, output_path=None, show_errorbars=True, ylim=(0, 0.16)
+):
+    """
+    Generic barplot function for dominance data.
+    Works for both individual studies and group-level averages.
+    """
+    ordered_receptors = [r for group in receptor_groups for r in group]
+    receptor_to_group = {r: i for i, g in enumerate(receptor_groups) for r in g}
+    receptor_to_class = {r: i for i, g in enumerate(receptor_class) for r in g}
 
-    base_colors = sns.color_palette('husl', len(receptor_groups))
-    receptor_to_group = {r: i for i, grp in enumerate(receptor_groups) for r in grp}
-    receptor_to_class = {r: i for i, grp in enumerate(receptor_class) for r in grp}
-    ordered = [r for grp in receptor_groups for r in grp]
+    base_colors = sns.color_palette("husl", len(receptor_groups))
+    colors = []
+    for r in ordered_receptors:
+        group_idx = receptor_to_group[r]
+        class_type = receptor_to_class.get(r, -1)
+        if class_type == 0:
+            color = sns.dark_palette(base_colors[group_idx], n_colors=3)[1]
+        elif class_type == 1:
+            color = sns.light_palette(base_colors[group_idx], n_colors=3)[1]
+        else:
+            color = sns.color_palette("muted")[group_idx]
+        colors.append(color)
 
-    for latent_var in variables:
-        file_path = os.path.join(output_dir, f'{latent_var}_{mask_comb}_dominance_allsubj_{model_type}.pickle')
-        if not os.path.exists(file_path):
-            print(f"Skipping {latent_var} — no dominance file found.")
-            continue
+    mean_vals = df[ordered_receptors].mean()
+    sem_vals = df[ordered_receptors].sem()
 
-        results_df = pd.read_pickle(file_path)
-        if 'a2' in results_df.columns:
-            results_df.rename(columns={'a2': 'A2'}, inplace=True)
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.bar(
+        ordered_receptors,
+        mean_vals,
+        yerr=sem_vals if show_errorbars else None,
+        color=colors,
+        edgecolor="black",
+        capsize=5,
+    )
+    ax.set_xticks(np.arange(len(ordered_receptors)))
+    ax.set_xticklabels(params.receptor_label_formatted, rotation=90)
+    for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
+        label.set_color(base_colors[receptor_to_group[receptor]])
 
-        # Normalize by total contribution
-        standardized = results_df[ordered].div(results_df[ordered].sum(axis=1), axis=0)
-        bar_means = standardized.mean()
-        bar_sem = standardized.sem()
+    ax.set_ylabel("Contribution (%)")
+    ax.set_ylim(ylim)
+    ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+    if title:
+        ax.set_title(title)
+    plt.tight_layout()
 
-        fig, ax = plt.subplots(figsize=(12, 8))
-        bars = ax.bar(ordered, bar_means, yerr=bar_sem,
-                      color=[sns.dark_palette(base_colors[receptor_to_group[r]], n_colors=3)[1]
-                             if receptor_to_class.get(r, 0) == 0
-                             else sns.light_palette(base_colors[receptor_to_group[r]], n_colors=3)[1]
-                             for r in ordered],
-                      capsize=5)
-        ax.set_xticklabels(ordered, rotation=90)
-        ax.set_xlabel('Receptor/Transporter')
-        ax.set_ylabel('Contribution (%)')
-        plt.tight_layout()
+    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+    plt.show()
 
-        fig_dir = os.path.join(output_dir, 'plots')
-        os.makedirs(fig_dir, exist_ok=True)
-        plt.savefig(os.path.join(fig_dir, f'{latent_var}_dominance_{model_type}.png'), dpi=300, bbox_inches='tight')
-        plt.close()
+
+def plot_dominance_heatmap(df, cmap, title=None, output_path=None):
+    """
+    Generic heatmap plotting for dominance means across studies.
+    """
+    fig, ax = plt.subplots(figsize=(12, 4))
+    sns.heatmap(
+        df,
+        xticklabels=params.receptor_labels,
+        cmap=cmap,
+        linewidths=0.5,
+        vmin=0,
+        vmax=0.18,
+        cbar_kws=dict(location="left", label="Contribution (%)"),
+    )
+    plt.yticks(rotation=0)
+    if title:
+        plt.title(title)
+    plt.tight_layout()
+
+    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
+    plt.savefig(output_path, bbox_inches="tight")
+    plt.close(fig)
+
 
 # Regression Analysis
 if RUN_REGRESSION:
@@ -342,6 +369,36 @@ if RUN_DOMINANCE:
             fname = f'{latent_var}_{params.mask}_dominance_allsubj_{MODEL_TYPE}.pickle'
             results_df.to_pickle(os.path.join(output_dir, fname))
 
-
-
 if __name__ == "__main__":
+    for latent_var in latent_vars:
+        #individual regression plots
+        plot_regression_coefficients(rec, params, paths, mask_comb, model_type=MODEL_TYPE):
+
+        # Load all dominance results
+        results = load_dominance_data(experiments, latent_var, paths, params, model_type=MODEL_TYPE)
+
+        # ---- Individual plots ----
+        for exp, df in results.items():
+            title = f"{exp} – {latent_var}"
+            plot_dominance_bars(df, params.receptor_groups, params.receptor_class,
+                                title=title,
+                                output_path=f"{paths.home_dir}/plots/{exp}_{latent_var}_dominance.pdf")
+
+        # ---- Group-level mean (exclude Explore) ----
+        combined, per_study_means = aggregate_dominance(results, exclude_explore=True)
+        plot_dominance_bars(combined, params.receptor_groups, params.receptor_class, 
+                            title=f"Group Mean – {latent_var}",
+                            output_path=f"{paths.home_dir}/plots/group_{latent_var}_dominance.pdf")
+
+        # ---- Heatmaps ----
+        plot_dominance_heatmap(per_study_means,
+                            cmap_seq,
+                            title=f"Per-study {latent_var} dominance",
+                            output_path=f"{paths.home_dir}/plots/heatmap_{latent_var}.pdf")
+
+        # ---- Explore-only heatmap ----
+        explore_df = results["Explore"].mean().to_frame().T
+        plot_dominance_heatmap(explore_df,
+                            cmap_seq,
+                            title=f"Explore – {latent_var}",
+                            output_path=f"{paths.home_dir}/plots/Explore_heatmap_{latent_var}.pdf")
