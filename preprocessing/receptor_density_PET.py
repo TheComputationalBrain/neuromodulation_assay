@@ -24,6 +24,7 @@ from nilearn.datasets import fetch_atlas_schaefer_2018
 from nilearn import image, plotting, datasets, surface
 from params_and_paths import Paths, Params
 from neuromaps import transforms
+import cmcrameri.cm as cmc
 
 
 PLOT_RECEPTORS=False
@@ -34,8 +35,7 @@ paths = Paths()
 params = Params()
 
 output_dir = os.path.join(paths.home_dir,'receptors', 'PET2')
-if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+os.makedirs(output_dir, exist_ok = True)
 
 if params.parcelated == False:
      masker = fun.get_masker()
@@ -81,7 +81,7 @@ receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
                  paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
                  paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
 
-for proj in ['vol', 'surf']:    #['vol', 'surf']:
+for proj in ['vol', 'surf']:  
     masked = []
     for receptor in receptors_nii:
         img = nib.load(receptor)
@@ -192,7 +192,6 @@ if PLOT_CORR:
     cmap_div = ListedColormap(cmap)
     plt.rcParams.update({'font.size': 20})
 
-    #receptor_data = np.load(os.path.join(output_dir, f'receptor_density_{MASK_NAME}.pickle'), allow_pickle=True)
     ordered_receptors = [receptor for group in receptor_groups for receptor in group]
     df = pd.DataFrame(receptor_data, columns=receptor_names)
     df = df.apply(zscore)
@@ -213,8 +212,7 @@ if PLOT_CORR:
     else:
         fig_fname = f'receptor_corr_matrix_{params.mask}.png'
         plt.savefig(os.path.join(plot_path, fig_fname))
-        output_dir = '/home/ah278717/neuromodulation_assay/figures/' #for poster
-        plt.savefig(os.path.join(output_dir, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
+
 
 
 

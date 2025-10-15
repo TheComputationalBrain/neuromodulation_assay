@@ -32,6 +32,8 @@ class Params:
 
         self.zscore_per_session = True 
 
+        self.latent_vars = ['confidence','surprise']
+
         if db != 'Explore':
             self.io_options = {'p_c': 1/75, 'resol': 20} 
 
@@ -70,8 +72,8 @@ class Params:
             self.session = []
             self.split = False 
             self.reward = False 
-            self.model = 'noEntropy_noER'  
-            self.io_variables = ['US', 'EC_chosen'] 
+            self.model = 'noEntropy_noER'  #[noEntropy]
+            self.io_variables = ['US', 'EC_chosen'] #['US', 'EC_chosen, 'ER_chosen']
 
         elif db == 'PNAS':
             self.ignore = []
@@ -120,7 +122,8 @@ class Receptors:
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
 
-        if source == 'PET2':
+        #map including alpha2 map
+        if source == 'PET2': 
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                                 "MOR", "NET", "NMDA", "VAChT", "A2"]

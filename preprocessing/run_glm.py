@@ -19,7 +19,6 @@ os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import glob
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -33,10 +32,11 @@ from nilearn.datasets import fetch_atlas_schaefer_2018
 from scipy.stats import zscore
 from functions_design_matrices import create_design_matrix, zscore_regressors
 import fmri_funcs as fun
-import main_funcs as mf
 import io_funcs as iof
-
 from params_and_paths import Params, Paths
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+import main_funcs as mf
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
 SAVE_DMTX_PLOT = True
@@ -60,8 +60,7 @@ else:
 
 #make output directories
 fmri_arr_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level',f'data_arrays_whole_brain_{params.smoothing_fwhm}') 
-if not os.path.exists(fmri_arr_dir):
-        os.makedirs(fmri_arr_dir)
+os.makedirs(fmri_arr_dir, exist_ok =True)
 
 if params.update:
     if params.db == 'Explore':
@@ -77,10 +76,8 @@ else:
 
     design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
     
-if not os.path.exists(output_dir):
-        os.makedirs(output_dir) 
-if not os.path.exists(design_dir):
-        os.makedirs(design_dir)
+os.makedirs(output_dir, exist_ok = True) 
+os.makedirs(design_dir, exist_ok = True)
 
 subjects = mf.get_subjects(params.db, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore] 
@@ -92,7 +89,7 @@ for sub in subjects:
     print(f"--- processing subject {sub} ----")
 
     #get global info that's not session specific
-    sessions = mf.get_sessions(sub)
+    sessions = fun.get_sessions(sub)
     tr = fun.get_tr(params.db, sub, 1, json_file_dir) # in seconds
     masker = fun.get_masker(fmri_dir,tr, params.smoothing_fwhm)
 
@@ -122,19 +119,19 @@ for sub in subjects:
     #create design matrix 
     for s,sess in enumerate(sessions):
         #IO inference 
-        seq = mf.get_seq(db=params.db,
+        seq = fun.get_seq(db=params.db,
                         sub=sub,
                         sess=sess,
                         beh_dir=beh_dir)
         seq = sg.ConvertSequence(seq)['seq']
 
         if params.db == 'Explore':
-            events = mf.get_events(params.db, sub, sess)
+            events = fun.get_events(params.db, sub, sess)
         else:
             io_inference = iof.get_post_inference(seq=seq,
                                                     seq_type= params.seq_type, 
                                                     options=params.io_options)
-            events = mf.get_events(params.db, sub, sess, beh_dir, io_inference, seq) 
+            events = fun.get_events(params.db, sub, sess, beh_dir, io_inference, seq) 
                   
         #frame time 
         frame_times = fun.get_fts(params.db, sub, sess, fmri_dir, json_file_dir) 
@@ -181,7 +178,7 @@ for sub in subjects:
         plt.close()
 
     #run GLM on all voxels
-    print("---- Running glm with autoregressive model  ----")
+    print("---- Running glm ----")
     labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 1)
 
     # save results
@@ -220,20 +217,9 @@ for sub in subjects:
             contrasts = {'surprise_free': contrasts['US_free'],
                         'confidence_free': contrasts[f'EC_{params.model}_free'],
                         'prediction_free': contrasts[f'ER_{params.model}_free'],
-                        'predictability_free': contrasts[f'entropy_{params.model}_free'],
                         'surprise_forced': contrasts[f'US_forced'],
                         'confidence_forced': contrasts[f'EC_{params.model}_forced'],
-                        'prediction_forced': contrasts[f'ER_{params.model}_forced'],
-                        'predictability_forced': contrasts[f'entropy_{params.model}_forced']}
-        elif params.model == 'US_reward':
-            contrasts = {'surprise': contrasts['US'],
-                        'confidence': contrasts[f'EC_chosen'],
-                        'predictions': contrasts[f'ER_chosen'],
-                        'predictability': contrasts[f'entropy_chosen'],
-                        'surprise_neg': contrasts_neg['US'],
-                        'confidence_neg': contrasts_neg[f'EC_chosen'],
-                        'predictions_neg': contrasts_neg[f'ER_chosen'],
-                        'predictability_neg': contrasts_neg[f'entropy_chosen']}
+                        'prediction_forced': contrasts[f'ER_{params.model}_forced']}
         elif params.model in ['noEntropy', 'noEntropy_reducedDM', 'noEntropy_reducedDM2']:
             contrasts = {'surprise': contrasts['US'],
                         'confidence': contrasts[f'EC_chosen'],
@@ -247,7 +233,6 @@ for sub in subjects:
                         'surprise_neg': contrasts_neg['US'],
                         'confidence_neg': contrasts_neg[f'EC_chosen']}
 
-            
     for contrast_id in contrasts:
         contrast = compute_contrast(labels,
                                     estimates,
@@ -269,7 +254,7 @@ for sub in subjects:
         fname = f'sub-{sub:02d}_{contrast_id}_{params.mask}_effect_size_map{add_info}.nii.gz'
         nib.save(effect_size, os.path.join(output_dir, fname))
 
-        #if mask is schaefer compute the mean by region, as we only use this atlas for the autoradiography data that's only available in the Schaefer 100 parcelation
+        #if mask is schaefer compute the mean by region
         if (params.mask == 'schaefer') & params.parcelated:
             atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
             atlas.labels = np.insert(atlas.labels, 0, "Background")

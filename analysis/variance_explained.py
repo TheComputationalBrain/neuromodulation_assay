@@ -19,13 +19,10 @@ from nilearn import datasets
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import pearsonr
 
-
-
 FROM_BETA = False
 COMP_NULL = False
 COMPARE_LANG_LEARN = False
 COMPARE_EXPL_VAR = False
-
 
 PLOT_VAR_EXPLAINED = False
 PLOT_RATIO_VAR_EXPLAINED = False
@@ -41,8 +38,7 @@ params = Params()
 rec = Receptors()
 
 output_dir = os.path.join(paths.home_dir, 'variance_explained')
-if not os.path.exists(output_dir):
-        os.makedirs(output_dir) 
+os.makedirs(output_dir, exist_ok=True) 
 
 comparison_latent = 'language'
 comparison_task = 'lanA'
@@ -104,7 +100,6 @@ if FROM_BETA:
                         r, _ = pearsonr(y, y_pred) #equivalent to correlating y and X
                         corr_sq = r**2
                         all_rsquared.append(corr_sq)
-
 
             # Save results
             with open(os.path.join(output_dir,f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'), "wb") as fp:   
@@ -183,8 +178,8 @@ if COMPARE_EXPL_VAR:
     # Store results for later FDR correction
     results = []
 
-    for task in tasks:
-        for latent_var in latent_vars:
+    for task in params.tasks:
+        for latent_var in params.latent_vars:
             print(f"Running permutation for {task} / {latent_var}...")
 
             # Load task data
