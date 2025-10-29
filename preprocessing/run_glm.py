@@ -11,6 +11,7 @@ The output corresponds to the labels and estimates of the GLM.
 """
 
 import os
+import sys
 #specify the number of threads before importing numpy to limit the amount of ressources that are taken up by numpy.
 os.environ["OMP_NUM_THREADS"] = "1" 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"  
@@ -20,6 +21,7 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import glob
 import matplotlib
 import matplotlib.pyplot as plt
+from pathlib import Path
 import numpy as np
 import pandas as pd
 import pickle
@@ -39,18 +41,20 @@ sys.path.append(str(parent_dir))
 import main_funcs as mf
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
+TASK = 'EncodeProb'
 SAVE_DMTX_PLOT = True
+REDO_MASK = False
 
-paths = Paths()
-params = Params()
+paths = Paths(task=TASK)
+params = Params(task=TASK)
 
 # Init paths
-beh_dir  = mf.get_beh_dir(params.db)
-json_file_dir = mf.get_json_dir(params.db)
-fmri_dir = mf.get_fmri_dir(params.db)
+beh_dir  = mf.get_beh_dir(TASK, params.root_dir, params.data_dir)
+json_file_dir = mf.get_json_dir(TASK, params.root_dir, params.data_dir)
+fmri_dir = mf.get_fmri_dir(TASK, params.root_dir, params.data_dir)
 
 #adjust naming
-if params.db in ['NAConf']:
+if TASK in ['NAConf']:
     if params.remove_trials:
          add_info = '_firstTrialsRemoved'
 if not params.zscore_per_session:
@@ -59,27 +63,27 @@ else:
      add_info = ""
 
 #make output directories
-fmri_arr_dir  = os.path.join(paths.home_dir,params.db,params.mask,'first_level',f'data_arrays_whole_brain_{params.smoothing_fwhm}') 
+fmri_arr_dir  = os.path.join(paths.home_dir,TASK,params.mask,'first_level',f'data_arrays_whole_brain_{params.smoothing_fwhm}') 
 os.makedirs(fmri_arr_dir, exist_ok =True)
 
 if params.update:
-    if params.db == 'Explore':
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model', params.model)
+    if TASK == 'Explore':
+        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level', 'update_model', params.model)
     else:
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level', 'update_model')
+        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level', 'update_model')
     design_dir = os.path.join(output_dir, 'designmatrix_update')
 else:
-    if params.db == 'Explore':
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level',params.model)
+    if TASK == 'Explore':
+        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level',params.model)
     else:
-        output_dir = os.path.join(paths.home_dir,params.db,params.mask,'first_level') 
+        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level') 
 
     design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
     
 os.makedirs(output_dir, exist_ok = True) 
 os.makedirs(design_dir, exist_ok = True)
 
-subjects = mf.get_subjects(params.db, fmri_dir)
+subjects = mf.get_subjects(TASK, fmri_dir)
 subjects = [subj for subj in subjects if subj not in params.ignore] 
 #for Explore the subjects are already removed in the fMRI data folder/in NAConf some are already removed 
 
@@ -89,16 +93,16 @@ for sub in subjects:
     print(f"--- processing subject {sub} ----")
 
     #get global info that's not session specific
-    sessions = fun.get_sessions(sub)
-    tr = fun.get_tr(params.db, sub, 1, json_file_dir) # in seconds
-    masker = fun.get_masker(fmri_dir,tr, params.smoothing_fwhm)
+    sessions = fun.get_sessions(sub, params)
+    tr = fun.get_tr(TASK, sub, 1, json_file_dir) # in seconds
+    masker = fun.get_masker(fmri_dir,tr, params.smoothing_fwhm, params, paths)
 
     #fMRI data
     fmri_data = os.path.join(fmri_arr_dir, f'*{sub:02d}_data*.npy')
     fmri_f = glob.glob(fmri_data)
 
     # check existence of the arrays
-    if len(fmri_f) == 1 and params.redo_mask == False:
+    if len(fmri_f) == 1 and REDO_MASK == False:
         fmri_data = np.load(glob.glob(fmri_data)[0], allow_pickle=True)
     # otherwise extract the data with masker 
     else:
@@ -109,7 +113,7 @@ for sub in subjects:
             params.mask,
             sub,
             fmri_arr_dir, 
-            params.db)
+            TASK)
     
     if params.zscore_per_session == False:
         fmri_data = zscore(fmri_data)  
@@ -119,22 +123,22 @@ for sub in subjects:
     #create design matrix 
     for s,sess in enumerate(sessions):
         #IO inference 
-        seq = fun.get_seq(db=params.db,
+        seq = fun.get_seq(db=TASK,
                         sub=sub,
                         sess=sess,
                         beh_dir=beh_dir)
         seq = sg.ConvertSequence(seq)['seq']
 
-        if params.db == 'Explore':
-            events = fun.get_events(params.db, sub, sess)
+        if TASK == 'Explore':
+            events = fun.get_events(TASK, sub, sess, params)
         else:
             io_inference = iof.get_post_inference(seq=seq,
                                                     seq_type= params.seq_type, 
                                                     options=params.io_options)
-            events = fun.get_events(params.db, sub, sess, beh_dir, io_inference, seq) 
+            events = fun.get_events(TASK, sub, sess, beh_dir, io_inference, seq) 
                   
         #frame time 
-        frame_times = fun.get_fts(params.db, sub, sess, fmri_dir, json_file_dir) 
+        frame_times = fun.get_fts(TASK, sub, sess, fmri_dir, json_file_dir, paths) 
 
         #wrapper for design matrix, uses the nilearn function within
         dmtx = create_design_matrix(events,
@@ -162,18 +166,18 @@ for sub in subjects:
     design_matrix.to_pickle(
         os.path.join(
             design_dir,
-            f'sub-{sub:02d}_design_matrix_' + params.db + f'{add_info}.pickle')) 
+            f'sub-{sub:02d}_design_matrix_' + TASK + f'{add_info}.pickle')) 
 
     # plot and save the design matrix
     if SAVE_DMTX_PLOT:
-        fig_fname = f'sub-{sub:02d}_design_matrix_' + params.db + f'{add_info}.png'
+        fig_fname = f'sub-{sub:02d}_design_matrix_' + TASK + f'{add_info}.png'
         fig_fpath = os.path.join(design_dir, fig_fname)
-        if params.db == 'Explore':
+        if TASK == 'Explore':
             fig, ax = plt.subplots(figsize=[8, 12])
         else:
             fig, ax = plt.subplots(figsize=[8, 6])
         plot_design_matrix(design_matrix, rescale = False, ax=ax)
-        fig.suptitle(f'Regressors: Subject {sub:02d}, {params.db}', y=1.05, fontweight='bold')
+        fig.suptitle(f'Regressors: Subject {sub:02d}, {TASK}', y=1.05, fontweight='bold')
         fig.savefig(fig_fpath, bbox_inches='tight', dpi=220)
         plt.close()
 
@@ -182,10 +186,10 @@ for sub in subjects:
     labels, estimates = run_glm(fmri_data, design_matrix.values, n_jobs = 1)
 
     # save results
-    label_fname = f'sub-{sub:02d}_{params.db}_labels_{params.mask}{add_info}.pickle'
+    label_fname = f'sub-{sub:02d}_{TASK}_labels_{params.mask}{add_info}.pickle'
     with open(os.path.join(output_dir, label_fname), 'wb') as f:
         pickle.dump(labels, f)
-    estimates_fname = f'sub-{sub:02d}_{params.db}_estimates_{params.mask}{add_info}.pickle'
+    estimates_fname = f'sub-{sub:02d}_{TASK}_estimates_{params.mask}{add_info}.pickle'
     with open(os.path.join(output_dir, estimates_fname), 'wb') as f:
         pickle.dump(estimates, f)
 
@@ -197,7 +201,7 @@ for sub in subjects:
     contrasts_neg = dict([(column, contrast_matrix_neg[i])
                           for i, column in enumerate(design_matrix.columns)])
     
-    if params.db != 'Explore':
+    if TASK != 'Explore':
         if params.update:
             contrasts = {'update': contrasts['update'],
                         'predictions': contrasts['predictions'],

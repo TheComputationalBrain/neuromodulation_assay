@@ -17,7 +17,7 @@ import pandas as pd
 import pickle
 import warnings
 
-from idealObserver3 import io_with_derivations
+from preprocessing.idealObserver3 import io_with_derivations
 
 # Helper functions
 def zscore(x):

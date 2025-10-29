@@ -1,23 +1,24 @@
 import os
-import pickle
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
 import nibabel as nib
+from pathlib import Path
 from nilearn import plotting, datasets, surface
 from matplotlib.colors import ListedColormap, BoundaryNorm
 from scipy.stats import pearsonr
 from neuromaps import transforms
-from params_and_paths import Paths, Params
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
+from params_and_paths import Paths, Params
 
 
 # --- Global configuration ---
-paths = Paths()
-params = Params()
+paths = Paths(task='all')
+params = Params(task='all')
 RESOLUTION = 'fsaverage'
 EXPLORE_MODEL = 'noEntropy_noER'
 FWHM = 5
@@ -29,7 +30,7 @@ fsaverage = datasets.fetch_surf_fsaverage(mesh=RESOLUTION)
 
 
 # Plot individual significant clusters per dataset & contrast
-def plot_individual_clusters(tasks, contrasts):
+def plot_individual_clusters(tasks, contrasts, output_dir):
     for contrast in contrasts:
         cmap = 'Blues' if '_neg' in contrast else 'Reds'
         for task in tasks:
@@ -50,59 +51,53 @@ def plot_individual_clusters(tasks, contrasts):
                 threshold=TRESH, vmax=VMAX, title=f"{task} {contrast}",
                 colorbar=True, inflate=True, cmap=cmap, cbar_tick_format='%.2f'
             )
-            out_path = os.path.join(OUTPUT_DIR, 'plots_by_task')
+            out_path = os.path.join(output_dir, 'plots_by_task')
             os.makedirs(out_path, exist_ok=True)
             plt.savefig(os.path.join(out_path, f'{task}_{contrast}_cluster_mass.png'), dpi=300)
             plt.close('all')
 
             # Right hemisphere detailed
             texture = surface.vol_to_surf(img, fsaverage.pial_right)
-            plotting.plot_surf_stat_map(
+            fig = plotting.plot_surf_stat_map(
                 fsaverage.infl_right, texture, bg_map=fsaverage.sulc_right,
                 hemi='right', threshold=TRESH, vmax=VMAX, title=f"{task} {contrast}",
                 colorbar=True, cmap=cmap, cbar_tick_format='%.2f'
             )
-            plt.savefig(os.path.join(out_path, f'{task}_{contrast}_cluster_mass_right.png'), dpi=300)
-            plt.close('all')
+            
+            mf.save_figure(fig, output_dir, f'{task}_{contrast}_cluster_mass_right')
 
 
 # Plot overlap across all datasets
-def plot_cluster_overlap_all(tasks, contrasts):
-    with open(os.path.join(OUTPUT_DIR, 'ROIs_overlap_explore.txt'), "w") as outfile:
-        for contrast in contrasts:
-            rois_with_overlap = []
+def plot_cluster_overlap_all(tasks, contrasts, output_dir):
+    for contrast in contrasts:
+        for hemi in ['right', 'left']:
+            task_masks = []
+            for task in tasks:
+                _, add_info = mf.get_beta_dir_and_info(task)
+                group_dir = (
+                    os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
+                    if task == 'Explore'
+                    else os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
+                )
+                img_path = os.path.join(group_dir, f'{contrast}_logp_max_mass{add_info}_{FWHM}.nii.gz')
+                img = nib.load(img_path)
+                texture = surface.vol_to_surf(img, getattr(fsaverage, f'pial_{hemi}'))
+                task_masks.append(texture > TRESH)
 
-            for hemi in ['right', 'left']:
-                task_masks = []
-                for task in tasks:
-                    _, add_info = mf.get_beta_dir_and_info(task)
-                    group_dir = (
-                        os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
-                        if task == 'Explore'
-                        else os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
-                    )
-                    img_path = os.path.join(group_dir, f'{contrast}_logp_max_mass{add_info}_{FWHM}.nii.gz')
-                    img = nib.load(img_path)
-                    texture = surface.vol_to_surf(img, getattr(fsaverage, f'pial_{hemi}'))
-                    task_masks.append(texture > TRESH)
+            # compute overlap
+            conditions_array = np.sum(task_masks, axis=0)
 
-                # compute overlap
-                all_tasks_mask = np.all(task_masks, axis=0)
-                conditions_array = np.sum(task_masks, axis=0)
+            cmap = ListedColormap(['#4793AF', '#FFC470', '#6C946F', '#DD5746'])
 
-                cmap = ListedColormap(['#4793AF', '#FFC470', '#6C946F', '#DD5746'])
-
-                # Save plots
-                for view in ['lateral', 'medial']:
-                    mesh = getattr(fsaverage, f'infl_{hemi}')
-                    bg_map = getattr(fsaverage, f'sulc_{hemi}')
-                    figure = plotting.plot_surf_roi(
-                        surf_mesh=mesh, roi_map=conditions_array, bg_map=bg_map,
-                        cmap=cmap, vmin=1, vmax=4, hemi=hemi, view=view
-                    )
-                    base = f'{contrast}_allOverlap_explore_{hemi}_{view}'
-                    plt.savefig(os.path.join(OUTPUT_DIR, f'{base}.png'), bbox_inches="tight", dpi=300)
-                    plt.savefig(os.path.join(OUTPUT_DIR, f'{base}.svg'), bbox_inches="tight")
+            # Save plots
+            for view in ['lateral', 'medial']:
+                mesh = getattr(fsaverage, f'infl_{hemi}')
+                bg_map = getattr(fsaverage, f'sulc_{hemi}')
+                fig = plotting.plot_surf_roi(
+                    surf_mesh=mesh, roi_map=conditions_array, bg_map=bg_map,
+                    cmap=cmap, vmin=1, vmax=4, hemi=hemi, view=view
+                )
+                mf.save_figure(fig, output_dir, f'{contrast}_allOverlap_{hemi}_{view}')
 
 
 # Plot colorbar legend for overlap
@@ -115,38 +110,15 @@ def plot_colorbar_overlap():
     sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
     sm.set_array([])
 
-    fig, ax = plt.subplots(figsize=(0.5, 5))
+    fig, ax = plt.subplots() 
     cbar = plt.colorbar(sm, cax=ax, orientation='vertical')
     cbar.set_ticks([0.5, 1.5, 2.5, 3.5])
     cbar.ax.set_yticklabels(labels)
     cbar.ax.tick_params(labelsize=24)
 
-    for ext in ['png', 'svg']:
-        plt.savefig(os.path.join(OUTPUT_DIR, f'colorbar_overlap_4cat.{ext}'), bbox_inches="tight", dpi=300)
-    plt.close('all')
+    return fig, ax
 
-
-# Group-level correlation analysis (modular)
-def plot_correlations(plots_to_generate=["all"]):
-    """
-    Generate correlation plots between second-level maps across tasks and contrasts.
-
-    plots_to_generate: list of strings controlling which plots are created.
-        Options include:
-        - "all": full correlation heatmap (default)
-        - "contrast_sorted": heatmap sorted by contrast/task
-        - "confidence": submatrix for confidence contrasts
-        - "surprise": submatrix for surprise contrasts
-        - "cross": cross correlation between confidence and surprise
-        - "lower_triangles": masked lower-triangle plots for publication-style visuals
-    """
-    plt.rcParams.update({'font.size': 16})
-
-    tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore']
-    cmap = np.genfromtxt('/home/ah278717/hansen_receptors/data/colourmap.csv', delimiter=',')
-    cmap_div = ListedColormap(cmap)
-
-    # --- Gather data ---
+def run_correlations(tasks, output_dir):
     data_list = []
     for task in tasks:
         _, add_info = mf.get_beta_dir_and_info(task)
@@ -179,19 +151,97 @@ def plot_correlations(plots_to_generate=["all"]):
 
     labels = [f"{r.task}_{r.contrast}" for _, r in df.iterrows()]
     corr_df = pd.DataFrame(corr_matrix, index=labels, columns=labels)
-    corr_df.to_csv(os.path.join(OUTPUT_DIR, 'correlation_df.csv'))
+    corr_df.to_csv(os.path.join(output_dir, 'correlation_df.csv'))
+
+
+# Group-level correlation analysis (modular)
+def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", output_dir=""):
+    """
+    Generate correlation plots between second-level maps across tasks and contrasts.
+
+    plots_to_generate: list of strings controlling which plots are created.
+        Options include:
+        - "all": full correlation heatmap (default)
+        - "contrast_sorted": heatmap sorted by contrast/task
+        - "confidence": submatrix for confidence contrasts
+        - "surprise": submatrix for surprise contrasts
+        - "cross": cross correlation between confidence and surprise
+        - "lower_triangles": masked lower-triangle plots for publication-style visuals
+    """
+    # --- get results ---
+    corr_df = pd.read_csv(os.path.join(paths.home_dir, 'domain_general', 'correlation_df.csv'), index_col = [0])
+    labels = corr_df.index
 
     # --- Helper for saving ---
-    def save_heatmap(matrix, fname, title=None, mask=None, annot=False):
-        plt.figure(figsize=(10, 8))
-        sns.heatmap(matrix, annot=annot, fmt=".2f", cmap=cmap_div,
-                    center=0, square=True, mask=mask, cbar_kws={'label': 'r'})
+    def save_heatmap(
+        matrix,
+        fname,
+        title=None,
+        mask=None,
+        annot=True,
+        rename_tasks=False,
+    ):
+        """
+        Saves a heatmap for a matrix.
+        
+        If rename_tasks=True, any label containing a task name from
+        params.study_mapping will be replaced with the corresponding study name.
+        """
+        # Copy to avoid modifying original
+        matrix_to_plot = matrix.copy()
+
+        if rename_tasks:
+            new_index = [
+                next((params.study_mapping[t] for t in params.study_mapping if t in str(lbl)), lbl)
+                for lbl in matrix_to_plot.index
+            ]
+            new_columns = [
+                next((params.study_mapping[t] for t in params.study_mapping if t in str(lbl)), lbl)
+                for lbl in matrix_to_plot.columns
+            ]
+            matrix_to_plot.index = new_index
+            matrix_to_plot.columns = new_columns
+
+        data = matrix_to_plot.values
+        max_abs = np.max(np.abs(data))
+        vmin = -max_abs
+        vmax = max_abs
+
+        fig = plt.figure()
+        ax = sns.heatmap(
+            matrix_to_plot,
+            annot=annot,
+            fmt=".2f",
+            cmap=cmap,
+            center=0,
+            square=True,
+            mask=mask,
+            linewidth=1,
+            vmin=vmin, 
+            vmax=vmax,   
+            cbar_kws=dict(label = "Pearson's correlation", shrink= 0.6)
+        )
+
+        # Get colorbar
+        cbar = ax.collections[0].colorbar  
+
+        cbar = ax.collections[0].colorbar
+        cbar.set_ticks([vmin, vmax])
+        cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
+        cbar.ax.tick_params(pad=1)
+
+        cbar.set_label("Contribution (%)", labelpad=-12)  
+        cbar.ax.yaxis.label.set_verticalalignment('center')
+
+        # Rotate tick labels to avoid overlap
+        plt.xticks(rotation=45, ha="right")
+        plt.yticks(rotation=45)
+
         if title:
             plt.title(title)
-        plt.tight_layout()
-        for ext in ['png', 'svg']:
-            plt.savefig(os.path.join(OUTPUT_DIR, f'{fname}.{ext}'), dpi=300, bbox_inches='tight')
-        plt.close('all')
+
+        mf.save_figure(fig, output_dir, fname)
+        plt.close(fig)  
 
     # --- 1. Full heatmap ---
     if "all" in plots_to_generate:
@@ -232,11 +282,12 @@ def plot_correlations(plots_to_generate=["all"]):
 
         conf_df = corr_df.loc[conf_labels, conf_labels]
         mask_conf = np.triu(np.ones_like(conf_df, dtype=bool))
-        save_heatmap(conf_df, 'correlation_confidence_lower_triangle', 'Confidence (lower triangle)', mask=mask_conf)
+        save_heatmap(conf_df, 'correlation_confidence_lower_triangle', None, mask=mask_conf, rename_tasks=True)
 
         surpr_df = corr_df.loc[surpr_labels, surpr_labels]
         mask_surpr = np.triu(np.ones_like(surpr_df, dtype=bool))
-        save_heatmap(surpr_df, 'correlation_surprise_lower_triangle', 'Surprise (lower triangle)', mask=mask_surpr)
+        save_heatmap(surpr_df, 'correlation_surprise_lower_triangle', None, mask=mask_surpr, rename_tasks=True)
+
 
 # Main controller 
 def run_analysis(
@@ -249,17 +300,22 @@ def run_analysis(
     tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore']
     contrasts = ['surprise', 'confidence', 'surprise_neg', 'confidence_neg']
 
+    mf.set_publication_style(font_size=8, layout="2-across")
+
     if run_individual:
-        plot_individual_clusters(tasks, contrasts)
+        plot_individual_clusters(tasks, contrasts, OUTPUT_DIR) #saves internally by task and latent variable
 
     if run_overlap:
-        plot_cluster_overlap_all(tasks, contrasts)
+        plot_cluster_overlap_all(tasks, contrasts, OUTPUT_DIR) #saves internally by hemisphere
 
     if run_colorbar:
-        plot_colorbar_overlap()
+        fig, ax = plot_colorbar_overlap()
+        mf.save_figure(fig, OUTPUT_DIR, 'colorbar_overlap_4cat')
 
     if run_correlations:
-        plot_correlations(plots_to_generate=corr_plots or ["lower_triangles"])
+        run_correlations(tasks,OUTPUT_DIR)
+        cmap_div = mf.get_custom_colormap('diverging')
+        plot_correlations(["lower_triangles"], cmap_div, OUTPUT_DIR)
 
 if __name__ == "__main__":
 

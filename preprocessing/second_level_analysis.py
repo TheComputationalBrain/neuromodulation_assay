@@ -9,12 +9,14 @@ contrasts and plots the results. First-level contrasts have been parformed seper
 """
 
 import os
+import sys
 import pickle
 import pandas as pd
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
 import seaborn as sns
+from pathlib import Path
 from nilearn.glm.second_level import SecondLevelModel, non_parametric_inference
 from nilearn import plotting, image
 from nilearn import datasets
@@ -30,13 +32,14 @@ parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
 
-paths = Paths()
-params = Params()
-rec = Receptors()
+TASK = 'EncodeProb'
 
 RUN_PERMUTATION = True
 RESOLUTION = 'fsaverage'
 
+paths = Paths(task=TASK)
+params = Params(task=TASK)
+rec = Receptors()
 
 #for cluster permutation:
 N_PERM = 100000
@@ -44,6 +47,11 @@ N_JOBS = 4
 TRESH = 0.001
 FWHM = 5
 TWO_SIDED = False
+
+if TASK in ['NAConf']:
+    add_info = '_firstTrialsRemoved'
+else:
+    add_info = ""
 
 # --- Utility functions ---
 
@@ -58,8 +66,8 @@ def plot_beta_map(effect_map, var, plot_path, resolution, add_info):
         inflate=True, symmetric_cbar=True,
         cbar_tick_format='%2f'
     )
-    fname = f'{var}_effect_map{add_info}.png'
-    plt.savefig(os.path.join(plot_path, fname), dpi=300)
+    fname = f'{var}_effect_map{add_info}.pdf'
+    plt.savefig(os.path.join(plot_path, fname), transparent=True)
     plt.close()
 
 
@@ -75,7 +83,7 @@ def plot_z_map(z_map, var, plot_path, resolution, add_info):
         inflate=True, symmetric_cbar=True,
         cbar_tick_format='%.2f'
     )
-    plt.savefig(os.path.join(plot_path, f'{var}_z_map{add_info}.png'), dpi=300)
+    plt.savefig(os.path.join(plot_path, f'{var}_z_map{add_info}.pdf'), transparent=True)
     plt.close()
 
     # Right hemisphere only, lateral view
@@ -87,18 +95,21 @@ def plot_z_map(z_map, var, plot_path, resolution, add_info):
         cmap='cold_hot', inflate=True,
         symmetric_cbar=True, cbar_tick_format='%i'
     )
-    plt.savefig(os.path.join(plot_path, f'{var}_z_map_right{add_info}.png'), dpi=300)
-    plt.savefig(os.path.join(plot_path, f'{var}_z_map_right{add_info}.svg'), transparent=True)
+    plt.savefig(os.path.join(plot_path, f'{var}_z_map_right{add_info}.pdf'), transparent=True)
     plt.close()
 
 
 # --- Main analysis ---
 
-fmri_dir = mf.get_fmri_dir(params.db)
+fmri_dir = mf.get_fmri_dir(params.db, params.root_dir, params.data_dir)
 subjects = [s for s in mf.get_subjects(params.db, fmri_dir) if s not in params.ignore]
 
 # Output paths
-beta_dir, add_info  = mf.get_beta_dir_and_info(params.task)
+if params.db == 'Explore':
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level',params.model)
+else: 
+    output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
+beta_dir, add_info  = mf.get_beta_dir_and_info(TASK)
 
 plot_path = os.path.join(output_dir, 'plot_raw')
 os.makedirs(plot_path, exist_ok=True)
@@ -132,12 +143,12 @@ for var in params.latent_vars:
     with open(os.path.join(output_dir, f'group_{var}_{params.mask}_effect_size{add_info}.pickle'), 'wb') as f:
         pickle.dump(effect, f)
 
-    plot_beta_map(effect_map, var, plot_path, resolution, add_info)
+    plot_beta_map(effect_map, var, plot_path, RESOLUTION, add_info)
 
     # --- Z-map ---
     z_map = second_level_model.compute_contrast('intercept', output_type='z_score')
     nib.save(z_map, os.path.join(output_dir, f'{var}_{params.mask}_z_map{add_info}.nii.gz'))
-    plot_z_map(z_map, var, plot_path, resolution, add_info)
+    plot_z_map(z_map, var, plot_path, RESOLUTION, add_info)
 
 if RUN_PERMUTATION:
 

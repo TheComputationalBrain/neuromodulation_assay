@@ -3,9 +3,11 @@
 Created on Mon Jun 27 12:02:11 2022
 
 @author: Saeyeon, Alice
+
+This script is self contained, as it load already existing meta analysis data and is supposed to also run independendly of this project
 """
 
-#%% Import useful packages 
+# Import useful packages 
 
 '''import packages from python'''
 import pickle
@@ -18,6 +20,8 @@ import os
 import pandas as pd
 import math
 import sys
+import matplotlib
+import seaborn as sns
 from scipy.stats import sem, ttest_1samp
 from scipy.stats import bootstrap
 from scipy.stats import linregress 
@@ -45,16 +49,19 @@ sys.modules['pandas.core.indexes.numeric'] = fake_numeric
 
 '''import tools from the toolbox'''
 # Append the path of the main directory in the search paths for modules
-root = os.path.dirname(os.path.abspath("__file__"))
-root_model = os.path.join(root, "TransitionProbModel/")
+root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+root_model = os.path.join(root, "TransitionProbModel")
+
 if root_model not in sys.path:
     sys.path.append(root_model)
-from TransitionProbModel.MarkovModel_Python import IdealObserver as IO
-from TransitionProbModel.MarkovModel_Python import IdealObserver as IO
-from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
+
+from MarkovModel_Python import IdealObserver as IO
+from MarkovModel_Python import IdealObserver as IO
+from MarkovModel_Python import IdealObserver as IO
+from MarkovModel_Python import GenerateSequence as sg
 
 
-#%% Compute some useful functions :
+#Compute some useful functions :
     
 def entropy(p):
     p = np.clip(p, np.finfo(np.float).resolution, 1-np.finfo(np.float).resolution) 
@@ -97,11 +104,79 @@ def print_regression_results(df, col, file, label=''):
     file.write(f"  Slope: mean={slopes.mean():.03f}, SD={slopes.std():.03f}, "
                f"d={slopes.mean()/slopes.std():.03f}, "
                f"t({slopes.count()-1})={t_res.statistic:.02f}, p={t_res.pvalue:.2e}\n\n")
+    
+def set_publication_style(font_size=7, line_width=1, context="paper", layout="single"):
+    """
+    Set consistent, publication-quality figure style.
+    
+    Parameters
+    ----------
+    font_size : int
+        Base font size for all text.
+    line_width : float
+        Default line width for axes and lines.
+    context : str
+        Seaborn plotting context ('paper', 'notebook', 'talk', 'poster').
+    layout : str
+        Publication layout: 'single', '2-across', or '3-across'
+        - single: one plot per column (3.35" width)
+        - 2-across: two plots spanning page width (≈3.3" each)
+        - 3-across: three plots spanning page width (≈2.15" each)
+    """
+
+    # Choose figure width based on layout
+    if layout == "single":
+        figsize = (3.35, 2.6)  # 85 mm width
+        capsize = 2.5
+    elif layout == "2-across":
+        figsize = (3.3, 2.5)   # half of double-column width
+        capsize = 2.0
+    elif layout == "3-across":
+        figsize = (2.15, 2.3)  # one-third of double-column width
+        capsize = 1.5
+    else:
+        raise ValueError("layout must be: 'single', '2-across', or '3-across'")
+    
+    matplotlib.rcParams['errorbar.capsize'] = capsize
+
+    sns.set_theme(
+        style="ticks",
+        context=context,
+        font="sans-serif",
+        rc={
+            # Figure sizing
+            "figure.figsize": figsize,
+            "figure.dpi": 300,
+
+            # Fonts
+            "font.size": font_size,
+            "axes.titlesize": font_size,
+            "axes.labelsize": font_size,
+            "xtick.labelsize": font_size,
+            "ytick.labelsize": font_size,
+            "legend.fontsize": font_size,
+            "legend.title_fontsize": font_size,
+
+            # Lines & ticks
+            "axes.linewidth": 0.5,
+            "lines.linewidth": line_width,
+            "lines.markersize": 3,
+            "xtick.major.size": 2.5,
+            "ytick.major.size": 2.5,
+
+            # Export-friendly
+            "savefig.transparent": True,
+        },
+    )
+
+    # Embed fonts correctly in vector exports
+    matplotlib.rcParams['pdf.fonttype'] = 42
+    matplotlib.rcParams['ps.fonttype'] = 42
 
 
-# %% Get data and inference for each subject
+#  Get data and inference for each subject
 behavior_path = '/neurospin/unicog/protocols/comportement/ConfidenceDataBase_2020_Meyniel/subjects_data'
-out_dir = '/home_local/alice_hodapp/NeuroModAssay/domain_general/behavior' 
+out_dir = '/home_local/alice_hodapp/NeuroModAssay/figures'
 
 #subject to skip 
 naconf_numbers = [3, 5, 6, 9, 36, 51]
@@ -258,7 +333,7 @@ for subject in filtered_list_subject:
     data = pd.concat([data, sub_data])    
 
 
-# %% Compute within subject correlations and linear regressions
+#  Compute within subject correlations and linear regressions
 
 subj_correlations = pd.DataFrame(index=filtered_list_subject,
                                  columns=['sub_io_conf', 'sub_io_conf_int', 'sub_io_conf_slope',
@@ -333,8 +408,8 @@ with open(os.path.join(out_dir, 'behav_group_summary_meta.txt'), "w") as file:
         print_stat_results(subj_correlations, col, file)
         print_regression_results(subj_correlations, col, file)
         
-# %% Plot group level effects, binned, with linear fit
-FONTSIZE = 16
+#  Plot group level effects, binned, with linear fit
+set_publication_style(font_size=7, layout="3-across")
 
 N_BINS = 6
 analysis_list = [
@@ -347,7 +422,7 @@ analysis_list = [
 for analysis in analysis_list:
     binned_data = data.groupby(by=[pd.qcut(data[analysis['ind_var']].rank(method='first'), N_BINS), 'subject']).mean()
     binned_data = binned_data.groupby(level=analysis['ind_var'])
-    fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+    fig, ax = plt.subplots()
     #simple_axis(ax)
     if analysis['dep_var'] == 'io_pred':
         xlim = [0, 1]
@@ -370,16 +445,16 @@ for analysis in analysis_list:
     ax.errorbar(binned_data.mean()[analysis['ind_var']],
                  binned_data.mean()[analysis['dep_var']],
                  binned_data.sem()[analysis['dep_var']],
-                 fmt='o', capsize=8,
-                 markersize=8,
+                 fmt='o', 
                  color="black",
                  zorder=2)
-    ax.set_xlabel(analysis['x_label'], fontsize=FONTSIZE-2)
-    ax.set_ylabel(analysis['y_label'], fontsize=FONTSIZE-2)
-    ax.tick_params(axis='both', which='major', labelsize=FONTSIZE-4, pad=8)
+    ax.set_xlabel(analysis['x_label'])
+    ax.set_ylabel(analysis['y_label'])
+    ax.tick_params(axis='both', which='major', pad=8)
     if analysis['x_label'] == 'Ideal confidence \n(log precision)' and analysis['y_label'] == 'Subjective confidence':
         ax.set_ylim(0.5, 0.8)
     fig.tight_layout()
+    sns.despine(trim=False)
     fig.savefig(os.path.join(out_dir, f"{analysis['dep_var']}_vs_{analysis['ind_var']}_group.svg"))
     fig.savefig(os.path.join(out_dir, f"{analysis['dep_var']}_vs_{analysis['ind_var']}_group.png"), dpi=300)
 
@@ -427,7 +502,7 @@ for dataset_name, dataset_df in data.groupby('dataset'):
         binned_mean = binned.groupby(level=0).mean()
         binned_sem = binned.groupby(level=0).sem()
 
-        fig, ax = plt.subplots(1, 1, figsize=(4, 4))
+        fig, ax = plt.subplots()
         if analysis['dep_var'] == 'io_pred':
             xlim = [0, 1]
         else:
@@ -449,12 +524,12 @@ for dataset_name, dataset_df in data.groupby('dataset'):
         ax.errorbar(binned_mean[analysis['ind_var']],
                     binned_mean[analysis['dep_var']],
                     binned_sem[analysis['dep_var']],
-                    fmt='o', capsize=8, markersize=8,
+                    fmt='o',
                     color="black", zorder=2)
 
-        ax.set_xlabel(analysis['x_label'], fontsize=FONTSIZE - 2)
-        ax.set_ylabel(analysis['y_label'], fontsize=FONTSIZE - 2)
-        ax.tick_params(axis='both', which='major', labelsize=FONTSIZE - 4, pad=8)
+        ax.set_xlabel(analysis['x_label'])
+        ax.set_ylabel(analysis['y_label'])
+        ax.tick_params(axis='both', which='major', pad=8)
 
         if analysis['x_label'] == 'Ideal confidence \n(log precision)' and analysis['y_label'] == 'Subjective confidence':
             # Calculate the min and max of the error bars
@@ -469,6 +544,7 @@ for dataset_name, dataset_df in data.groupby('dataset'):
             ax.set_ylim(ymin, ymax)
 
         fig.tight_layout()
+        sns.despine(trim=False)
         filename = f"{dataset_name}_{analysis['dep_var']}_vs_{analysis['ind_var']}_group.svg"
         fig.savefig(os.path.join(out_dir, filename))
         fig.savefig(os.path.join(out_dir, filename.replace('.svg', '.png')), dpi=300)

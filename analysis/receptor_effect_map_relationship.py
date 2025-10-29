@@ -11,24 +11,25 @@ and total dominance values.
 """
 
 import os
-# Limit resource usage before importing NumPy
-os.environ["OMP_NUM_THREADS"] = "1"
-os.environ["OPENBLAS_NUM_THREADS"] = "1"
-os.environ["MKL_NUM_THREADS"] = "1"
-os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
-os.environ["NUMEXPR_NUM_THREADS"] = "1"
-
+import sys
 import numpy as np
 import pandas as pd
 import pickle
+from pathlib import Path
 from concurrent.futures import ProcessPoolExecutor
 from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
-
-import main_funcs as mf
-from params_and_paths_analysis import Paths, Params, Receptors
+import seaborn as sns
+import matplotlib.pyplot as plt
+from matplotlib.ticker import FormatStrFormatter
+from statsmodels.stats.multitest import fdrcorrection
+from scipy.stats import ttest_1samp
+from params_and_paths import Paths, Params, Receptors
 from dominance_funcs import dominance_stats
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+import main_funcs as mf
 
 # --- Configuration ---
 MODEL_TYPE = 'linear'      # Options: 'linear', 'lin+quad', 'lin+interact', 'poly2'
@@ -38,29 +39,26 @@ NUM_WORKERS = 30           # Parallel dominance analysis workers
 START_AT = 0               # Resume point for dominance analysis
 
 # --- Initialize paths and parameters ---
-paths = Paths()
-params = Params()
+paths = Paths(task='all')
+params = Params(task='all')
 rec = Receptors()
 
-fmri_dir = mf.get_fmri_dir(params.db)
-subjects = [s for s in mf.get_subjects(params.db, fmri_dir) if s not in params.ignore]
 
-
-def plot_regression_coefficients(rec, params, paths, mask_comb, model_type='linear'):
+def plot_regression_coefficients(tasks, model_type='linear'):
     """Plot regression coefficients across subjects with FDR-corrected significance."""
     
-    for task in params.task:
+    for task in tasks:
 
         beta_dir, _ = mf.get_beta_dir_and_info(task)
         output_dir = os.path.join(beta_dir, 'regressions', rec.source)
         os.makedirs(output_dir, exist_ok=True)
 
 
-        base_colors = sns.color_palette('husl', len(receptor_groups))
+        base_colors = sns.color_palette('husl', len(params.receptor_groups))
         plt.rcParams.update({'font.size': 18})
 
         for latent_var in params.latent_vars:
-            fname = f'{latent_var}_{mask_comb}_regression_results_bysubject_all_{model_type}.csv'
+            fname = f'{latent_var}_{params.mask}_regression_results_bysubject_all_{model_type}.csv'
             file_path = os.path.join(output_dir, fname)
             if not os.path.exists(file_path):
                 print(f"Skipping {latent_var} — no file found.")
@@ -84,7 +82,7 @@ def plot_regression_coefficients(rec, params, paths, mask_comb, model_type='line
             # --- Group color logic ---
             receptor_to_group = {r: i for i, grp in enumerate(params.receptor_groups) for r in grp}
             receptor_to_class = {r: i for i, grp in enumerate(params.receptor_class) for r in grp}
-            ordered = [r for grp in receptor_groups for r in grp]
+            ordered = [r for grp in params.receptor_groups for r in grp]
 
             colors = []
             for receptor in ordered:
@@ -99,7 +97,7 @@ def plot_regression_coefficients(rec, params, paths, mask_comb, model_type='line
                 colors.append(col)
 
             # --- Plot ---
-            fig, ax = plt.subplots(figsize=(12, 8))
+            fig, ax = plt.subplots() 
             sns.boxplot(data=results_df[ordered], ax=ax, palette=colors)
             for i, receptor in enumerate(ordered):
                 if receptor in sig_receptors:
@@ -112,9 +110,6 @@ def plot_regression_coefficients(rec, params, paths, mask_comb, model_type='line
             ax.set_ylabel('Coefficient')
             ax.set_title(f'{latent_var} regression coefficients ({rec.source})')
 
-            ax.text(0.95, 0.95, textstr, transform=ax.transAxes,
-                    ha='right', va='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
-
             plt.tight_layout()
             fig_dir = os.path.join(output_dir, 'plots')
             os.makedirs(fig_dir, exist_ok=True)
@@ -122,7 +117,7 @@ def plot_regression_coefficients(rec, params, paths, mask_comb, model_type='line
             plt.close()
 
 # ---------- Data loading ----------
-def load_dominance_data(experiments, latent_var, paths, params, mask="schaefer", model_type="linear"):
+def load_dominance_data(tasks, latent_var, model_type="linear"):
     """
     Loads and standardizes dominance results for given experiments.
     Returns a dictionary {exp_name: standardized_df}
@@ -130,15 +125,15 @@ def load_dominance_data(experiments, latent_var, paths, params, mask="schaefer",
     results = {}
     model_suffix = "" if model_type == "linear" else "_lin+quad"
 
-    for exp in experiments:
-        beta_dir = os.path.join(paths.home_dir, exp, params.mask, "first_level")
+    for task in tasks:
+        beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
         input_dir = os.path.join(beta_dir, "regressions", "PET2")
-        fname = f"{latent_var}_{mask}_dominance_allsubj{model_suffix}.pickle"
+        fname = f"{latent_var}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
         df = pd.read_pickle(os.path.join(input_dir, fname))
         if "a2" in df.columns:
             df.rename(columns={"a2": "A2"}, inplace=True)
         standardized_df = df.div(df.sum(axis=1), axis=0)
-        results[exp] = standardized_df
+        results[task] = standardized_df
     return results
 
 
@@ -159,246 +154,381 @@ def aggregate_dominance(results_dict, exclude_explore=True):
 
 # ---------- Plotting ----------
 def plot_dominance_bars(
-    df, receptor_groups, receptor_class, 
-    title=None, output_path=None, show_errorbars=True, ylim=(0, 0.16)
+    df, receptor_groups, receptor_class, receptor_label_formatted,
+    title=None, show_errorbars=True, ylim=(0, 0.16)
 ):
     """
     Generic barplot function for dominance data.
     Works for both individual studies and group-level averages.
     """
+    # Order and maps
     ordered_receptors = [r for group in receptor_groups for r in group]
     receptor_to_group = {r: i for i, g in enumerate(receptor_groups) for r in g}
     receptor_to_class = {r: i for i, g in enumerate(receptor_class) for r in g}
 
+    # Base color palette for groups
     base_colors = sns.color_palette("husl", len(receptor_groups))
-    colors = []
-    for r in ordered_receptors:
-        group_idx = receptor_to_group[r]
-        class_type = receptor_to_class.get(r, -1)
-        if class_type == 0:
-            color = sns.dark_palette(base_colors[group_idx], n_colors=3)[1]
-        elif class_type == 1:
-            color = sns.light_palette(base_colors[group_idx], n_colors=3)[1]
-        else:
-            color = sns.color_palette("muted")[group_idx]
-        colors.append(color)
 
+    colors = []
+    for receptor in ordered_receptors:
+        group_idx = receptor_to_group.get(receptor, -1)
+        class_type = receptor_to_class.get(receptor, -1)
+        if class_type == 0:  # Excitatory
+            color = sns.dark_palette(base_colors[group_idx], n_colors=3)[1]
+            colors.append({"face": color, "edge": color})
+        elif class_type == 1:  # Inhibitory
+            color = sns.light_palette(base_colors[group_idx], n_colors=3)[1]
+            colors.append({"face": color, "edge": color})
+        else:  # “other” receptors
+            face_color = sns.light_palette(base_colors[group_idx], n_colors=3)[0]
+            edge_color = sns.dark_palette(base_colors[group_idx], n_colors=3)[2]
+            colors.append({"face": face_color, "edge": edge_color})
+
+    # Compute mean & SEM 
     mean_vals = df[ordered_receptors].mean()
     sem_vals = df[ordered_receptors].sem()
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.bar(
+    # --- PLOT ---
+    fig, ax = plt.subplots() 
+
+    bars = ax.bar(
         ordered_receptors,
         mean_vals,
         yerr=sem_vals if show_errorbars else None,
-        color=colors,
-        edgecolor="black",
-        capsize=5,
+        color=[c["face"] for c in colors],
+        edgecolor=[c["edge"] for c in colors],
     )
-    ax.set_xticks(np.arange(len(ordered_receptors)))
-    ax.set_xticklabels(params.receptor_label_formatted, rotation=90)
-    for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
-        label.set_color(base_colors[receptor_to_group[receptor]])
 
+    # Add hatching for receptors not in excitatory/inhibitory classes
+    for i, receptor in enumerate(ordered_receptors):
+        if receptor not in receptor_class[0] and receptor not in receptor_class[1]:
+            bars[i].set_hatch("//")
+
+    # --- Formatting ---
+    ax.set_xticks(np.arange(len(ordered_receptors)))
+    ax.set_xticklabels(receptor_label_formatted, rotation=90)
+    for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
+        group_idx = receptor_to_group.get(receptor, -1)
+        label.set_color(base_colors[group_idx])
+
+    ax.set_xlabel("Receptor/Transporter")
     ax.set_ylabel("Contribution (%)")
-    ax.set_ylim(ylim)
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
+    ax.set_ylim(ylim)
     if title:
         ax.set_title(title)
+
     plt.tight_layout()
 
-    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, bbox_inches="tight")
-    plt.close(fig)
-    plt.show()
+    return fig, ax
 
-
-def plot_dominance_heatmap(df, cmap, title=None, output_path=None):
+def plot_dominance_heatmap(
+    all_means,
+    receptor_groups,
+    cmap,
+    receptor_label_formatted,
+    title=None,
+    rename_tasks=False,
+):
     """
     Generic heatmap plotting for dominance means across studies.
+    
+    Parameters
+    ----------
+    all_means : pd.DataFrame
+        DataFrame of dominance means (rows=studies/tasks, columns=receptors)
+    receptor_groups : list of lists
+        Groups of receptors to determine order
+    cmap : matplotlib colormap
+        Colormap for heatmap
+    receptor_label_formatted : list
+        Labels for x-axis receptors
+    title : str, optional
+        Figure title
+    rename_tasks : bool, default False
+        If True, remap row/column labels containing task names to study names
+        according to `params.study_mapping`.
     """
-    fig, ax = plt.subplots(figsize=(12, 4))
-    sns.heatmap(
-        df,
-        xticklabels=params.receptor_labels,
+    ordered_receptors = [r for group in receptor_groups for r in group]
+    
+    all_means_to_plot = all_means.copy()
+
+    # Apply task-to-study remapping if requested
+    if rename_tasks:
+        new_index = [
+            next((params.study_mapping[t] for t in params.study_mapping if t in str(lbl)), lbl)
+            for lbl in all_means_to_plot.index
+        ]
+        all_means_to_plot.index = new_index
+
+    fig, ax = plt.subplots()
+    vmin=0
+    vmax=0.18
+    ax = sns.heatmap(
+        all_means_to_plot[ordered_receptors],
+        xticklabels=receptor_label_formatted,
         cmap=cmap,
-        linewidths=0.5,
-        vmin=0,
-        vmax=0.18,
-        cbar_kws=dict(location="left", label="Contribution (%)"),
+        linewidths=1,
+        vmin=vmin,
+        vmax=vmax,
+        cbar_kws=dict(location="left", label="Contribution (%)")
     )
-    plt.yticks(rotation=0)
+    cbar = ax.collections[0].colorbar
+    cbar.set_ticks([vmin, vmax])
+    cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
+    cbar.ax.tick_params(pad=1)
+
+    cbar.set_label("Contribution (%)", labelpad=-12) 
+    cbar.ax.yaxis.set_label_position('left')          
+    cbar.ax.yaxis.label.set_verticalalignment('center')
+
+    plt.yticks(rotation=90)
     if title:
         plt.title(title)
     plt.tight_layout()
 
-    Path(os.path.dirname(output_path)).mkdir(parents=True, exist_ok=True)
-    plt.savefig(output_path, bbox_inches="tight")
-    plt.close(fig)
+    return fig, ax
 
+def plot_explore_dominance_heatmap(
+    latent_vars,
+    receptor_groups,
+    receptor_label_formatted,
+    cmap,
+    model_type="linear",
+    title=None,
+):
+    """
+    Special-case function to plot Explore dominance heatmap
+    including both latent variables in a single plot.
+    """
 
-# Regression Analysis
-if RUN_REGRESSION:
-    for task in params.tasks:
-        beta_dir, _ = mf.get_beta_dir_and_info()
-        output_dir = os.path.join(beta_dir, 'regressions', rec.source)
-        os.makedirs(output_dir, exist_ok=True)
+    # Load dominance data only for Explore
+    all_explore_means = []
+    model_suffix = "" if model_type == "linear" else "_lin+quad"
+    task = "Explore"
 
-        receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)
-        receptor_density = mf.load_recptor_array(on_surface=False)
+    ordered_receptors = [r for group in receptor_groups for r in group]
 
-        # Determine regression columns
-        if MODEL_TYPE == 'linear':
-            columns = rec.receptor_names + ["R2", "adjusted_R2", "BIC"]
-        else:
-            poly = PolynomialFeatures(degree=2, include_bias=False)
-            dummy = np.zeros((1, receptor_density.shape[1]))
-            poly.fit_transform(dummy)
-            feature_names = poly.get_feature_names_out(rec.receptor_names)
+    for lv in latent_vars:
+        beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+        input_dir = os.path.join(beta_dir, "regressions", "PET2")
 
-            if MODEL_TYPE == 'lin+quad':
-                # Linear + quadratic only (exclude interaction terms)
-                mask = [(" " not in n) or ("^" in n) for n in feature_names]
-                feature_names = feature_names[mask]
-            elif MODEL_TYPE == 'lin+interact':
-                # Linear + interactions only (exclude squared terms)
-                mask = ["^" not in n for n in feature_names]
-                feature_names = feature_names[mask]
+        fname = f"{lv}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
+        df = pd.read_pickle(os.path.join(input_dir, fname))
 
-            columns = list(feature_names) + ["R2", "adjusted_R2", "BIC"]
+        if "a2" in df.columns:
+            df.rename(columns={"a2": "A2"}, inplace=True)
 
-        for latent_var in params.latent_vars:
-            results_df = pd.DataFrame(columns=columns)
+        # Standardize
+        df = df.div(df.sum(axis=1), axis=0)
 
-            for sub in subjects:
-                y_data = mf.load_effect_map_array(sub, task, latent_var)
-                receptor_density_zm = receptor_density
+        mean_vals = df[ordered_receptors].mean()
+        mean_vals.name = lv
+        all_explore_means.append(mean_vals)
 
-                non_nan_idx = ~np.isnan(y_data)
-                X = receptor_density_zm[non_nan_idx, :]
-                y = y_data[non_nan_idx]
+    # Create row × receptor matrix (rows = latent vars)
+    explore_means = pd.concat(all_explore_means, axis=1).T
 
-                # Model selection
-                if MODEL_TYPE == 'linear':
-                    model = LinearRegression()
-                elif MODEL_TYPE == 'poly2':
-                    model = make_pipeline(PolynomialFeatures(degree=2, include_bias=False),
-                                          LinearRegression())
-                else:
-                    poly = PolynomialFeatures(degree=2, include_bias=False)
-                    X = poly.fit_transform(X)
-                    feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+    vmin=0
+    vmax=0.18
 
-                    if MODEL_TYPE == 'lin+quad':
-                        mask = [(" " not in n) or ("^" in n) for n in feature_names]
-                    elif MODEL_TYPE == 'lin+interact':
-                        mask = ["^" not in n for n in feature_names]
+    fig, ax = plt.subplots()
 
-                    X = X[:, mask]
-                    filtered_feature_names = feature_names[mask]
-                    model = LinearRegression()
+    # Plot using existing helper heatmap function
+    ax = sns.heatmap(
+        explore_means[ordered_receptors],
+        xticklabels=receptor_label_formatted,
+        cmap=cmap,
+        linewidths=1,
+        vmin=vmin,
+        vmax=vmax,
+        cbar_kws=dict(location="left", label="Contribution (%)")
+    )
+    cbar = ax.collections[0].colorbar
+    cbar.set_ticks([vmin, vmax])
+    cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
+    cbar.ax.tick_params(pad=1)
 
-                # Fit model and compute metrics
-                model.fit(X, y)
-                coefs = (model.named_steps['linearregression'].coef_
-                         if MODEL_TYPE == 'poly2' else model.coef_)
+    cbar.set_label("Contribution (%)", labelpad=-12)  
+    cbar.ax.yaxis.set_label_position('left')        
+    cbar.ax.yaxis.label.set_verticalalignment('center')
 
-                yhat = model.predict(X)
-                ss_res = np.sum((y - yhat) ** 2)
-                ss_tot = np.sum((y - np.mean(y)) ** 2)
-                r2 = 1 - ss_res / ss_tot
-                adj_r2 = 1 - (1 - r2) * (len(y) - 1) / (len(y) - X.shape[1] - 1)
+    plt.yticks(rotation=90)
+    
 
-                results = pd.DataFrame([np.append(coefs, [r2, adj_r2])],
-                                       columns=columns)
-                results_df = pd.concat([results_df, results], ignore_index=True)
-
-            fname = f'{latent_var}_{params.mask}_regression_results_bysubject_all_{MODEL_TYPE}.csv'
-            results_df.to_csv(os.path.join(output_dir, fname), index=False)
-
-# Dominance Analysis
-if RUN_DOMINANCE:
-
-    def process_subject(sub, latent_var, task):
-        """Run dominance analysis for a single subject."""
-        print(f"--- Dominance analysis for {task} subject {sub} ----")
-
-        beta_dir, _ = mf.get_beta_dir_and_info()
-        output_dir = os.path.join(beta_dir, 'regressions', rec.source)
-        os.makedirs(output_dir, exist_ok=True)
-
-        y_data = mf.load_effect_map_array(sub, task, latent_var)
-        non_nan_idx = ~np.isnan(y_data)
-        X = receptor_density[non_nan_idx, :]
-        y = y_data[non_nan_idx]
-
-        if MODEL_TYPE == 'lin+quad':
-            poly = PolynomialFeatures(degree=2, include_bias=False)
-            X = poly.fit_transform(X)
-            feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
-            mask = [(" " not in n) or ("^" in n) for n in feature_names]
-            X = X[:, mask]
-            filtered_feature_names = feature_names[mask]
-            m = dominance_stats(X, y, feature_names=filtered_feature_names)
-        elif MODEL_TYPE == 'linear':
-            m = dominance_stats(X, y)
-        else:
-            raise ValueError(f"Dominance analysis for '{MODEL_TYPE}' not supported!")
-
-        fname = f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}_{MODEL_TYPE}.pickle'
-        with open(os.path.join(output_dir, fname), 'wb') as f:
-            pickle.dump(m, f)
-
-        total_dominance = m["total_dominance"]
-        return pd.DataFrame([total_dominance], columns=rec.receptor_names)
-
-    for task in params.tasks:
-        for latent_var in params.variables:
-            print(f"--- Dominance analysis for {latent_var} ----")
-            results_df = pd.DataFrame(columns=rec.receptor_names)
-            valid_subjects = [s for s in subjects if s > START_AT]
-
-            with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-                futures = [executor.submit(process_subject, s, latent_var, task)
-                           for s in valid_subjects]
-                for future in futures:
-                    res = future.result()
-                    results_df = pd.concat([results_df, res], ignore_index=True)
-
-            # Save combined results
-            fname = f'{latent_var}_{params.mask}_dominance_allsubj_{MODEL_TYPE}.pickle'
-            results_df.to_pickle(os.path.join(output_dir, fname))
+    return fig, ax
 
 if __name__ == "__main__":
-    for latent_var in latent_vars:
-        #individual regression plots
-        plot_regression_coefficients(rec, params, paths, mask_comb, model_type=MODEL_TYPE):
+    # Regression Analysis
+    if RUN_REGRESSION:
+        for task in params.tasks:
+            fmri_dir = mf.get_fmri_dir(task)
+            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore[task]]      
+            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+            output_dir = os.path.join(beta_dir, 'regressions', rec.source)
+            os.makedirs(output_dir, exist_ok=True)
+
+            receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)
+            receptor_density = mf.load_receptor_array(on_surface=False)
+
+            # Determine regression columns
+            if MODEL_TYPE == 'linear':
+                columns = rec.receptor_names + ["R2", "adjusted_R2"]
+            else:
+                poly = PolynomialFeatures(degree=2, include_bias=False)
+                dummy = np.zeros((1, receptor_density.shape[1]))
+                poly.fit_transform(dummy)
+                feature_names = poly.get_feature_names_out(rec.receptor_names)
+
+                if MODEL_TYPE == 'lin+quad':
+                    # Linear + quadratic only (exclude interaction terms)
+                    mask = [(" " not in n) or ("^" in n) for n in feature_names]
+                    feature_names = feature_names[mask]
+                elif MODEL_TYPE == 'lin+interact':
+                    # Linear + interactions only (exclude squared terms)
+                    mask = ["^" not in n for n in feature_names]
+                    feature_names = feature_names[mask]
+
+                columns = list(feature_names) + ["R2", "adjusted_R2",]
+
+            for latent_var in params.latent_vars:
+                results_df = pd.DataFrame(columns=columns)
+
+                for sub in subjects:
+                    y_data = mf.load_effect_map_array(sub, task, latent_var)
+                    receptor_density_zm = receptor_density
+
+                    non_nan_idx = ~np.isnan(y_data)
+                    X = receptor_density_zm[non_nan_idx, :]
+                    y = y_data[non_nan_idx]
+
+                    # Model selection
+                    if MODEL_TYPE == 'linear':
+                        model = LinearRegression()
+                    elif MODEL_TYPE == 'poly2':
+                        model = make_pipeline(PolynomialFeatures(degree=2, include_bias=False),
+                                            LinearRegression())
+                    else:
+                        poly = PolynomialFeatures(degree=2, include_bias=False)
+                        X = poly.fit_transform(X)
+                        feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+
+                        if MODEL_TYPE == 'lin+quad':
+                            mask = [(" " not in n) or ("^" in n) for n in feature_names]
+                        elif MODEL_TYPE == 'lin+interact':
+                            mask = ["^" not in n for n in feature_names]
+
+                        X = X[:, mask]
+                        filtered_feature_names = feature_names[mask]
+                        model = LinearRegression()
+
+                    # Fit model and compute metrics
+                    model.fit(X, y)
+                    coefs = (model.named_steps['linearregression'].coef_
+                            if MODEL_TYPE == 'poly2' else model.coef_)
+
+                    yhat = model.predict(X)
+                    ss_res = np.sum((y - yhat) ** 2)
+                    ss_tot = np.sum((y - np.mean(y)) ** 2)
+                    r2 = 1 - ss_res / ss_tot
+                    adj_r2 = 1 - (1 - r2) * (len(y) - 1) / (len(y) - X.shape[1] - 1)
+
+                    results = pd.DataFrame([np.append(coefs, [r2, adj_r2])],
+                                        columns=columns)
+                    results_df = pd.concat([results_df, results], ignore_index=True)
+
+                fname = f'{latent_var}_{params.mask}_regression_results_bysubject_all_{MODEL_TYPE}.csv'
+                results_df.to_csv(os.path.join(output_dir, fname), index=False)
+
+    # Dominance Analysis
+    if RUN_DOMINANCE:
+
+        def process_subject(sub, latent_var, task):
+            """Run dominance analysis for a single subject."""
+            print(f"--- Dominance analysis for {task} subject {sub} ----")
+
+            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+            output_dir = os.path.join(beta_dir, 'regressions', rec.source)
+            os.makedirs(output_dir, exist_ok=True)
+
+            y_data = mf.load_effect_map_array(sub, task, latent_var)
+            non_nan_idx = ~np.isnan(y_data)
+            X = receptor_density[non_nan_idx, :]
+            y = y_data[non_nan_idx]
+
+            if MODEL_TYPE == 'lin+quad':
+                poly = PolynomialFeatures(degree=2, include_bias=False)
+                X = poly.fit_transform(X)
+                feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+                mask = [(" " not in n) or ("^" in n) for n in feature_names]
+                X = X[:, mask]
+                filtered_feature_names = feature_names[mask]
+                m = dominance_stats(X, y, feature_names=filtered_feature_names)
+            elif MODEL_TYPE == 'linear':
+                m = dominance_stats(X, y)
+            else:
+                raise ValueError(f"Dominance analysis for '{MODEL_TYPE}' not supported!")
+
+            fname = f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}_{MODEL_TYPE}.pickle'
+            with open(os.path.join(output_dir, fname), 'wb') as f:
+                pickle.dump(m, f)
+
+            total_dominance = m["total_dominance"]
+            return pd.DataFrame([total_dominance], columns=rec.receptor_names)
+
+        for task in params.tasks:
+            fmri_dir = mf.get_fmri_dir(task)
+            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore[task]]
+            for latent_var in params.latent_vars:
+                print(f"--- Dominance analysis for {latent_var} ----")
+                results_df = pd.DataFrame(columns=rec.receptor_names)
+                valid_subjects = [s for s in subjects if s > START_AT]
+
+                with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
+                    futures = [executor.submit(process_subject, s, latent_var, task)
+                            for s in valid_subjects]
+                    for future in futures:
+                        res = future.result()
+                        results_df = pd.concat([results_df, res], ignore_index=True)
+
+                # Save combined results
+                fname = f'{latent_var}_{params.mask}_dominance_allsubj_{MODEL_TYPE}.pickle'
+                results_df.to_pickle(os.path.join(output_dir, fname))
+
+    mf.set_publication_style(font_size=8)
+
+    #individual regression plots
+    plot_regression_coefficients(params.tasks, model_type=MODEL_TYPE)
+
+    for latent_var in params.latent_vars:
 
         # Load all dominance results
-        results = load_dominance_data(experiments, latent_var, paths, params, model_type=MODEL_TYPE)
+        results = load_dominance_data(params.tasks, latent_var, model_type=MODEL_TYPE)
 
+        plot_dir = os.path.join(paths.home_dir, "figures")
         # ---- Individual plots ----
         for exp, df in results.items():
             title = f"{exp} – {latent_var}"
-            plot_dominance_bars(df, params.receptor_groups, params.receptor_class,
-                                title=title,
-                                output_path=f"{paths.home_dir}/plots/{exp}_{latent_var}_dominance.pdf")
+            fig, ax = plot_dominance_bars(df, params.receptor_groups, params.receptor_class,
+                                title=title)
+            mf.save_figure(fig, plot_dir, f"{exp}_{latent_var}_dominance")
 
         # ---- Group-level mean (exclude Explore) ----
         combined, per_study_means = aggregate_dominance(results, exclude_explore=True)
-        plot_dominance_bars(combined, params.receptor_groups, params.receptor_class, 
-                            title=f"Group Mean – {latent_var}",
-                            output_path=f"{paths.home_dir}/plots/group_{latent_var}_dominance.pdf")
+        fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted)
+        mf.save_figure(fig, plot_dir, f"group_{latent_var}_dominance")
 
         # ---- Heatmaps ----
-        plot_dominance_heatmap(per_study_means,
-                            cmap_seq,
-                            title=f"Per-study {latent_var} dominance",
-                            output_path=f"{paths.home_dir}/plots/heatmap_{latent_var}.pdf")
+        cmap_pos = mf.get_custom_colormap('pos')
+        fig, ax = plot_dominance_heatmap(per_study_means, rec.receptor_groups, cmap_pos, rec.receptor_label_formatted, rename_tasks=True)
+        mf.save_figure(fig, plot_dir, f"heatmap_{latent_var}")
 
-        # ---- Explore-only heatmap ----
-        explore_df = results["Explore"].mean().to_frame().T
-        plot_dominance_heatmap(explore_df,
-                            cmap_seq,
-                            title=f"Explore – {latent_var}",
-                            output_path=f"{paths.home_dir}/plots/Explore_heatmap_{latent_var}.pdf")
+    # ---- Explore-only heatmap ----
+    fig, ax = plot_explore_dominance_heatmap(
+        params.latent_vars,
+        rec.receptor_groups,
+        rec.receptor_label_formatted,
+        cmap_pos,
+        model_type=MODEL_TYPE,
+    )
+    mf.save_figure(fig, plot_dir, "heatmap_explore")

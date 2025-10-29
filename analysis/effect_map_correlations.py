@@ -8,11 +8,12 @@ from nilearn.surface import SurfaceImage
 from statsmodels.stats.multitest import multipletests
 
 # Local imports
-from params_and_paths import Paths, Params
 
 # Load local debugged version of neuromaps
 sys.path.insert(0, os.path.abspath("."))
 from neuromaps import nulls, transforms, stats
+from params_and_paths import Paths, Params
+
 
 # Data loading and preprocessing
 def load_group_surface_map(task, contrast, paths, explore_model="noEntropy_noER"):

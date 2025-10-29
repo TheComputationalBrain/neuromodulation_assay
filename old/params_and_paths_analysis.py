@@ -16,28 +16,26 @@ RECEPTOR_SOURCE = 'PET2' #PET2 is the dataset including alpha2
 class Params:
     def __init__(self):
         
-        self.tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] # or ['lanA']
-        self.latent_vars = ['surprise', 'confidence'] # or ['S-N'] for language
+        self.tasks = ['lanA'] #['EncodeProb', 'NAConf', 'PNAS', 'Explore'] # or ['lanA']
+        self.latent_vars = ['S-N']#['confidence', 'surprise',] # or ['S-N'] for language
 
         self.ignore = {'NAConf': [3, 5, 6, 9, 15, 30, 36, 40, 42, 43, 51, 59], #30, 43, 15, 40, 42, 59 are removed because of their low coverage 
             'EncodeProb': [1, 4, 12, 20],
             'Explore': [9, 17, 46],
             'PNAS': [],
-            'lanA' : []} # random selection of subjects
+            'lanA' : [80]} # random selection of subjects
+        
         self.mask = 'schaefer'
 
         self.zscore_per_session = True 
 
-        self.receptor_label_formatted = [
-            '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
-            '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
-            '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$', '$5\\text{-}\\mathrm{HTT}$',
-            '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$', '$\\mathrm{M}_{\\mathrm{1}}$',
-            '$\\mathrm{VAChT}$', '$\\mathrm{NET}$', '$\\mathrm{A}_{\\mathrm{2}}$',
-            '$\\mathrm{MOR}$', '$\\mathrm{mGluR}_{\\mathrm{5}}$', '$\\mathrm{NMDA}$',
-            '$\\mathrm{H}_{\\mathrm{3}}$', '$\\mathrm{GABA}_{\\mathrm{a}}$', '$\\mathrm{D}_{\\mathrm{1}}$',
-            '$\\mathrm{D}_{\\mathrm{2}}$', '$\\mathrm{DAT}$', '$\\mathrm{CB}_{\\mathrm{1}}$'
-        ]
+        self.study_mapping = {
+            "EncodeProb": "Study 1",
+            "NAConf": "Study 2",
+            "PNAS": "Study 3",
+            "Explore": "Study 4",
+        }
+
 
 class Paths:
     def __init__(self):
@@ -89,5 +87,21 @@ class Receptors:
             self.cannabinnoid = ["CB1"]
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'A2']
+
+        # Grouping 
+        self.receptor_groups = [self.serotonin, self.acetylcholine, self.noradrenaline, self.opioid, self.glutamate, self.histamine, self.gaba, self.dopamine, self.cannabinnoid]
+        self.group_names = ['serotonin', 'acetylcholine', 'norepinephrine', 'opioid', 'glutamate', 'histamine', 'gaba', 'cannabinnoid']
+        self.receptor_class = [self.exc,self.inh]
+
+        self.receptor_label_formatted = [
+            '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
+            '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
+            '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$', '$5\\text{-}\\mathrm{HTT}$',
+            '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$', '$\\mathrm{M}_{\\mathrm{1}}$',
+            '$\\mathrm{VAChT}$', '$\\mathrm{NET}$', '$\\mathrm{A}_{\\mathrm{2}}$',
+            '$\\mathrm{MOR}$', '$\\mathrm{mGluR}_{\\mathrm{5}}$', '$\\mathrm{NMDA}$',
+            '$\\mathrm{H}_{\\mathrm{3}}$', '$\\mathrm{GABA}_{\\mathrm{a}}$', '$\\mathrm{D}_{\\mathrm{1}}$',
+            '$\\mathrm{D}_{\\mathrm{2}}$', '$\\mathrm{DAT}$', '$\\mathrm{CB}_{\\mathrm{1}}$'
+        ]
 
 
