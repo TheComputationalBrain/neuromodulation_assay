@@ -12,8 +12,7 @@ from statsmodels.stats.multitest import multipletests
 # Load local debugged version of neuromaps
 sys.path.insert(0, os.path.abspath("."))
 from neuromaps import nulls, transforms, stats
-from params_and_paths import Paths, Params
-
+from params_and_paths import Paths
 
 # Data loading and preprocessing
 def load_group_surface_map(task, contrast, paths, explore_model="noEntropy_noER"):
@@ -48,6 +47,7 @@ def run_spin_test_within(tasks, contrasts, paths, explore_model="noEntropy_noER"
 
         # Prepare surface maps and nulls
         for task in tasks:
+            paths = Paths(task=task)
             surf_map = load_group_surface_map(task, contrast, paths, explore_model)
             surf_maps[task] = surf_map
             null_models[task] = generate_null_model(surf_map, n_perm, seed)
@@ -78,6 +78,7 @@ def run_spin_test_across(tasks, contrasts, paths, explore_model="noEntropy_noER"
 
     # Load all maps and generate nulls
     for task in tasks:
+        paths = Paths(task=task)
         for contrast in contrasts:
             surf_map = load_group_surface_map(task, contrast, paths, explore_model)
             key = f"{task}_{contrast}"
@@ -109,6 +110,7 @@ def run_spin_test_across(tasks, contrasts, paths, explore_model="noEntropy_noER"
 # Main controller
 def run_all_spin_tests(
     within=True,
+    paths = None,
     output_dir=None,
     tasks=None,
     contrasts=None,
@@ -117,8 +119,6 @@ def run_all_spin_tests(
     seed=1234,
 ):
     """wrapper to run spin tests (within or across contrasts)."""
-    paths = Paths()
-    params = Params()
 
     if tasks is None:
         tasks = ["EncodeProb", "NAConf", "PNAS", "Explore"]
@@ -141,8 +141,9 @@ def run_all_spin_tests(
 
 
 if __name__ == "__main__":
+    paths = Paths(task='all')
     # Run within-contrast correlations (surprise-surprise, confidence-confidence)
-    run_all_spin_tests(within=True)
+    run_all_spin_tests(within=True, paths=paths)
 
     # Run cross-contrast correlations (confidence-surprise)
-    run_all_spin_tests(within=False)
+    run_all_spin_tests(within=False, paths=paths)

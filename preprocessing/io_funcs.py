@@ -12,11 +12,12 @@ from scipy.stats import dirichlet
 import sys 
 import os
 
-# Append the path of the main directory in the search paths for modules
-root = os.path.dirname(os.path.abspath("__file__"))
-root_model = os.path.join(root, "TransitionProbModel/")
+root = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(root)
+root_model = os.path.join(project_root, "TransitionProbModel")
 if root_model not in sys.path:
     sys.path.append(root_model)
+
 from TransitionProbModel.MarkovModel_Python import IdealObserver as IO
 
 def get_conditional_value(val, seq):

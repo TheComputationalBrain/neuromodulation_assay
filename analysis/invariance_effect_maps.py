@@ -17,15 +17,11 @@ from params_and_paths import Paths, Params
 
 
 # --- Global configuration ---
-paths = Paths(task='all')
-params = Params(task='all')
 RESOLUTION = 'fsaverage'
 EXPLORE_MODEL = 'noEntropy_noER'
 FWHM = 5
 TRESH = -np.log10(0.05)
 VMAX = -np.log10(1 / 100000)
-OUTPUT_DIR = os.path.join(paths.home_dir, 'domain_general')
-os.makedirs(OUTPUT_DIR, exist_ok=True)
 fsaverage = datasets.fetch_surf_fsaverage(mesh=RESOLUTION)
 
 
@@ -34,7 +30,9 @@ def plot_individual_clusters(tasks, contrasts, output_dir):
     for contrast in contrasts:
         cmap = 'Blues' if '_neg' in contrast else 'Reds'
         for task in tasks:
-            _, add_info = mf.get_beta_dir_and_info(task)
+            params = Params(task=task)
+            paths = Paths(task=task)
+            _, add_info = mf.get_beta_dir_and_info(task, params, paths)
             group_dir = (
                 os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
                 if task == 'Explore'
@@ -73,7 +71,9 @@ def plot_cluster_overlap_all(tasks, contrasts, output_dir):
         for hemi in ['right', 'left']:
             task_masks = []
             for task in tasks:
-                _, add_info = mf.get_beta_dir_and_info(task)
+                params = Params(task=task)
+                paths = Paths(task=task)
+                _, add_info = mf.get_beta_dir_and_info(task, params, paths)
                 group_dir = (
                     os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
                     if task == 'Explore'
@@ -121,7 +121,9 @@ def plot_colorbar_overlap():
 def run_correlations(tasks, output_dir):
     data_list = []
     for task in tasks:
-        _, add_info = mf.get_beta_dir_and_info(task)
+        params = Params(task=task)
+        paths = Paths(task=task)
+        _, add_info = mf.get_beta_dir_and_info(task, params, paths)
         base_dir = (
             os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
             if task == 'Explore'
@@ -169,6 +171,8 @@ def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", output_dir=""):
         - "lower_triangles": masked lower-triangle plots for publication-style visuals
     """
     # --- get results ---
+    params = Params(task="all")
+    paths = Paths(task="all")
     corr_df = pd.read_csv(os.path.join(paths.home_dir, 'domain_general', 'correlation_df.csv'), index_col = [0])
     labels = corr_df.index
 
@@ -230,7 +234,7 @@ def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", output_dir=""):
         cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
         cbar.ax.tick_params(pad=1)
 
-        cbar.set_label("Contribution (%)", labelpad=-12)  
+        cbar.set_label("Pearson's correlation", labelpad=-12)  
         cbar.ax.yaxis.label.set_verticalalignment('center')
 
         # Rotate tick labels to avoid overlap
@@ -270,13 +274,10 @@ def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", output_dir=""):
         conf_labels = [l for l in labels if "confidence" in l]
         surpr_labels = [l for l in labels if "surprise" in l]
         cross_df = corr_df.loc[conf_labels, surpr_labels]
-        save_heatmap(cross_df, 'correlation_conf_surprise_cross', 'Cross correlation: confidence vs surprise')
+        save_heatmap(cross_df, 'correlation_conf_surprise_cross', None, mask = None, rename_tasks=True)
 
     # --- 6. Lower-triangle versions (cleaner visuals) ---
     if "lower_triangles" in plots_to_generate:
-        mask = np.triu(np.ones_like(corr_df, dtype=bool))
-        save_heatmap(corr_df, 'correlation_lower_triangle', 'Lower triangle only', mask=mask)
-
         conf_labels = [l for l in labels if "confidence" in l]
         surpr_labels = [l for l in labels if "surprise" in l]
 
@@ -295,10 +296,15 @@ def run_analysis(
     run_overlap=False,
     run_colorbar=False,
     run_correlations=False,
-    corr_plots=None):
+    params = None,
+    paths = None):
     """wrapper to run selected analyses."""
-    tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore']
+
+    tasks=params.tasks
     contrasts = ['surprise', 'confidence', 'surprise_neg', 'confidence_neg']
+
+    OUTPUT_DIR = os.path.join(paths.home_dir, 'domain_general')
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
 
     mf.set_publication_style(font_size=8, layout="2-across")
 
@@ -315,8 +321,10 @@ def run_analysis(
     if run_correlations:
         run_correlations(tasks,OUTPUT_DIR)
         cmap_div = mf.get_custom_colormap('diverging')
-        plot_correlations(["lower_triangles"], cmap_div, OUTPUT_DIR)
+        plot_correlations(["cross","lower_triangles"], cmap_div, OUTPUT_DIR)
 
 if __name__ == "__main__":
+    params = Params(task='all')
+    paths = Paths(task='all')
 
-    run_analysis(run_individual=True, run_overlap=True ,run_colorbar=True, run_correlations=True)
+    run_analysis(run_individual=True, run_overlap=True ,run_colorbar=True, run_correlations=True, params=params, paths=paths)

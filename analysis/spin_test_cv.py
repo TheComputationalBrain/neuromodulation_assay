@@ -25,10 +25,9 @@ sys.path.append(str(parent_dir))
 import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 
-
-paths = Paths(task='language')
-params = Params(task='language')
-rec = Receptors()
+paths = Paths(task='all')
+params = Params(task='all', cv_true=True)
+rec = Receptors(source = 'PET2')
 
 N_SPINS = 1000
 MODEL_TYPE = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
@@ -130,13 +129,16 @@ def compute_loocv_r2_by_subject_mask(receptor_map_full, fmri_activity, score='de
 def process_task(task):
     results_emp = {}
     results_null = {}
+
+    paths = Paths(task=task)
+    params = Params(task=task, cv_true=True)
     
     for latent_var in params.latent_vars:
-        fmri_dir = mf.get_fmri_dir(task)
+        fmri_dir = mf.get_fmri_dir(task, paths)
 
         subject_paths = paths.home_dir if task == "lanA" else paths.root_dir
         subjects = mf.get_subjects(task, os.path.join(subject_paths, fmri_dir))
-        subjects = [subj for subj in subjects if subj not in params.ignore[task]] 
+        subjects = [subj for subj in subjects if subj not in params.ignore] 
 
         fmri_activity = mf.load_surface_effect_maps_for_cv(subjects, task, latent_var, params, paths)
 

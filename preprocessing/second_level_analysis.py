@@ -27,10 +27,11 @@ import fmri_funcs as fun
 import nibabel as nib
 from scipy.stats import zscore
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from params_and_paths import Paths, Params, Receptors
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
+from params_and_paths import Paths, Params, Receptors
+
 
 TASK = 'EncodeProb'
 
@@ -39,7 +40,7 @@ RESOLUTION = 'fsaverage'
 
 paths = Paths(task=TASK)
 params = Params(task=TASK)
-rec = Receptors()
+rec = Receptors(source = 'PET2')
 
 #for cluster permutation:
 N_PERM = 100000
@@ -101,7 +102,7 @@ def plot_z_map(z_map, var, plot_path, resolution, add_info):
 
 # --- Main analysis ---
 
-fmri_dir = mf.get_fmri_dir(params.db, params.root_dir, params.data_dir)
+fmri_dir = mf.get_fmri_dir(params.db, paths)
 subjects = [s for s in mf.get_subjects(params.db, fmri_dir) if s not in params.ignore]
 
 # Output paths
@@ -109,13 +110,13 @@ if params.db == 'Explore':
     output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level',params.model)
 else: 
     output_dir = os.path.join(paths.home_dir,params.db,params.mask,'second_level')
-beta_dir, add_info  = mf.get_beta_dir_and_info(TASK)
+beta_dir, add_info  = mf.get_beta_dir_and_info(TASK, params, paths)
 
 plot_path = os.path.join(output_dir, 'plot_raw')
 os.makedirs(plot_path, exist_ok=True)
 
 # Masker setup
-masker = fun.get_masker()
+masker = fun.get_masker(paarams=params, paths=paths)
 masker.fit()
 
 # Templates

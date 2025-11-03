@@ -14,31 +14,35 @@ import nibabel as nib
 from scipy.stats import zscore
 import pickle 
 import os
+import sys
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from matplotlib.patches import Rectangle
+from pathlib import Path
 import seaborn as sns
 import fmri_funcs as fun
 from nilearn.input_data import NiftiLabelsMasker
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from nilearn import image, plotting, datasets, surface
-from params_and_paths import Paths, Params
 from neuromaps import transforms
 import cmcrameri.cm as cmc
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+from params_and_paths import Params, Paths
 
 
 PLOT_RECEPTORS=False
 PLOT_RECEPTORS_INFLATED=False
 PLOT_CORR = False
 
-paths = Paths()
-params = Params()
+paths = Paths(task = 'all')
+params = Params(task='all')
 
 output_dir = os.path.join(paths.home_dir,'receptors', 'PET2')
 os.makedirs(output_dir, exist_ok = True)
 
 if params.parcelated == False:
-     masker = fun.get_masker()
+     masker = fun.get_masker(params=params, paths=paths)
 elif (params.mask == 'schaefer') & params.parcelated:
     atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2) 
     atlas.labels = np.insert(atlas.labels, 0, "Background")

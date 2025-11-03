@@ -130,7 +130,7 @@ def get_custom_colormap(map_type="diverging", N=256):
 
     # Define 3-point segments for each side
     neg_colors = ["#08306B", "#4292C6", "#FFFFFF"]
-    pos_colors = ["#FFFFFF", "#F7AD45", "#BB3E00"]
+    pos_colors = ["#FFFFFF", "#F7AD45", "#8C1007"]
 
     if map_type == "diverging":
         # Create negative and positive halves
@@ -162,32 +162,32 @@ def demean(x):
     mean = np.nanmean(x)
     return x - mean
 
-def get_json_dir(db_name, root_dir, data_dir):
+def get_json_dir(db_name, paths):
    
-    json_files_dir = {'NAConf': op.join(root_dir, data_dir, 'bids_dataset'),
-                    'EncodeProb': op.join(root_dir, data_dir, 'bids_dataset'),
-                    'Explore': op.join(root_dir, data_dir, 'bids/raw/'),
-                    'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
+    json_files_dir = {'NAConf': op.join(paths.root_dir, paths.data_dir, 'bids_dataset'),
+                    'EncodeProb': op.join(paths.root_dir, paths.data_dir, 'bids_dataset'),
+                    'Explore': op.join(paths.root_dir, paths.data_dir, 'bids/raw/'),
+                    'PNAS': op.join(paths.root_dir, paths.data_dir, 'MRI_data/analyzed_data')}
     
     return json_files_dir[db_name]
 
 
-def get_fmri_dir(db_name, root_dir, data_dir):
+def get_fmri_dir(db_name, paths):
     
-    fmri_dir = {'NAConf': op.join(root_dir, data_dir, 'derivatives'),
-                'EncodeProb': op.join(root_dir, data_dir, 'derivatives'),
-                'Explore': op.join(root_dir, data_dir, 'bids/derivatives/fmriprep-23.1.3_MAIN'),
-                'PNAS': op.join(root_dir, data_dir, 'MRI_data/analyzed_data')}
+    fmri_dir = {'NAConf': op.join(paths.root_dir, paths.data_dir, 'derivatives'),
+                'EncodeProb': op.join(paths.root_dir, paths.data_dir, 'derivatives'),
+                'Explore': op.join(paths.root_dir, paths.data_dir, 'bids/derivatives/fmriprep-23.1.3_MAIN'),
+                'PNAS': op.join(paths.root_dir, paths.data_dir, 'MRI_data/analyzed_data')}
 
     return fmri_dir[db_name]
 
 
-def get_beh_dir(db_name, root_dir, data_dir):
+def get_beh_dir(db_name, paths):
 
-    beh_dir = {'NAConf': op.join(root_dir, data_dir),
-               'EncodeProb': op.join(root_dir, data_dir),
+    beh_dir = {'NAConf': op.join(paths.root_dir, paths.data_dir),
+               'EncodeProb': op.join(paths.root_dir, paths.data_dir),
                'Explore': '/home_local/EXPLORE/github/explore/2021_Continous_2armed',
-               'PNAS': op.join(root_dir, data_dir)}
+               'PNAS': op.join(paths.root_dir, paths.data_dir)}
 
     return beh_dir[db_name]
 
@@ -218,7 +218,7 @@ def get_subjects(db, data_dir):
 
     return sorted(subjects)
 
-def get_beta_dir_and_info(task, params,paths):
+def get_beta_dir_and_info(task, params, paths):
     if task == 'Explore':
         beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
     elif task == 'lanA':

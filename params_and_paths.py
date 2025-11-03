@@ -10,7 +10,6 @@ Created on Mon Apr 15 09:59:22 2024
 #  PARAMS TO CHANGE   #
 MASK_NAME =  'schaefer' 
 PARCELATED = False
-RECEPTOR_SOURCE = 'PET2' #PET2 is the dataset including alpha2
 PARCELATED = False
 
 #exploratory setting
@@ -18,23 +17,14 @@ UPDATE_REG = False #update or suprise + confidence as regressor
 #---------------------------------------------------
 
 class Params:
-    def __init__(self, task, mask=MASK_NAME, parcel = PARCELATED, update =UPDATE_REG):
+    def __init__(self, task, cv_true=False, mask=MASK_NAME, parcel = PARCELATED, update=UPDATE_REG):
 
-        if task == "all":
-            self.tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
-            self.ignore = {'NAConf': [3, 5, 6, 9, 15, 30, 36, 40, 42, 43, 51, 59], #30, 43, 15, 40, 42, 59 are removed for CV only because of their low coverage 
-                'EncodeProb': [1, 4, 12, 20],
-                'Explore': [9, 17, 46],
-                'PNAS': [],
-                'lanA' : [80]} # random selection of subjects
-        elif task == "language":
+        self.tasks = ['EncodeProb', 'NAConf', 'PNAS', 'Explore'] 
+         # random selection of subjects
+        if task == "language":
             self.tasks = ['lanA'] 
-            self.ignore = {'NAConf': [3, 5, 6, 9, 15, 30, 36, 40, 42, 43, 51, 59],
-                'EncodeProb': [1, 4, 12, 20],
-                'Explore': [9, 17, 46],
-                'PNAS': [],
-                'lanA' : [80]} # random selection of subjects
-        if task == 'EncodeProb':
+            self.ignore =  [80] # random selection of subjects
+        elif task == 'EncodeProb':
             self.db = task
             self.seq_type = 'bernoulli'
             self.smoothing_fwhm = 5 #no smoothing necessary because of 7T fMRI -> just for comparison with other studies 
@@ -48,7 +38,7 @@ class Params:
             [1, 2, 4, 7, 8, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 
             24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 
             43, 44, 45, 46, 47, 48, 49, 50, 52, 53, 55, 56, 57, 58, 59, 60, 61] 
-            self.ignore = [3, 5, 6, 9, 36, 51]
+            self.ignore = [3, 5, 6, 9, 36, 51] if cv_true == False else [3, 5, 6, 9, 15, 30, 36, 40, 42, 43, 51, 59] #30, 43, 15, 40, 42, 59 are removed for CV only because of their low coverage 
             self.session = []
         elif task == 'PNAS':
             self.db = task
@@ -65,6 +55,9 @@ class Params:
             self.reward = False 
             self.model = 'noEntropy_noER'  #[noEntropy]
             self.io_variables = ['US', 'EC_chosen'] #['US', 'EC_chosen, 'ER_chosen']
+
+        if task != 'Explore':
+            self.io_options = {'p_c': 1/75, 'resol': 20} 
 
         if task == 'language':
             self.latent_vars = ['S-N']
@@ -121,8 +114,7 @@ class Paths:
         self.alpha_path = '/home/ah278717/alpha2_receptor/' #path to the data shared by Benedicte Ballanger
 
 class Receptors:
-    def __init__(self, source=RECEPTOR_SOURCE):
-        self.source = RECEPTOR_SOURCE
+    def __init__(self, source):
 
         if source == 'PET':
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
@@ -140,6 +132,18 @@ class Receptors:
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR']
 
+            self.receptor_label_formatted = [
+                '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
+                '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
+                '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$', '$5\\text{-}\\mathrm{HTT}$',
+                '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$', '$\\mathrm{M}_{\\mathrm{1}}$',
+                '$\\mathrm{VAChT}$', '$\\mathrm{NET}$', 
+                '$\\mathrm{MOR}$', '$\\mathrm{mGluR}_{\\mathrm{5}}$', '$\\mathrm{NMDA}$',
+                '$\\mathrm{H}_{\\mathrm{3}}$', '$\\mathrm{GABA}_{\\mathrm{a}}$', '$\\mathrm{D}_{\\mathrm{1}}$',
+                '$\\mathrm{D}_{\\mathrm{2}}$', '$\\mathrm{DAT}$', '$\\mathrm{CB}_{\\mathrm{1}}$'
+            ]   
+
+        #PET2 is the dataset including alpha2
         elif source == 'PET2':
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
                                 "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
@@ -156,20 +160,21 @@ class Receptors:
             self.exc = ['5HT2a', '5HT4', '5HT6', 'D1', 'mGluR5', 'A4B2', 'M1', 'NMDA']
             self.inh = ['5HT1a', '5HT1b', 'CB1', 'D2', 'GABAa', 'H3', 'MOR', 'A2']
 
+            self.receptor_label_formatted = [
+                '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
+                '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
+                '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$', '$5\\text{-}\\mathrm{HTT}$',
+                '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$', '$\\mathrm{M}_{\\mathrm{1}}$',
+                '$\\mathrm{VAChT}$', '$\\mathrm{NET}$', '$\\mathrm{A}_{\\mathrm{2}}$',
+                '$\\mathrm{MOR}$', '$\\mathrm{mGluR}_{\\mathrm{5}}$', '$\\mathrm{NMDA}$',
+                '$\\mathrm{H}_{\\mathrm{3}}$', '$\\mathrm{GABA}_{\\mathrm{a}}$', '$\\mathrm{D}_{\\mathrm{1}}$',
+                '$\\mathrm{D}_{\\mathrm{2}}$', '$\\mathrm{DAT}$', '$\\mathrm{CB}_{\\mathrm{1}}$'
+            ]
+
         # Grouping 
         self.receptor_groups = [self.serotonin, self.acetylcholine, self.noradrenaline, self.opioid, self.glutamate, self.histamine, self.gaba, self.dopamine, self.cannabinnoid]
         self.group_names = ['serotonin', 'acetylcholine', 'norepinephrine', 'opioid', 'glutamate', 'histamine', 'gaba', 'cannabinnoid']
         self.receptor_class = [self.exc,self.inh]
 
-        self.receptor_label_formatted = [
-            '$5\\text{-}\\mathrm{HT}_{\\mathrm{1a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{1b}}$',
-            '$5\\text{-}\\mathrm{HT}_{\\mathrm{2a}}$', '$5\\text{-}\\mathrm{HT}_{\\mathrm{4}}$',
-            '$5\\text{-}\\mathrm{HT}_{\\mathrm{6}}$', '$5\\text{-}\\mathrm{HTT}$',
-            '$\\mathrm{A}_{\\mathrm{4}}\\mathrm{B}_{\\mathrm{2}}$', '$\\mathrm{M}_{\\mathrm{1}}$',
-            '$\\mathrm{VAChT}$', '$\\mathrm{NET}$', '$\\mathrm{A}_{\\mathrm{2}}$',
-            '$\\mathrm{MOR}$', '$\\mathrm{mGluR}_{\\mathrm{5}}$', '$\\mathrm{NMDA}$',
-            '$\\mathrm{H}_{\\mathrm{3}}$', '$\\mathrm{GABA}_{\\mathrm{a}}$', '$\\mathrm{D}_{\\mathrm{1}}$',
-            '$\\mathrm{D}_{\\mathrm{2}}$', '$\\mathrm{DAT}$', '$\\mathrm{CB}_{\\mathrm{1}}$'
-        ]
 
 

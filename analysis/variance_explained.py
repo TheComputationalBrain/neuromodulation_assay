@@ -25,7 +25,7 @@ import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 
 #analysis
-FROM_BETA = True
+FROM_BETA = False
 COMP_NULL = False
 COMPARE_LANG_LEARN = False
 COMPARE_EXPL_VAR = False
@@ -40,9 +40,9 @@ SCORE = 'determination'
 
 suffix = ''
 
+params = Params(task='all', cv_true=True)
 paths = Paths(task='all')
-params = Params(task='all')
-rec = Receptors()
+rec = Receptors(source = 'PET2')
 
 output_dir = os.path.join(paths.home_dir, 'variance_explained')
 os.makedirs(output_dir, exist_ok=True) 
@@ -55,12 +55,15 @@ fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
 if FROM_BETA:
     for task in params.tasks: 
 
+        paths = Paths(task=task)
+        params = Params(task=task, cv_true=True)
+
         beta_dir, add_info = mf.get_beta_dir_and_info(task, params, paths)
-        fmri_dir = mf.get_fmri_dir(task)
+        fmri_dir = mf.get_fmri_dir(task, paths)
 
         subject_paths = paths.home_dir if task == "lanA" else paths.root_dir
         subjects = mf.get_subjects(task, os.path.join(subject_paths, fmri_dir))
-        subjects = [subj for subj in subjects if subj not in params.ignore[task]] 
+        subjects = [subj for subj in subjects if subj not in params.ignore] 
 
         with open(os.path.join(output_dir,f'predict_from_beta.txt'), "a") as outfile:
             outfile.write(f'{task}: variance explained in analysis:\n\n')

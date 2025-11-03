@@ -21,8 +21,12 @@ from sklearn.linear_model import LinearRegression
 from sklearn.preprocessing import PolynomialFeatures
 from sklearn.pipeline import make_pipeline
 import seaborn as sns
+import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FormatStrFormatter
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
+from matplotlib.legend_handler import HandlerTuple
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import ttest_1samp
 from params_and_paths import Paths, Params, Receptors
@@ -39,17 +43,17 @@ NUM_WORKERS = 30           # Parallel dominance analysis workers
 START_AT = 0               # Resume point for dominance analysis
 
 # --- Initialize paths and parameters ---
-paths = Paths(task='all')
-params = Params(task='all')
-rec = Receptors()
+rec =Receptors(source = 'PET2')
 
 
 def plot_regression_coefficients(tasks, model_type='linear'):
     """Plot regression coefficients across subjects with FDR-corrected significance."""
     
     for task in tasks:
+        paths = Paths(task=task)
+        params = Params(task=task)
 
-        beta_dir, _ = mf.get_beta_dir_and_info(task)
+        beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
         output_dir = os.path.join(beta_dir, 'regressions', rec.source)
         os.makedirs(output_dir, exist_ok=True)
 
@@ -126,6 +130,8 @@ def load_dominance_data(tasks, latent_var, model_type="linear"):
     model_suffix = "" if model_type == "linear" else "_lin+quad"
 
     for task in tasks:
+        paths = Paths(task=tasks)
+        params = Params(task=task)
         beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
         input_dir = os.path.join(beta_dir, "regressions", "PET2")
         fname = f"{latent_var}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
@@ -212,7 +218,7 @@ def plot_dominance_bars(
         label.set_color(base_colors[group_idx])
 
     ax.set_xlabel("Receptor/Transporter")
-    ax.set_ylabel("Contribution (%)")
+    ax.set_ylabel("% Contribution")
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
     ax.set_ylim(ylim)
     if title:
@@ -229,6 +235,7 @@ def plot_dominance_heatmap(
     receptor_label_formatted,
     title=None,
     rename_tasks=False,
+    params = None,
 ):
     """
     Generic heatmap plotting for dominance means across studies.
@@ -261,7 +268,7 @@ def plot_dominance_heatmap(
         ]
         all_means_to_plot.index = new_index
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(3.3, 1.5))
     vmin=0
     vmax=0.18
     ax = sns.heatmap(
@@ -271,18 +278,20 @@ def plot_dominance_heatmap(
         linewidths=1,
         vmin=vmin,
         vmax=vmax,
-        cbar_kws=dict(location="left", label="Contribution (%)")
+        cbar = False
+        # cbar_kws=dict(location="right", label="% Contribution")
     )
-    cbar = ax.collections[0].colorbar
-    cbar.set_ticks([vmin, vmax])
-    cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
-    cbar.ax.tick_params(pad=1)
+    # cbar = ax.collections[0].colorbar
+    # cbar.set_ticks([vmin, vmax])
+    # cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
+    # cbar.ax.tick_params(pad=1)
+    # ax.set_xticklabels(ax.get_xticklabels(), rotation=45, ha='right')  # ha='right' aligns them nicely
+    plt.yticks(rotation=45)
 
-    cbar.set_label("Contribution (%)", labelpad=-12) 
-    cbar.ax.yaxis.set_label_position('left')          
-    cbar.ax.yaxis.label.set_verticalalignment('center')
+    # cbar.set_label("Contribution (%)", labelpad=-10) 
+    # cbar.ax.yaxis.set_label_position('left')          
+    # cbar.ax.yaxis.label.set_verticalalignment('center')
 
-    plt.yticks(rotation=90)
     if title:
         plt.title(title)
     plt.tight_layout()
@@ -296,6 +305,8 @@ def plot_explore_dominance_heatmap(
     cmap,
     model_type="linear",
     title=None,
+    params = None,
+    paths = None,
 ):
     """
     Special-case function to plot Explore dominance heatmap
@@ -332,7 +343,7 @@ def plot_explore_dominance_heatmap(
     vmin=0
     vmax=0.18
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=(3.3, 1.5))
 
     # Plot using existing helper heatmap function
     ax = sns.heatmap(
@@ -342,28 +353,134 @@ def plot_explore_dominance_heatmap(
         linewidths=1,
         vmin=vmin,
         vmax=vmax,
-        cbar_kws=dict(location="left", label="Contribution (%)")
+        cbar = False
     )
-    cbar = ax.collections[0].colorbar
-    cbar.set_ticks([vmin, vmax])
-    cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
-    cbar.ax.tick_params(pad=1)
+    # cbar = ax.collections[0].colorbar
+    # cbar.set_ticks([vmin, vmax])
+    # cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
+    # cbar.ax.tick_params(pad=1)
 
-    cbar.set_label("Contribution (%)", labelpad=-12)  
-    cbar.ax.yaxis.set_label_position('left')        
-    cbar.ax.yaxis.label.set_verticalalignment('center')
+    # cbar.set_label("Contribution (%)", labelpad=-10)  
+    # cbar.ax.yaxis.set_label_position('left')        
+    # cbar.ax.yaxis.label.set_verticalalignment('center')
 
-    plt.yticks(rotation=90)
-    
+    plt.yticks(rotation=45)
 
     return fig, ax
 
+def plot_separate_colorbar(cmap, vmin=0, vmax=0.18, label="Contribution (%)", orientation="vertical"):
+    # Create the figure and axis for the colorbar
+    if orientation == "vertical":
+        fig, ax = plt.subplots(figsize=(0.25, 1.3))
+    else:
+        fig, ax = plt.subplots(figsize=(1.5, 0.25))
+    
+    # Create a ScalarMappable to serve as colorbar data source
+    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+    sm = matplotlib.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])
+
+    # Draw the colorbar on the axis
+    cbar = fig.colorbar(sm, cax=ax, orientation=orientation)
+    cbar.set_label(label, labelpad=-10)
+    cbar.set_ticks([vmin, vmax])
+    cbar.set_ticklabels([f"{vmin:.2f}", f"{vmax:.2f}"])
+    
+    if orientation == "vertical":
+        cbar.ax.yaxis.set_label_position('left')
+        cbar.ax.yaxis.label.set_verticalalignment('center')
+    else:
+        cbar.ax.xaxis.set_label_position('bottom')
+
+    plt.tight_layout()
+    return fig, ax
+
+def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
+    """
+    Create a standalone legend spanning multiple columns, suitable for placing
+    above combined plots (e.g., in Inkscape).
+    """
+ # --- Define colors and elements ---
+    base_colors = sns.color_palette('husl', len(rec.group_names))
+    legend_elements = []
+    legend_labels = []
+
+    for color, name in zip(base_colors, rec.group_names):
+        dark_color = sns.dark_palette(color, n_colors=3)[1]
+        light_color = sns.light_palette(color, n_colors=3)[1]
+
+        dark_square = mlines.Line2D([], [], color=dark_color, marker='s', markersize=10, linestyle='None')
+        light_square = mlines.Line2D([], [], color=light_color, marker='s', markersize=10, linestyle='None')
+
+        legend_elements.append((dark_square, light_square))
+        legend_labels.append(name)
+
+    # Excitatory/inhibitory
+    dark_grey_patch = mpatches.Patch(color="dimgray", label="excitatory")
+    light_grey_patch = mpatches.Patch(color="lightgrey", label="inhibitory")
+    legend_elements.extend([dark_grey_patch, light_grey_patch])
+    legend_labels.extend(["excitatory", "inhibitory"])
+
+    # Transporter hatch
+    hatch_example = mpatches.Patch(facecolor='white', edgecolor='black', hatch='//', label='transporter')
+    legend_elements.append(hatch_example)
+    legend_labels.append("transporter")
+
+    # Significance markers
+    red_dot = mlines.Line2D(
+        [], [], 
+        color='black', 
+        marker='+', 
+        markersize=8,          # make it clearly visible
+        markeredgewidth=1.5,    # thicker lines for visibility
+        linestyle='None',
+        label="sig. estimate in full model: positive"
+    )
+    blue_dot = mlines.Line2D(
+        [], [], 
+        color='black', 
+        marker='_', 
+        markersize=10,          # slightly larger for underscore visibility
+        markeredgewidth=2, 
+        linestyle='None',
+        label="sig. estimate in full model: negative"
+    )
+    legend_elements.extend([red_dot, blue_dot])
+    legend_labels.extend([
+        "sig. estimate in full model: positive",
+        "sig. estimate in full model: negative"
+    ])
+
+    # --- Plot legend only ---
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    ax.axis("off")
+
+    legend = ax.legend(
+        legend_elements,
+        legend_labels,
+        handler_map={tuple: HandlerTuple(ndivide=None, pad=0.8)},
+        loc="center",
+        ncol=ncol,             # number of columns across
+        frameon=False,
+        columnspacing=3.0,     # 🔹 space between columns
+        handlelength=4.0,      # 🔹 keeps paired squares apart from text
+        handletextpad=1.0,     # 🔹 space between handles and labels
+        labelspacing=1.5,      # vertical spacing between rows (if wrapping)
+    )
+
+    plt.tight_layout()
+    return fig
+
+
 if __name__ == "__main__":
+    params = Params(task='all')
     # Regression Analysis
     if RUN_REGRESSION:
         for task in params.tasks:
-            fmri_dir = mf.get_fmri_dir(task)
-            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore[task]]      
+            paths = Paths(task=task)
+            params = Params(task=task)
+            fmri_dir = mf.get_fmri_dir(task, paths)
+            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore]      
             beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
             output_dir = os.path.join(beta_dir, 'regressions', rec.source)
             os.makedirs(output_dir, exist_ok=True)
@@ -438,7 +555,7 @@ if __name__ == "__main__":
                     results_df = pd.concat([results_df, results], ignore_index=True)
 
                 fname = f'{latent_var}_{params.mask}_regression_results_bysubject_all_{MODEL_TYPE}.csv'
-                results_df.to_csv(os.path.join(output_dir, fname), index=False)
+                results_df.to_csv(os.path.join(output_dir, fname), index=False)        
 
     # Dominance Analysis
     if RUN_DOMINANCE:
@@ -477,8 +594,8 @@ if __name__ == "__main__":
             return pd.DataFrame([total_dominance], columns=rec.receptor_names)
 
         for task in params.tasks:
-            fmri_dir = mf.get_fmri_dir(task)
-            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore[task]]
+            fmri_dir = mf.get_fmri_dir(task, paths)
+            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore]
             for latent_var in params.latent_vars:
                 print(f"--- Dominance analysis for {latent_var} ----")
                 results_df = pd.DataFrame(columns=rec.receptor_names)
@@ -520,15 +637,23 @@ if __name__ == "__main__":
 
         # ---- Heatmaps ----
         cmap_pos = mf.get_custom_colormap('pos')
-        fig, ax = plot_dominance_heatmap(per_study_means, rec.receptor_groups, cmap_pos, rec.receptor_label_formatted, rename_tasks=True)
+        fig, ax = plot_dominance_heatmap(per_study_means, rec.receptor_groups, cmap_pos, rec.receptor_label_formatted, rename_tasks=True, params=params, paths=paths)
         mf.save_figure(fig, plot_dir, f"heatmap_{latent_var}")
 
     # ---- Explore-only heatmap ----
+    paths = Paths(task='Explore')
+    params = Params(task='Explore')
     fig, ax = plot_explore_dominance_heatmap(
         params.latent_vars,
         rec.receptor_groups,
         rec.receptor_label_formatted,
         cmap_pos,
         model_type=MODEL_TYPE,
+        params=params,
+        paths=paths
     )
     mf.save_figure(fig, plot_dir, "heatmap_explore")
+
+    # ---- Legend for dominance barplot ----
+    fig = plot_legend_dominance_bars(rec)
+    mf.save_figure(fig, plot_dir, f"legend_{latent_var}_dominance_bar")

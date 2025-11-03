@@ -35,11 +35,12 @@ from scipy.stats import zscore
 from functions_design_matrices import create_design_matrix, zscore_regressors
 import fmri_funcs as fun
 import io_funcs as iof
-from params_and_paths import Params, Paths
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
+from params_and_paths import Params, Paths
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
+
 
 TASK = 'EncodeProb'
 SAVE_DMTX_PLOT = True
@@ -49,9 +50,9 @@ paths = Paths(task=TASK)
 params = Params(task=TASK)
 
 # Init paths
-beh_dir  = mf.get_beh_dir(TASK, params.root_dir, params.data_dir)
-json_file_dir = mf.get_json_dir(TASK, params.root_dir, params.data_dir)
-fmri_dir = mf.get_fmri_dir(TASK, params.root_dir, params.data_dir)
+beh_dir  = mf.get_beh_dir(TASK, paths)
+json_file_dir = mf.get_json_dir(TASK, paths)
+fmri_dir = mf.get_fmri_dir(TASK, paths)
 
 #adjust naming
 if TASK in ['NAConf']:
@@ -145,7 +146,8 @@ for sub in subjects:
                                     tr, 
                                     frame_times,
                                     sub,
-                                    sess)
+                                    sess,
+                                    params)
         
         # specify the session 
         for i in range(1, len(sessions) + 1):

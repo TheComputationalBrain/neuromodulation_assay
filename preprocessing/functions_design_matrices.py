@@ -16,10 +16,7 @@ import pandas as pd
 import nilearn.signal
 from nilearn.glm.first_level import make_first_level_design_matrix
 from scipy.stats import zscore
-from params_and_paths import Params
 import main_funcs as mf
-
-params = Params()
 
 # Define functions
 
@@ -32,7 +29,7 @@ def zscore_regressors(dmtx):
             dmtx_z[col] = zscore(dmtx_z[col])
     return dmtx_z
 
-def clean_regs(reg, tr):
+def clean_regs(reg, tr, params):
     """
     Apply the same cleaning process to the given regressors as applied to the
     BOLD signal, i.e. first detrending and then high-pass filtering.
@@ -52,7 +49,8 @@ def create_design_matrix(events_all,
                         tr,
                         frame_times,
                         subject,
-                        sess):
+                        sess,
+                        params):
     '''
     This function creates a design matrix from the event dataframe and adds movement regressors.
     
@@ -82,7 +80,7 @@ def create_design_matrix(events_all,
     
     # clean all regressors (exluding movement) 
     for reg in dmtx.columns:
-        dmtx[reg] = clean_regs(dmtx[reg],tr)
+        dmtx[reg] = clean_regs(dmtx[reg],tr, params)
     
     if params.zscore_per_session:
         dmtx = zscore_regressors(dmtx)
