@@ -29,11 +29,12 @@ import matplotlib.lines as mlines
 from matplotlib.legend_handler import HandlerTuple
 from statsmodels.stats.multitest import fdrcorrection
 from scipy.stats import ttest_1samp
-from params_and_paths import Paths, Params, Receptors
 from dominance_funcs import dominance_stats
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
+from params_and_paths import Paths, Params, Receptors
+
 
 # --- Configuration ---
 MODEL_TYPE = 'linear'      # Options: 'linear', 'lin+quad', 'lin+interact', 'poly2'
@@ -217,7 +218,6 @@ def plot_dominance_bars(
         group_idx = receptor_to_group.get(receptor, -1)
         label.set_color(base_colors[group_idx])
 
-    ax.set_xlabel("Receptor/Transporter")
     ax.set_ylabel("% Contribution")
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
     ax.set_ylim(ylim)
@@ -268,7 +268,7 @@ def plot_dominance_heatmap(
         ]
         all_means_to_plot.index = new_index
 
-    fig, ax = plt.subplots(figsize=(3.3, 1.5))
+    fig, ax = plt.subplots(figsize=(3.38, 1.5))
     vmin=0
     vmax=0.18
     ax = sns.heatmap(
@@ -320,11 +320,11 @@ def plot_explore_dominance_heatmap(
 
     ordered_receptors = [r for group in receptor_groups for r in group]
 
-    for lv in latent_vars:
+    for latent_var in latent_vars:
         beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
         input_dir = os.path.join(beta_dir, "regressions", "PET2")
 
-        fname = f"{lv}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
+        fname = f"{latent_var}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
         df = pd.read_pickle(os.path.join(input_dir, fname))
 
         if "a2" in df.columns:
@@ -334,7 +334,7 @@ def plot_explore_dominance_heatmap(
         df = df.div(df.sum(axis=1), axis=0)
 
         mean_vals = df[ordered_receptors].mean()
-        mean_vals.name = lv
+        mean_vals.name = latent_var
         all_explore_means.append(mean_vals)
 
     # Create row × receptor matrix (rows = latent vars)
@@ -343,7 +343,7 @@ def plot_explore_dominance_heatmap(
     vmin=0
     vmax=0.18
 
-    fig, ax = plt.subplots(figsize=(3.3, 1.5))
+    fig, ax = plt.subplots(figsize=(3.38, 1.5))
 
     # Plot using existing helper heatmap function
     ax = sns.heatmap(
@@ -371,7 +371,7 @@ def plot_explore_dominance_heatmap(
 def plot_separate_colorbar(cmap, vmin=0, vmax=0.18, label="Contribution (%)", orientation="vertical"):
     # Create the figure and axis for the colorbar
     if orientation == "vertical":
-        fig, ax = plt.subplots(figsize=(0.25, 1.3))
+        fig, ax = plt.subplots(figsize=(0.15, 1.3))
     else:
         fig, ax = plt.subplots(figsize=(1.5, 0.25))
     
@@ -392,7 +392,6 @@ def plot_separate_colorbar(cmap, vmin=0, vmax=0.18, label="Contribution (%)", or
     else:
         cbar.ax.xaxis.set_label_position('bottom')
 
-    plt.tight_layout()
     return fig, ax
 
 def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
@@ -409,8 +408,8 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
         dark_color = sns.dark_palette(color, n_colors=3)[1]
         light_color = sns.light_palette(color, n_colors=3)[1]
 
-        dark_square = mlines.Line2D([], [], color=dark_color, marker='s', markersize=10, linestyle='None')
-        light_square = mlines.Line2D([], [], color=light_color, marker='s', markersize=10, linestyle='None')
+        dark_square = mlines.Line2D([], [], color=dark_color, marker='s', markersize=7, linestyle='None')
+        light_square = mlines.Line2D([], [], color=light_color, marker='s', markersize=7, linestyle='None')
 
         legend_elements.append((dark_square, light_square))
         legend_labels.append(name)
@@ -431,7 +430,7 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
         [], [], 
         color='black', 
         marker='+', 
-        markersize=8,          # make it clearly visible
+        markersize=6,          # make it clearly visible
         markeredgewidth=1.5,    # thicker lines for visibility
         linestyle='None',
         label="sig. estimate in full model: positive"
@@ -440,17 +439,17 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
         [], [], 
         color='black', 
         marker='_', 
-        markersize=10,          # slightly larger for underscore visibility
+        markersize=8,          # slightly larger for underscore visibility
         markeredgewidth=2, 
         linestyle='None',
         label="sig. estimate in full model: negative"
     )
     legend_elements.extend([red_dot, blue_dot])
     legend_labels.extend([
-        "sig. estimate in full model: positive",
-        "sig. estimate in full model: negative"
+        "pos. sig. in full reg. model",
+        "neg. sig. in full reg. model"
     ])
-
+    
     # --- Plot legend only ---
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     ax.axis("off")
@@ -462,13 +461,12 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
         loc="center",
         ncol=ncol,             # number of columns across
         frameon=False,
-        columnspacing=3.0,     # 🔹 space between columns
-        handlelength=4.0,      # 🔹 keeps paired squares apart from text
-        handletextpad=1.0,     # 🔹 space between handles and labels
-        labelspacing=1.5,      # vertical spacing between rows (if wrapping)
+        columnspacing=1.0,     # 🔹 space between columns
+        handlelength=2.5,      # 🔹 keeps paired squares apart from text
+        handletextpad=0.5,     # 🔹 space between handles and labels
+        labelspacing=1.0,      # vertical spacing between rows (if wrapping)
     )
 
-    plt.tight_layout()
     return fig
 
 
@@ -485,8 +483,7 @@ if __name__ == "__main__":
             output_dir = os.path.join(beta_dir, 'regressions', rec.source)
             os.makedirs(output_dir, exist_ok=True)
 
-            receptor_dir = os.path.join(paths.home_dir, 'receptors', rec.source)
-            receptor_density = mf.load_receptor_array(on_surface=False)
+            receptor_density = mf.load_receptor_array(params, paths, rec, on_surface=False)
 
             # Determine regression columns
             if MODEL_TYPE == 'linear':
@@ -512,7 +509,7 @@ if __name__ == "__main__":
                 results_df = pd.DataFrame(columns=columns)
 
                 for sub in subjects:
-                    y_data = mf.load_effect_map_array(sub, task, latent_var)
+                    y_data = mf.load_effect_map_array(sub, task, latent_var, params, paths)
                     receptor_density_zm = receptor_density
 
                     non_nan_idx = ~np.isnan(y_data)
@@ -564,11 +561,13 @@ if __name__ == "__main__":
             """Run dominance analysis for a single subject."""
             print(f"--- Dominance analysis for {task} subject {sub} ----")
 
+            receptor_density = mf.load_receptor_array(params, paths, rec, on_surface=False)
+
             beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
             output_dir = os.path.join(beta_dir, 'regressions', rec.source)
             os.makedirs(output_dir, exist_ok=True)
 
-            y_data = mf.load_effect_map_array(sub, task, latent_var)
+            y_data = mf.load_effect_map_array(sub, task, latent_var, params, paths)
             non_nan_idx = ~np.isnan(y_data)
             X = receptor_density[non_nan_idx, :]
             y = y_data[non_nan_idx]

@@ -105,9 +105,15 @@ def print_regression_results(df, col, file, label=''):
                f"d={slopes.mean()/slopes.std():.03f}, "
                f"t({slopes.count()-1})={t_res.statistic:.02f}, p={t_res.pvalue:.2e}\n\n")
     
-def set_publication_style(font_size=7, line_width=1, context="paper", layout="single"):
+def set_publication_style(
+    font_size=7,
+    line_width=1,
+    context="paper",
+    layout="single",
+    page="full",
+):
     """
-    Set consistent, publication-quality figure style.
+    Set consistent, publication-quality figure style 
     
     Parameters
     ----------
@@ -116,36 +122,66 @@ def set_publication_style(font_size=7, line_width=1, context="paper", layout="si
     line_width : float
         Default line width for axes and lines.
     context : str
-        Seaborn plotting context ('paper', 'notebook', 'talk', 'poster').
+        Seaborn context ('paper', 'notebook', 'talk', 'poster').
     layout : str
-        Publication layout: 'single', '2-across', or '3-across'
-        - single: one plot per column (3.35" width)
-        - 2-across: two plots spanning page width (≈3.3" each)
-        - 3-across: three plots spanning page width (≈2.15" each)
+        'single', '2-across', '3-across', or '6-across'
+    page : str
+        'single' (column width ≈ 8.9 cm) or 'full' (page width ≈ 17.8 cm)
     """
 
-    # Choose figure width based on layout
-    if layout == "single":
-        figsize = (3.35, 2.6)  # 85 mm width
-        capsize = 2.5
-    elif layout == "2-across":
-        figsize = (3.3, 2.5)   # half of double-column width
-        capsize = 2.0
-    elif layout == "3-across":
-        figsize = (2.15, 2.3)  # one-third of double-column width
-        capsize = 1.5
-    else:
-        raise ValueError("layout must be: 'single', '2-across', or '3-across'")
-    
-    matplotlib.rcParams['errorbar.capsize'] = capsize
+    import matplotlib
+    import seaborn as sns
 
+    cm_to_inch = 1 / 2.54
+
+    # --- PNAS-style page widths ---
+    page_widths = {
+        "single": 8.9 * cm_to_inch,   # ≈3.5"
+        "full": 17.8 * cm_to_inch,    # ≈7.0"
+    }
+
+    if page not in page_widths:
+        raise ValueError("page must be 'single' or 'full'")
+
+    page_width = page_widths[page]
+    gutter = 0.25 * cm_to_inch  # ≈0.1" between panels
+
+    # --- Compute figure width ---
+    n_panels = {
+        "single": 1,
+        "2-across": 2,
+        "3-across": 3,
+        "6-across": 6,
+    }.get(layout)
+
+    if n_panels is None:
+        raise ValueError("layout must be 'single', '2-across', '3-across', or '6-across'")
+
+    total_gutter = (n_panels - 1) * gutter
+    fig_width = (page_width - total_gutter) / n_panels
+
+    # Aspect ratio — for 6-across, use a shallower height
+    if layout == "6-across":
+        fig_height = fig_width * 0.65
+    else:
+        fig_height = fig_width * 0.75
+
+    # Error bar cap scaling
+    capsize = {
+        "single": 2.5,
+        "2-across": 2.0,
+        "3-across": 1.5,
+        "6-across": 1.0,
+    }[layout]
+    matplotlib.rcParams["errorbar.capsize"] = capsize
+
+    # --- Apply styling ---
     sns.set_theme(
         style="ticks",
         context=context,
         font="sans-serif",
         rc={
-            # Figure sizing
-            "figure.figsize": figsize,
+            "figure.figsize": (fig_width, fig_height),
             "figure.dpi": 300,
 
             # Fonts
@@ -169,9 +205,10 @@ def set_publication_style(font_size=7, line_width=1, context="paper", layout="si
         },
     )
 
-    # Embed fonts correctly in vector exports
-    matplotlib.rcParams['pdf.fonttype'] = 42
-    matplotlib.rcParams['ps.fonttype'] = 42
+    matplotlib.rcParams["pdf.fonttype"] = 42
+    matplotlib.rcParams["ps.fonttype"] = 42
+    matplotlib.rcParams['svg.fonttype'] = 'none'
+
 
 
 #  Get data and inference for each subject
@@ -409,14 +446,14 @@ with open(os.path.join(out_dir, 'behav_group_summary_meta.txt'), "w") as file:
         print_regression_results(subj_correlations, col, file)
         
 #  Plot group level effects, binned, with linear fit
-set_publication_style(font_size=7, layout="3-across")
+set_publication_style(font_size=7, layout="6-across")
 
 N_BINS = 6
 analysis_list = [
     {'dep_var': 'sub_pred', 'ind_var': 'io_pred', 'reg': 'sub_io_pred',
-     'x_label': 'Ideal probability estimate', 'y_label': 'Subjective probability estimate'},
+     'x_label': 'Ideal probability \nestimate', 'y_label': 'Subj. prob. est.'},
     {'dep_var': 'sub_conf', 'ind_var': 'io_conf', 'reg': 'sub_io_conf',
-     'x_label': 'Ideal confidence \n(log precision)', 'y_label': 'Subjective confidence'}
+     'x_label': 'Ideal confidence \n(log precision)', 'y_label': 'Subj. conf.'}
     ]
 
 for analysis in analysis_list:
@@ -451,15 +488,24 @@ for analysis in analysis_list:
     ax.set_xlabel(analysis['x_label'])
     ax.set_ylabel(analysis['y_label'])
     ax.tick_params(axis='both', which='major', pad=8)
-    if analysis['x_label'] == 'Ideal confidence \n(log precision)' and analysis['y_label'] == 'Subjective confidence':
+    if analysis['x_label'] == 'Ideal confidence \n(log precision)' and analysis['y_label'] == 'Subj. conf.':
         ax.set_ylim(0.5, 0.8)
-    fig.tight_layout()
     sns.despine(trim=False)
+    fig.tight_layout()
     fig.savefig(os.path.join(out_dir, f"{analysis['dep_var']}_vs_{analysis['ind_var']}_group.svg"))
     fig.savefig(os.path.join(out_dir, f"{analysis['dep_var']}_vs_{analysis['ind_var']}_group.png"), dpi=300)
 
 
 ###### by study output ######
+
+errorbar_kwargs = dict(
+    fmt='o',
+    color='black',
+    zorder=2,
+    elinewidth=0.5,   # thicker error lines
+    capsize=2.0,      # small horizontal caps for visibility
+    markersize=2,   # slightly smaller than default marker size
+)
 
 data['dataset'] = data['subject'].str.split('_').str[0]
 
@@ -519,19 +565,20 @@ for dataset_name, dataset_df in data.groupby('dataset'):
         int_mean = subset_corrs[analysis['reg'] + '_int'].mean()
 
         ax.plot(xlim, slope_mean * np.array(xlim) + int_mean,
-                lw=3, color="darkgrey", zorder=1, ls=ls)
+                lw=1, color="darkgrey", zorder=1, ls=ls)
 
-        ax.errorbar(binned_mean[analysis['ind_var']],
-                    binned_mean[analysis['dep_var']],
-                    binned_sem[analysis['dep_var']],
-                    fmt='o',
-                    color="black", zorder=2)
+        ax.errorbar(
+            binned_mean[analysis['ind_var']],
+            binned_mean[analysis['dep_var']],
+            binned_sem[analysis['dep_var']],
+            **errorbar_kwargs
+        )
 
         ax.set_xlabel(analysis['x_label'])
         ax.set_ylabel(analysis['y_label'])
-        ax.tick_params(axis='both', which='major', pad=8)
+        ax.tick_params(axis='both', which='major', pad=3)
 
-        if analysis['x_label'] == 'Ideal confidence \n(log precision)' and analysis['y_label'] == 'Subjective confidence':
+        if analysis['x_label'] == 'Ideal confidence \n(log precision)' and analysis['y_label'] == 'Subj. conf.':
             # Calculate the min and max of the error bars
             lower_bound = binned_mean[analysis['dep_var']] - binned_sem[analysis['dep_var']]
             upper_bound = binned_mean[analysis['dep_var']] + binned_sem[analysis['dep_var']]
@@ -543,9 +590,12 @@ for dataset_name, dataset_df in data.groupby('dataset'):
             # Apply the new limits
             ax.set_ylim(ymin, ymax)
 
-        fig.tight_layout()
+        ax.xaxis.set_major_formatter(plt.FormatStrFormatter('%.1f'))
+        ax.yaxis.set_major_formatter(plt.FormatStrFormatter('%.1f'))
+
         sns.despine(trim=False)
+
+
         filename = f"{dataset_name}_{analysis['dep_var']}_vs_{analysis['ind_var']}_group.svg"
-        fig.savefig(os.path.join(out_dir, filename))
-        fig.savefig(os.path.join(out_dir, filename.replace('.svg', '.png')), dpi=300)
+        fig.savefig(os.path.join(out_dir, filename), bbox_inches='tight')
         plt.close(fig)

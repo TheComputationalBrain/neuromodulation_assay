@@ -28,27 +28,29 @@ rec = Receptors(source = 'PET2')
 OUTPUT_DIR = os.path.join(paths.home_dir, 'figures')
 
 #invariance of functional activity: cluster overlap and colorbar
-mf.set_publication_style(font_size=7, layout="2-across")
-# plot_cluster_overlap_all(params.tasks, ['surprise', 'confidence', 'surprise_neg', 'confidence_neg'], OUTPUT_DIR)
-# fig,ax = plot_colorbar_overlap()
-# mf.save_figure(fig, OUTPUT_DIR, 'colorbar_overlap_4cat')
+mf.set_publication_style(font_size=7, layout="3-across")
+plot_cluster_overlap_all(params.tasks, ['surprise', 'confidence', 'surprise_neg', 'confidence_neg'], OUTPUT_DIR)
+fig,ax = plot_colorbar_overlap()
+mf.save_figure(fig, OUTPUT_DIR, 'colorbar_overlap_4cat')
 
 #invariance of functional activity: correlations between maps
 cmap_div = mf.get_custom_colormap('diverging')
 plot_correlations(["cross", "lower_triangles"], cmap_div,  OUTPUT_DIR)
 
 #variance explained: R2 and null model / ratio of explained variance
-fig, ax = plot_variance_explained(params)
+fig, ax = plot_variance_explained(params, legend=True)
 mf.save_figure(fig, OUTPUT_DIR, f"barplot_explained_variance")
-fig, ax = plot_explained_variance_ratio(params)
+fig, ax = plot_explained_variance_ratio(params, legend=False)
 mf.save_figure(fig, OUTPUT_DIR, f"barplot_explained_variance_ratio")
+
+mf.set_publication_style(font_size=7, layout="2-across")
 
 for latent_var in params.latent_vars:
     #dominance analysis and legend 
     results = load_dominance_data(params.tasks, latent_var, model_type='linear')
     combined, per_study_means = aggregate_dominance(results, exclude_explore=True)
 
-    fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted)
+    fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted, title=latent_var)
     mf.save_figure(fig, OUTPUT_DIR, f"group_{latent_var}_dominance")
 
     cmap_pos = mf.get_custom_colormap('pos')
@@ -70,5 +72,5 @@ mf.save_figure(fig, OUTPUT_DIR, f"Explore_heatmap")
 fig, ax = plot_separate_colorbar(cmap=cmap_pos, vmin=0, vmax=0.18)
 mf.save_figure(fig, OUTPUT_DIR, f"colorbar_heatmap")
 
-fig = plot_legend_dominance_bars(rec, ncol=7, fig_width=17.8, fig_height=1.5)
+fig = plot_legend_dominance_bars(rec, ncol=6, fig_width=7, fig_height=1.5)
 mf.save_figure(fig, OUTPUT_DIR, f"legend_dominance_bar")

@@ -63,6 +63,7 @@ class Params:
             self.latent_vars = ['S-N']
         else:
             self.latent_vars = ['confidence', 'surprise']
+            self.variables_long = ['surprise', 'confidence', 'surprise_neg', 'confidence_neg']
 
         self.mask = mask
 
@@ -115,6 +116,8 @@ class Paths:
 
 class Receptors:
     def __init__(self, source):
+
+        self.source = source
 
         if source == 'PET':
             self.receptor_names = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",

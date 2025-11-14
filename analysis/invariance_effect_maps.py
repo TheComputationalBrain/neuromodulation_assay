@@ -61,6 +61,9 @@ def plot_individual_clusters(tasks, contrasts, output_dir):
                 hemi='right', threshold=TRESH, vmax=VMAX, title=f"{task} {contrast}",
                 colorbar=True, cmap=cmap, cbar_tick_format='%.2f'
             )
+            for ax in plt.gcf().axes:
+                for coll in ax.collections:
+                    coll.set_rasterized(True)
             
             mf.save_figure(fig, output_dir, f'{task}_{contrast}_cluster_mass_right')
 
@@ -97,6 +100,9 @@ def plot_cluster_overlap_all(tasks, contrasts, output_dir):
                     surf_mesh=mesh, roi_map=conditions_array, bg_map=bg_map,
                     cmap=cmap, vmin=1, vmax=4, hemi=hemi, view=view
                 )
+                for ax in plt.gcf().axes:
+                    for coll in ax.collections:
+                        coll.set_rasterized(True)
                 mf.save_figure(fig, output_dir, f'{contrast}_allOverlap_{hemi}_{view}')
 
 

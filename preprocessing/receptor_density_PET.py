@@ -28,12 +28,13 @@ from neuromaps import transforms
 import cmcrameri.cm as cmc
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
-from params_and_paths import Params, Paths
+import main_funcs as mf
+from params_and_paths import Paths, Params, Receptors
 
 
 PLOT_RECEPTORS=False
 PLOT_RECEPTORS_INFLATED=False
-PLOT_CORR = False
+PLOT_CORR = True
 
 paths = Paths(task = 'all')
 params = Params(task='all')
@@ -85,7 +86,7 @@ receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
                  paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
                  paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
 
-for proj in ['vol', 'surf']:  
+for proj in ['surf','vol']:  
     masked = []
     for receptor in receptors_nii:
         img = nib.load(receptor)
@@ -163,6 +164,8 @@ if PLOT_RECEPTORS:
         plt.close()
 
 if PLOT_RECEPTORS_INFLATED:
+    mf.set_publication_style(font_size=7, layout="3-across")
+
     if params.parcelated:
         plot_path = os.path.join(output_dir, params.mask_details,'figures') 
     else:
@@ -172,14 +175,21 @@ if PLOT_RECEPTORS_INFLATED:
     for indx,receptor in enumerate(receptor_names):
         data = masker.inverse_transform(zscore(receptor_data[:, indx]))
         mask_img = image.new_img_like(data, image.get_data(data) != 0) 
+
         plotting.plot_img_on_surf(data, surf_mesh='fsaverage',threshold=1e-50,
-                                        hemispheres=['left'], views=['lateral', 'medial'],
+                                        hemispheres=['right'], views=['lateral'],
                                         title=receptor, colorbar=True, cmap = 'plasma',inflate=True, symmetric_cbar=False)
-        fig_fname = 'surface_receptor_'+receptor+'_cortical.png'
+        for ax in plt.gcf().axes:
+            for coll in ax.collections:
+                coll.set_rasterized(True)
+        fig_fname = 'surface_receptor_'+receptor+'_cortical_right.pdf'
         plt.savefig(os.path.join(plot_path, fig_fname),dpi=300, bbox_inches='tight',transparent=True)
         plt.close()
 
+
 if PLOT_CORR:
+    mf.set_publication_style(font_size=7, layout="2-across")
+
     #### correlation matrix
     serotonin = ["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT"]
     acetylcholine = ["A4B2", "M1", "VAChT"]
@@ -192,9 +202,7 @@ if PLOT_CORR:
     cannabinnoid = ["CB1"]
     receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
 
-    cmap = np.genfromtxt('../hansen_receptors/data/colourmap.csv', delimiter=',')
-    cmap_div = ListedColormap(cmap)
-    plt.rcParams.update({'font.size': 20})
+    cmap = mf.get_custom_colormap()
 
     ordered_receptors = [receptor for group in receptor_groups for receptor in group]
     df = pd.DataFrame(receptor_data, columns=receptor_names)
@@ -214,7 +222,7 @@ if PLOT_CORR:
         fig_fname = f'receptor_corr_matrix_{params.mask}_{params.mask_details}.png'
         plt.savefig(os.path.join(plot_path, fig_fname))
     else:
-        fig_fname = f'receptor_corr_matrix_{params.mask}.png'
+        fig_fname = f'receptor_corr_matrix_{params.mask}.pdf'
         plt.savefig(os.path.join(plot_path, fig_fname))
 
 

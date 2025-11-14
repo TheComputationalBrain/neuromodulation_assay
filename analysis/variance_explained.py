@@ -124,7 +124,7 @@ if FROM_BETA:
 
 if COMP_NULL:
     df = pd.DataFrame(index=params.tasks, columns=params.latent_vars)
-    results = []  # store results for correction later
+    results = []  
 
     # collect all p-values
     p_values = []
@@ -200,7 +200,7 @@ if COMPARE_EXPL_VAR:
             ratio_task = group_ratio(rec_var_task, expl_var_task)
             obs_diff = ratio_lanA - ratio_task
 
-            # --- Permutation test ---
+            # Permutation test
             combined_rec = np.concatenate([rec_var_lanA, rec_var_task])
             combined_expl = np.concatenate([expl_var_lanA, expl_var_task])
             n_lanA = len(rec_var_lanA)
@@ -229,7 +229,7 @@ if COMPARE_EXPL_VAR:
                 "p_val": p_val
             })
 
-    # --- FDR correction across all comparisons ---
+    # FDR correction across all comparisons 
     p_values = [r["p_val"] for r in results]
     reject, pvals_fdr, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
 
@@ -238,7 +238,7 @@ if COMPARE_EXPL_VAR:
         r["p_val_fdr"] = pvals_fdr[i]
         r["reject_null"] = reject[i]
 
-    # --- Write output ---
+    # Write output 
     outfile_path = os.path.join(output_dir, f'compare_explained_variance_cv_group_ratio_{SCORE}_permtest_fdr.txt')
     with open(outfile_path, "w") as outfile:
         for r in results:
@@ -253,7 +253,7 @@ if COMPARE_EXPL_VAR:
 
 
 
-def plot_variance_explained(params, model_type="linear", score="determination", comparison_latent="S-N"):
+def plot_variance_explained(params, model_type="linear", score="determination", comparison_latent="S-N", legend=True):
     """
     Plot variance explained and null model for each latent variable and task.
     """
@@ -271,7 +271,7 @@ def plot_variance_explained(params, model_type="linear", score="determination", 
 
     # Add the language comparison
     emp = np.asarray(np.load(os.path.join(paths.home_dir, 'variance_explained', f"lanA_S-N_all_regression_cv_r2_{score}.pickle"), allow_pickle=True))
-    null = np.asarray(np.load(os.path.join(paths.home_dir, 'variance_explained', f"lanA_S-N_all_regression_null_cv_r2.pickle"), allow_pickle=True))
+    null = np.asarray(np.load(os.path.join(paths.home_dir, 'variance_explained', f"lanA_S-N_all_regression_null_cv_r2_{score}.pickle"), allow_pickle=True))
     stats[("language", "lanA")] = {
         "mean_emp": np.nanmean(emp),
         "sem_emp": np.nanstd(emp, ddof=1) / np.sqrt(np.sum(~np.isnan(emp))),
@@ -343,24 +343,26 @@ def plot_variance_explained(params, model_type="linear", score="determination", 
         for i in range(len(params.tasks))
     ]
 
-    ax.legend(
-        handles=task_handles + [comparison_patch],
-        frameon=False,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.05),
-        ncol=2
-    )
+    if legend == True:
+
+        ax.legend(
+            handles=task_handles + [comparison_patch],
+            frameon=False,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=2
+        )
     return fig, ax
 
 
-def plot_explained_variance_ratio(params, model_type="lin", score="determination", comparison_latent="S-N", n_boot=10000):
+def plot_explained_variance_ratio(params, score="determination", comparison_latent="S-N", n_boot=10000, legend=True):
     """
     Plot the explainable variance ratio (empirical / predicted) with bootstrap CIs.
     Uses the currently active plotting style.
     """
     rng = np.random.default_rng(seed=124)
 
-    def bootstrap_group_ratio(rec_var, expl_var, n_boot=10000, rng=None):
+    def bootstrap_group_ratio(rec_var, expl_var, n_boot=n_boot, rng=None):
         n = len(rec_var)
         return np.array([
             np.mean(rng.choice(rec_var, size=n, replace=True)) / 
@@ -446,13 +448,14 @@ def plot_explained_variance_ratio(params, model_type="lin", score="determination
         for i in range(len(params.tasks))
     ]
 
-    ax.legend(
-        handles=task_handles + [comparison_patch],
-        frameon=False,
-        loc="lower center",
-        bbox_to_anchor=(0.5, 1.05),
-        ncol=2 
-    )
+    if legend == True:
+        ax.legend(
+            handles=task_handles + [comparison_patch],
+            frameon=False,
+            loc="lower center",
+            bbox_to_anchor=(0.5, 1.05),
+            ncol=2 
+        )
 
     plt.tight_layout()
     return fig, ax

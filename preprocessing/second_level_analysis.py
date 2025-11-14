@@ -18,24 +18,19 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from nilearn.glm.second_level import SecondLevelModel, non_parametric_inference
-from nilearn import plotting, image
+from nilearn import plotting
 from nilearn import datasets
-from nilearn import surface
-from nilearn.input_data import NiftiLabelsMasker
-import main_funcs as mf
 import fmri_funcs as fun
 import nibabel as nib
-from scipy.stats import zscore
-from nilearn.datasets import fetch_atlas_schaefer_2018
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 
 
-TASK = 'EncodeProb'
+TASK = 'Explore'
 
-RUN_PERMUTATION = True
+RUN_PERMUTATION = False
 RESOLUTION = 'fsaverage'
 
 paths = Paths(task=TASK)
@@ -49,16 +44,10 @@ TRESH = 0.001
 FWHM = 5
 TWO_SIDED = False
 
-if TASK in ['NAConf']:
-    add_info = '_firstTrialsRemoved'
-else:
-    add_info = ""
-
 # --- Utility functions ---
 
 def plot_beta_map(effect_map, var, plot_path, resolution, add_info):
     """Plot and save beta (effect size) maps on surface."""
-    plt.rcParams.update({'font.size': 8})
     plotting.plot_img_on_surf(
         effect_map, surf_mesh=resolution,
         hemispheres=['left', 'right'], views=['lateral', 'medial'],
@@ -67,6 +56,9 @@ def plot_beta_map(effect_map, var, plot_path, resolution, add_info):
         inflate=True, symmetric_cbar=True,
         cbar_tick_format='%2f'
     )
+    for ax in plt.gcf().axes:
+        for coll in ax.collections:
+            coll.set_rasterized(True)
     fname = f'{var}_effect_map{add_info}.pdf'
     plt.savefig(os.path.join(plot_path, fname), transparent=True)
     plt.close()
@@ -74,7 +66,6 @@ def plot_beta_map(effect_map, var, plot_path, resolution, add_info):
 
 def plot_z_map(z_map, var, plot_path, resolution, add_info):
     """Plot and save z-score maps on surface."""
-    plt.rcParams.update({'font.size': 8})
     # Left + Right, both views
     plotting.plot_img_on_surf(
         z_map, surf_mesh=resolution,
@@ -84,11 +75,14 @@ def plot_z_map(z_map, var, plot_path, resolution, add_info):
         inflate=True, symmetric_cbar=True,
         cbar_tick_format='%.2f'
     )
+    for ax in plt.gcf().axes:
+        for coll in ax.collections:
+            coll.set_rasterized(True)
+
     plt.savefig(os.path.join(plot_path, f'{var}_z_map{add_info}.pdf'), transparent=True)
     plt.close()
 
     # Right hemisphere only, lateral view
-    plt.rcParams.update({'font.size': 16})
     plotting.plot_img_on_surf(
         z_map, surf_mesh=resolution,
         hemispheres=['right'], views=['lateral'],
@@ -96,11 +90,16 @@ def plot_z_map(z_map, var, plot_path, resolution, add_info):
         cmap='cold_hot', inflate=True,
         symmetric_cbar=True, cbar_tick_format='%i'
     )
+    for ax in plt.gcf().axes:
+        for coll in ax.collections:
+            coll.set_rasterized(True)
     plt.savefig(os.path.join(plot_path, f'{var}_z_map_right{add_info}.pdf'), transparent=True)
     plt.close()
 
 
 # --- Main analysis ---
+mf.set_publication_style(font_size=7, layout="3-across")
+
 
 fmri_dir = mf.get_fmri_dir(params.db, paths)
 subjects = [s for s in mf.get_subjects(params.db, fmri_dir) if s not in params.ignore]
@@ -116,7 +115,7 @@ plot_path = os.path.join(output_dir, 'plot_raw')
 os.makedirs(plot_path, exist_ok=True)
 
 # Masker setup
-masker = fun.get_masker(paarams=params, paths=paths)
+masker = fun.get_masker(params=params, paths=paths)
 masker.fit()
 
 # Templates
@@ -144,7 +143,7 @@ for var in params.latent_vars:
     with open(os.path.join(output_dir, f'group_{var}_{params.mask}_effect_size{add_info}.pickle'), 'wb') as f:
         pickle.dump(effect, f)
 
-    plot_beta_map(effect_map, var, plot_path, RESOLUTION, add_info)
+    # plot_beta_map(effect_map, var, plot_path, RESOLUTION, add_info)
 
     # --- Z-map ---
     z_map = second_level_model.compute_contrast('intercept', output_type='z_score')
@@ -153,13 +152,8 @@ for var in params.latent_vars:
 
 if RUN_PERMUTATION:
 
-    if params.db == 'Explore':
-        variables_long = ['surprise', 'confidence', 'surprise_neg', 'confidence_neg']
-    else:
-        variables_long = params.latent_vars_long
-
     # for var in variables_long:
-    for var in variables_long:
+    for var in params.latent_vars_long:
 
         eff_size_files = []
         for sub in subjects:

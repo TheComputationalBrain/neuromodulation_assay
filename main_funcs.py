@@ -21,9 +21,15 @@ import nibabel as nib
 from neuromaps import transforms
 from scipy.stats import zscore
 
-def set_publication_style(font_size=7, line_width=1, context="paper", layout="single"):
+def set_publication_style(
+    font_size=7,
+    line_width=1,
+    context="paper",
+    layout="single",
+    page="full",
+):
     """
-    Set consistent, publication-quality figure style.
+    Set consistent, publication-quality figure style 
     
     Parameters
     ----------
@@ -32,36 +38,66 @@ def set_publication_style(font_size=7, line_width=1, context="paper", layout="si
     line_width : float
         Default line width for axes and lines.
     context : str
-        Seaborn plotting context ('paper', 'notebook', 'talk', 'poster').
+        Seaborn context ('paper', 'notebook', 'talk', 'poster').
     layout : str
-        Publication layout: 'single', '2-across', or '3-across'
-        - single: one plot per column (3.35" width)
-        - 2-across: two plots spanning page width (≈3.3" each)
-        - 3-across: three plots spanning page width (≈2.15" each)
+        'single', '2-across', '3-across', or '6-across'
+    page : str
+        'single' (column width ≈ 8.9 cm) or 'full' (page width ≈ 17.8 cm)
     """
 
-    # Choose figure width based on layout
-    if layout == "single":
-        figsize = (3.35, 2.6)  # 85 mm width
-        capsize = 2.5
-    elif layout == "2-across":
-        figsize = (3.3, 2.5)   # half of double-column width
-        capsize = 2.0
-    elif layout == "3-across":
-        figsize = (2.15, 2.3)  # one-third of double-column width
-        capsize = 1.5
-    else:
-        raise ValueError("layout must be: 'single', '2-across', or '3-across'")
-    
-    matplotlib.rcParams['errorbar.capsize'] = capsize
+    import matplotlib
+    import seaborn as sns
 
+    cm_to_inch = 1 / 2.54
+
+    # --- PNAS-style page widths ---
+    page_widths = {
+        "single": 8.9 * cm_to_inch,   # ≈3.5"
+        "full": 17.8 * cm_to_inch,    # ≈7.0"
+    }
+
+    if page not in page_widths:
+        raise ValueError("page must be 'single' or 'full'")
+
+    page_width = page_widths[page]
+    gutter = 0.25 * cm_to_inch  # ≈0.1" between panels
+
+    # --- Compute figure width ---
+    n_panels = {
+        "single": 1,
+        "2-across": 2,
+        "3-across": 3,
+        "6-across": 6,
+    }.get(layout)
+
+    if n_panels is None:
+        raise ValueError("layout must be 'single', '2-across', '3-across', or '6-across'")
+
+    total_gutter = (n_panels - 1) * gutter
+    fig_width = (page_width - total_gutter) / n_panels
+
+    # Aspect ratio — for 6-across, use a shallower height
+    if layout == "6-across":
+        fig_height = fig_width * 0.65
+    else:
+        fig_height = fig_width * 0.75
+
+    # Error bar cap scaling
+    capsize = {
+        "single": 2.5,
+        "2-across": 2.0,
+        "3-across": 1.5,
+        "6-across": 1.0,
+    }[layout]
+    matplotlib.rcParams["errorbar.capsize"] = capsize
+
+    # --- Apply styling ---
     sns.set_theme(
         style="ticks",
         context=context,
         font="sans-serif",
         rc={
-            # Figure sizing
-            "figure.figsize": figsize,
+            "figure.figsize": (fig_width, fig_height),
             "figure.dpi": 300,
 
             # Fonts
@@ -85,9 +121,10 @@ def set_publication_style(font_size=7, line_width=1, context="paper", layout="si
         },
     )
 
-    # Embed fonts correctly in vector exports
-    matplotlib.rcParams['pdf.fonttype'] = 42
-    matplotlib.rcParams['ps.fonttype'] = 42
+    matplotlib.rcParams["pdf.fonttype"] = 42
+    matplotlib.rcParams["ps.fonttype"] = 42
+    matplotlib.rcParams['svg.fonttype'] = 'none'
+
 
 def save_figure(fig, output_dir, filename, extension=['pdf', 'svg'], close=True):
     """
