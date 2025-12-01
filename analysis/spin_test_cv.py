@@ -168,7 +168,6 @@ def process_task(task):
 
     return results_emp, results_null
 
-
 # Main
 all_emp, all_null = {}, {}
 with concurrent.futures.ProcessPoolExecutor() as executor:
@@ -178,13 +177,14 @@ with concurrent.futures.ProcessPoolExecutor() as executor:
         all_emp.update(emp)
         all_null.update(null)
 
-# Convert to DataFrames
-df_emp = pd.DataFrame.from_dict(all_emp, orient="index", columns=["r2"])
-df_emp.index = pd.MultiIndex.from_tuples(df_emp.index, names=["task", "latent_var"])
-df_emp.to_csv(os.path.join(output_dir, f"overview_regression_cv_{SCORE}.csv"))
+# Convert to DataFrames (not necessary if running just one study)
+if len(params.tasks)>1:
+    df_emp = pd.DataFrame.from_dict(all_emp, orient="index", columns=["r2"])
+    df_emp.index = pd.MultiIndex.from_tuples(df_emp.index, names=["task", "latent_var"])
+    df_emp.to_csv(os.path.join(output_dir, f"overview_regression_cv_{SCORE}.csv"))
 
-if RUN_SPIN:
-    df_null = pd.DataFrame.from_dict(all_null, orient="index", columns=["r2"])
-    df_null.index = pd.MultiIndex.from_tuples(df_null.index, names=["task", "latent_var"])
-    df_null.to_csv(os.path.join(output_dir, f"overview_null_cv_{SCORE}.csv"))
+    if RUN_SPIN:
+        df_null = pd.DataFrame.from_dict(all_null, orient="index", columns=["r2"])
+        df_null.index = pd.MultiIndex.from_tuples(df_null.index, names=["task", "latent_var"])
+        df_null.to_csv(os.path.join(output_dir, f"overview_null_cv_{SCORE}.csv"))
 

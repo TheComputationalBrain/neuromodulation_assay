@@ -16,7 +16,7 @@ from scipy.io import loadmat
 from nilearn.datasets import fetch_atlas_harvard_oxford, fetch_atlas_schaefer_2018
 from nilearn import image
 from nilearn.input_data import NiftiMasker, MultiNiftiMasker
-from preprocessing.idealObserver3 import io_with_derivations
+from idealObserver3 import io_with_derivations
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 from main_funcs import *

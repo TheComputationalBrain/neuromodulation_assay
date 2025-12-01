@@ -18,6 +18,7 @@ from matplotlib.lines import Line2D
 from nilearn import datasets
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import pearsonr
+from scipy.stats import mannwhitneyu
 
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
@@ -29,10 +30,11 @@ FROM_BETA = False
 COMP_NULL = False
 COMPARE_LANG_LEARN = False
 COMPARE_EXPL_VAR = False
+COMPARE_EXPL_VAR_SUBJECT = False
 
 #plots
 PLOT_VAR_EXPLAINED = False
-PLOT_VAR_EXPLAINED_RATIO = False
+PLOT_VAR_EXPLAINED_RATIO = True
 
 MODEL_TYPE = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
 
@@ -179,7 +181,7 @@ if COMPARE_EXPL_VAR:
 
     # Function to compute group ratio
     def group_ratio(rec_var, expl_var):
-        return np.mean(rec_var) / np.mean(expl_var)
+        return np.mean(rec_var) / np.mean(expl_var)        
 
     # Load reference (lanA)
     expl_var_lanA = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
@@ -205,13 +207,17 @@ if COMPARE_EXPL_VAR:
             combined_expl = np.concatenate([expl_var_lanA, expl_var_task])
             n_lanA = len(rec_var_lanA)
 
+            combined = np.column_stack([combined_rec, combined_expl])
+
             perm_diffs = np.empty(n_perm)
             for i in range(n_perm):
-                perm_indices = rng.permutation(len(combined_rec))
-                rec_perm_A = combined_rec[perm_indices[:n_lanA]]
-                rec_perm_B = combined_rec[perm_indices[n_lanA:]]
-                expl_perm_A = combined_expl[perm_indices[:n_lanA]]
-                expl_perm_B = combined_expl[perm_indices[n_lanA:]]
+                perm_indices = rng.permutation(len(combined))
+                perm_A = combined[perm_indices[:n_lanA]]
+                perm_B = combined[perm_indices[n_lanA:]]
+
+                rec_perm_A, expl_perm_A = perm_A[:, 0], perm_A[:, 1]
+                rec_perm_B, expl_perm_B = perm_B[:, 0], perm_B[:, 1]
+
                 perm_diffs[i] = group_ratio(rec_perm_A, expl_perm_A) - group_ratio(rec_perm_B, expl_perm_B)
 
             # Two-sided p-value
@@ -250,6 +256,75 @@ if COMPARE_EXPL_VAR:
             outfile.write(f'Permutation p-value: {r["p_val"]:.4f}\n')
             outfile.write(f'FDR-corrected p-value: {r["p_val_fdr"]:.4f}\n')
             outfile.write(f'Significant after FDR (q<0.05): {r["reject_null"]}\n\n')
+
+
+if COMPARE_EXPL_VAR_SUBJECT:
+    rng = np.random.default_rng(seed=123)
+
+    # Function to compute subject-level ratio
+    def subject_ratios(rec_var, expl_var):
+        return rec_var / expl_var
+
+    # Load reference (lanA)
+    expl_var_lanA = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+    rec_var_lanA  = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_regression_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+
+    # Subject-level ratios for lanA
+    ratios_lanA = subject_ratios(rec_var_lanA, expl_var_lanA)
+    mean_ratio_lanA = np.mean(ratios_lanA)
+    results = []
+
+    for task in params.tasks:
+        for latent_var in params.latent_vars:
+            print(f"Running Mann–Whitney for {task} / {latent_var}...")
+
+            # Load task data
+            expl_var_task = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+            rec_var_task  = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+
+            # Subject-level ratios for task
+            ratios_task = subject_ratios(rec_var_task, expl_var_task)
+            mean_ratio_task = np.mean(ratios_task)
+
+            # Observed difference in means (just descriptive)
+            obs_diff = mean_ratio_lanA - mean_ratio_task
+
+            # Mann–Whitney U test
+            U, p_val = mannwhitneyu(ratios_task, ratios_lanA, alternative='greater')
+
+            # Store output
+            results.append({
+                "task": task,
+                "latent_var": latent_var,
+                "mean_ratio_lanA": mean_ratio_lanA,
+                "mean_ratio_task": mean_ratio_task,
+                "obs_diff": obs_diff,
+                "U_stat": U,
+                "p_val": p_val
+            })
+
+    # FDR correction across all p-values
+    p_values = [r["p_val"] for r in results]
+    reject, pvals_fdr, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
+
+    # Assign corrected values
+    for i, r in enumerate(results):
+        r["p_val_fdr"] = pvals_fdr[i]
+        r["reject_null"] = reject[i]
+
+    # Write results to file
+    outfile_path = os.path.join(output_dir, f'mannwhitney_subject_ratio_{SCORE}_fdr.txt')
+    with open(outfile_path, "w") as outfile:
+        for r in results:
+            outfile.write(f"{r['task']} and {r['latent_var']}:\n")
+            outfile.write(f'Mean Subject Ratio lanA: {r["mean_ratio_lanA"]:.4f}\n')
+            outfile.write(f'Mean Subject Ratio {r["task"]}_{r["latent_var"]}: {r["mean_ratio_task"]:.4f}\n')
+            outfile.write(f'Diff in Means (lanA - task): {r["obs_diff"]:.4f}\n')
+            outfile.write(f'Mann–Whitney U statistic: {r["U_stat"]:.4f}\n')
+            outfile.write(f'U-test p-value: {r["p_val"]:.4f}\n')
+            outfile.write(f'FDR-corrected p-value: {r["p_val_fdr"]:.4f}\n')
+            outfile.write(f'Significant after FDR (q<0.05): {r["reject_null"]}\n\n')
+
 
 
 
@@ -459,6 +534,7 @@ def plot_explained_variance_ratio(params, score="determination", comparison_late
 
     plt.tight_layout()
     return fig, ax
+
 
 mf.set_publication_style(font_size=8)
 

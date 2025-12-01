@@ -86,7 +86,7 @@ receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
                  paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
                  paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
 
-for proj in ['surf','vol']:  
+for proj in ['vol', 'surf']:  
     masked = []
     for receptor in receptors_nii:
         img = nib.load(receptor)
