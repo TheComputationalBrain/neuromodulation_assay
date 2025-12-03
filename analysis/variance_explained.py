@@ -29,7 +29,6 @@ from params_and_paths import Paths, Params, Receptors
 FROM_BETA = False
 COMP_NULL = False
 COMPARE_LANG_LEARN = False
-COMPARE_EXPL_VAR = False
 COMPARE_EXPL_VAR_SUBJECT = False
 
 #plots
@@ -54,245 +53,184 @@ comparison_task = 'lanA'
 
 fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
 
-if FROM_BETA:
-    for task in params.tasks: 
+def run_from_beta(params, Paths, mf, output_dir, SCORE='determination', to_file=True):
+
+    def write(text):
+        if to_file:
+            with open(os.path.join(output_dir, 'predict_from_beta.txt'), 'a') as f:
+                f.write(text)
+        else:
+            print(text, end="")
+
+    for task in params.tasks:
 
         paths = Paths(task=task)
-        params = Params(task=task, cv_true=True)
+        params = Params(task=task, cv_true=True)   # unchanged
 
         beta_dir, add_info = mf.get_beta_dir_and_info(task, params, paths)
         fmri_dir = mf.get_fmri_dir(task, paths)
 
         subject_paths = paths.home_dir if task == "lanA" else paths.root_dir
         subjects = mf.get_subjects(task, os.path.join(subject_paths, fmri_dir))
-        subjects = [subj for subj in subjects if subj not in params.ignore] 
+        subjects = [s for s in subjects if s not in params.ignore]
 
-        with open(os.path.join(output_dir,f'predict_from_beta.txt'), "a") as outfile:
-            outfile.write(f'{task}: variance explained in analysis:\n\n')
-            
-            for latent_var in params.latent_vars:
-                all_data = []
+        write(f"{task}: variance explained in analysis:\n\n")
 
-                #load all data
-                for sub in subjects:
-                    if task == 'lanA':
-                        file = nib.load(os.path.join(beta_dir,'subjects', f'{sub:03d}', 'SPM', 'spmT_S-N.nii'))
-                    else:
-                        file = nib.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz'))
-                    effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
-                    data_gii = []
-                    for img in effect_data:
-                        data_hemi = np.asarray(img.agg_data()).T
-                        data_gii.append(data_hemi)
-                    effect_array = np.hstack(data_gii)
-                    all_data.append(effect_array)
-            
-                all_rsquared = []
+        for latent_var in params.latent_vars:
+            all_data = []
 
-                for i in range(len(all_data)):
-                    sub_data = all_data[i]
-                    other_data = [arr for j, arr in enumerate(all_data) if j != i]
-                    other_data = np.stack(other_data)
-                    mean_data = np.nanmean(other_data, axis=0)
+            # Load beta data
+            for sub in subjects:
+                if task == 'lanA':
+                    file = nib.load(os.path.join(
+                        beta_dir, 'subjects', f'{sub:03d}', 'SPM', 'spmT_S-N.nii'
+                    ))
+                else:
+                    file = nib.load(os.path.join(
+                        beta_dir,
+                        f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz'
+                    ))
 
-                    mask_valid = ~np.isnan(sub_data)
+                effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
+                hemi_arrays = [np.asarray(img.agg_data()).T for img in effect_data]
+                all_data.append(np.hstack(hemi_arrays))
 
-                    X = mean_data[mask_valid].reshape(-1, 1)
-                    y = sub_data[mask_valid]
+            # Cross-validated R² or corr²
+            all_rsquared = []
 
-                    
-                    lin_reg = LinearRegression()
-                    lin_reg.fit(X, y)
-                    y_pred = lin_reg.predict(X)
+            for i in range(len(all_data)):
+                sub_data = all_data[i]
+                other_data = np.stack([arr for j, arr in enumerate(all_data) if j != i])
+                mean_data = np.nanmean(other_data, axis=0)
 
-                    if SCORE == 'determination':
-                        rsquared = r2_score(y, y_pred)
-                        all_rsquared.append(rsquared)
+                mask_valid = ~np.isnan(sub_data)
+                X = mean_data[mask_valid].reshape(-1, 1)
+                y = sub_data[mask_valid]
 
-                    elif SCORE == 'corr':
-                        r, _ = pearsonr(y, y_pred) #equivalent to correlating y and X
-                        corr_sq = r**2
-                        all_rsquared.append(corr_sq)
+                model = LinearRegression().fit(X, y)
+                y_pred = model.predict(X)
 
-            # Save results
-            with open(os.path.join(output_dir,f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'), "wb") as fp:   
+                if SCORE == 'determination':
+                    all_rsquared.append(r2_score(y, y_pred))
+                else:
+                    r, _ = pearsonr(y, y_pred)
+                    all_rsquared.append(r * r)
+
+            # Save pickle
+            outpath = os.path.join(
+                output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'
+            )
+            with open(outpath, 'wb') as fp:
                 pickle.dump(all_rsquared, fp)
 
-            expl_variance = np.mean(all_rsquared)
+            # Print/write results
+            mean_r2 = np.mean(all_rsquared)
             sem_r2 = sem(all_rsquared)
-            outfile.write(f'{latent_var}: {expl_variance}, sem: {sem_r2}\n')
+            write(f"{latent_var}: {mean_r2}, sem: {sem_r2}\n")
 
-            outfile.write('\n\n')
+        write("\n\n")
 
-if COMP_NULL:
+def run_comp_null(params, output_dir, MODEL_TYPE='linear', SCORE='determination', to_file=True):
+
+    def write(text):
+        if to_file:
+            with open(os.path.join(output_dir, f'compare_emp_null_cv_{SCORE}.txt'), 'a') as f:
+                f.write(text)
+        else:
+            print(text, end="")
+
     df = pd.DataFrame(index=params.tasks, columns=params.latent_vars)
-    results = []  
-
-    # collect all p-values
+    results = []
     p_values = []
 
     for task in params.tasks:
         for latent_var in params.latent_vars:
-            # Load empirical and null data
-            emp = np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'), allow_pickle=True)
-            null = np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_null_cv_r2_{SCORE}.pickle'), allow_pickle=True)
-            null_df = pd.DataFrame(null)
-            null_means = null_df.mean().tolist()
 
-            # Paired t-test
-            ttest = ttest_rel(null_means, emp, alternative='less')
+            emp = np.load(os.path.join(
+                output_dir,
+                f'{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'
+            ), allow_pickle=True)
 
-            # Store results
+            null = np.load(os.path.join(
+                output_dir,
+                f'{task}_{latent_var}_all_regression_null_cv_r2_{SCORE}.pickle'
+            ), allow_pickle=True)
+
+            null_mean = pd.DataFrame(null).mean().tolist()
+            ttest = ttest_rel(null_mean, emp, alternative='less')
+
             results.append({
                 'task': task,
                 'latent_var': latent_var,
                 't_value': ttest.statistic,
                 'p_value': ttest.pvalue,
-                'df': len(null_means) - 1
+                'df': len(null_mean) - 1
             })
             p_values.append(ttest.pvalue)
 
-    # Apply FDR correction across all tests
+    # FDR
     reject, pvals_corrected, _, _ = multipletests(p_values, method='fdr_bh')
-
-    # Add corrected p-values and rejection flags back into results
     for i, r in enumerate(results):
         r['p_value_fdr'] = pvals_corrected[i]
         r['significant_fdr'] = reject[i]
         df.loc[r['task'], r['latent_var']] = r['p_value_fdr']
 
-    # Save all results to file
-    with open(os.path.join(output_dir, f'compare_emp_null_cv_{SCORE}.txt'), "a") as outfile:
-        for r in results:
-            outfile.write(f"{r['task']} and {r['latent_var']}:\n")
-            outfile.write(f"t-value: {r['t_value']}\n")
-            outfile.write(f"p-value: {r['p_value']}\n")
-            outfile.write(f"FDR-corrected p-value: {r['p_value_fdr']}\n")
-            outfile.write(f"Significant (FDR<0.05): {r['significant_fdr']}\n")
-            outfile.write(f"df: {r['df']}\n\n")
+    # Print results
+    for r in results:
+        write(f"{r['task']} and {r['latent_var']}:\n")
+        write(f"t-value: {r['t_value']}\n")
+        write(f"p-value: {r['p_value']}\n")
+        write(f"FDR-corrected p-value: {r['p_value_fdr']}\n")
+        write(f"Significant (FDR<0.05): {r['significant_fdr']}\n")
+        write(f"df: {r['df']}\n\n")
 
-    # Optionally save FDR-corrected table
     df.to_csv(os.path.join(output_dir, f'fdr_corrected_pvalues_{SCORE}.csv'))
 
 
-if COMPARE_EXPL_VAR:
-    n_perm = 10000
-    rng = np.random.default_rng(seed=123)
+def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE = 'determination', to_file=True):
 
-    # Function to compute group ratio
-    def group_ratio(rec_var, expl_var):
-        return np.mean(rec_var) / np.mean(expl_var)        
+    def write(lines):
+        if to_file:
+            with open(os.path.join(
+                output_dir, f'mannwhitney_subject_ratio_{SCORE}_fdr.txt'
+            ), 'a') as f:
+                f.write(lines)
+        else:
+            print(lines, end="")
 
-    # Load reference (lanA)
-    expl_var_lanA = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
-    rec_var_lanA  = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'), allow_pickle=True))
-    ratio_lanA = group_ratio(rec_var_lanA, expl_var_lanA)
+    def subject_ratios(rec, expl):
+        return rec / expl
 
-    # Store results for later FDR correction
-    results = []
+    # lanA reference
+    expl_lanA = np.load(os.path.join(
+        output_dir, f'lanA_S-N_all_predict_from_beta_cv_r2_{SCORE}.pickle'
+    ), allow_pickle=True)
+    rec_lanA = np.load(os.path.join(
+        output_dir, f'lanA_S-N_all_regression_cv_r2_{SCORE}.pickle'
+    ), allow_pickle=True)
 
-    for task in params.tasks:
-        for latent_var in params.latent_vars:
-            print(f"Running permutation for {task} / {latent_var}...")
-
-            # Load task data
-            expl_var_task = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
-            rec_var_task  = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'), allow_pickle=True))
-
-            ratio_task = group_ratio(rec_var_task, expl_var_task)
-            obs_diff = ratio_lanA - ratio_task
-
-            # Permutation test
-            combined_rec = np.concatenate([rec_var_lanA, rec_var_task])
-            combined_expl = np.concatenate([expl_var_lanA, expl_var_task])
-            n_lanA = len(rec_var_lanA)
-
-            combined = np.column_stack([combined_rec, combined_expl])
-
-            perm_diffs = np.empty(n_perm)
-            for i in range(n_perm):
-                perm_indices = rng.permutation(len(combined))
-                perm_A = combined[perm_indices[:n_lanA]]
-                perm_B = combined[perm_indices[n_lanA:]]
-
-                rec_perm_A, expl_perm_A = perm_A[:, 0], perm_A[:, 1]
-                rec_perm_B, expl_perm_B = perm_B[:, 0], perm_B[:, 1]
-
-                perm_diffs[i] = group_ratio(rec_perm_A, expl_perm_A) - group_ratio(rec_perm_B, expl_perm_B)
-
-            # Two-sided p-value
-            p_val = np.mean(np.abs(perm_diffs) >= np.abs(obs_diff))
-            ci_lower, ci_upper = np.percentile(perm_diffs, [2.5, 97.5])
-
-            results.append({
-                "task": task,
-                "latent_var": latent_var,
-                "ratio_lanA": ratio_lanA,
-                "ratio_task": ratio_task,
-                "obs_diff": obs_diff,
-                "ci_lower": ci_lower,
-                "ci_upper": ci_upper,
-                "p_val": p_val
-            })
-
-    # FDR correction across all comparisons 
-    p_values = [r["p_val"] for r in results]
-    reject, pvals_fdr, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
-
-    # Assign corrected p-values
-    for i, r in enumerate(results):
-        r["p_val_fdr"] = pvals_fdr[i]
-        r["reject_null"] = reject[i]
-
-    # Write output 
-    outfile_path = os.path.join(output_dir, f'compare_explained_variance_cv_group_ratio_{SCORE}_permtest_fdr.txt')
-    with open(outfile_path, "w") as outfile:
-        for r in results:
-            outfile.write(f"{r['task']} and {r['latent_var']}:\n")
-            outfile.write(f'Group Ratio lanA: {r["ratio_lanA"]:.4f}\n')
-            outfile.write(f'Group Ratio {r["task"]}_{r["latent_var"]}: {r["ratio_task"]:.4f}\n')
-            outfile.write(f'Diff in Group Ratios (lanA - task): {r["obs_diff"]:.4f}\n')
-            outfile.write(f'95% Permutation CI: [{r["ci_lower"]:.4f}, {r["ci_upper"]:.4f}]\n')
-            outfile.write(f'Permutation p-value: {r["p_val"]:.4f}\n')
-            outfile.write(f'FDR-corrected p-value: {r["p_val_fdr"]:.4f}\n')
-            outfile.write(f'Significant after FDR (q<0.05): {r["reject_null"]}\n\n')
-
-
-if COMPARE_EXPL_VAR_SUBJECT:
-    rng = np.random.default_rng(seed=123)
-
-    # Function to compute subject-level ratio
-    def subject_ratios(rec_var, expl_var):
-        return rec_var / expl_var
-
-    # Load reference (lanA)
-    expl_var_lanA = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
-    rec_var_lanA  = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_regression_cv_r2_{SCORE}.pickle'), allow_pickle=True))
-
-    # Subject-level ratios for lanA
-    ratios_lanA = subject_ratios(rec_var_lanA, expl_var_lanA)
+    ratios_lanA = subject_ratios(rec_lanA, expl_lanA)
     mean_ratio_lanA = np.mean(ratios_lanA)
+
     results = []
 
     for task in params.tasks:
         for latent_var in params.latent_vars:
-            print(f"Running Mann–Whitney for {task} / {latent_var}...")
 
-            # Load task data
-            expl_var_task = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
-            rec_var_task  = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+            expl_task = np.load(os.path.join(
+                output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'
+            ), allow_pickle=True)
+            rec_task = np.load(os.path.join(
+                output_dir, f'{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'
+            ), allow_pickle=True)
 
-            # Subject-level ratios for task
-            ratios_task = subject_ratios(rec_var_task, expl_var_task)
+            ratios_task = subject_ratios(rec_task, expl_task)
             mean_ratio_task = np.mean(ratios_task)
 
-            # Observed difference in means (just descriptive)
             obs_diff = mean_ratio_lanA - mean_ratio_task
 
-            # Mann–Whitney U test
             U, p_val = mannwhitneyu(ratios_task, ratios_lanA, alternative='greater')
 
-            # Store output
             results.append({
                 "task": task,
                 "latent_var": latent_var,
@@ -303,28 +241,57 @@ if COMPARE_EXPL_VAR_SUBJECT:
                 "p_val": p_val
             })
 
-    # FDR correction across all p-values
-    p_values = [r["p_val"] for r in results]
-    reject, pvals_fdr, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
+    # FDR
+    pvals = [r["p_val"] for r in results]
+    reject, pvals_fdr, _, _ = multipletests(pvals, alpha=0.05, method='fdr_bh')
 
-    # Assign corrected values
     for i, r in enumerate(results):
         r["p_val_fdr"] = pvals_fdr[i]
         r["reject_null"] = reject[i]
 
-    # Write results to file
-    outfile_path = os.path.join(output_dir, f'mannwhitney_subject_ratio_{SCORE}_fdr.txt')
-    with open(outfile_path, "w") as outfile:
-        for r in results:
-            outfile.write(f"{r['task']} and {r['latent_var']}:\n")
-            outfile.write(f'Mean Subject Ratio lanA: {r["mean_ratio_lanA"]:.4f}\n')
-            outfile.write(f'Mean Subject Ratio {r["task"]}_{r["latent_var"]}: {r["mean_ratio_task"]:.4f}\n')
-            outfile.write(f'Diff in Means (lanA - task): {r["obs_diff"]:.4f}\n')
-            outfile.write(f'Mann–Whitney U statistic: {r["U_stat"]:.4f}\n')
-            outfile.write(f'U-test p-value: {r["p_val"]:.4f}\n')
-            outfile.write(f'FDR-corrected p-value: {r["p_val_fdr"]:.4f}\n')
-            outfile.write(f'Significant after FDR (q<0.05): {r["reject_null"]}\n\n')
+        write(
+            f"{r['task']} and {r['latent_var']}:\n"
+            f"Mean ratio lanA: {r['mean_ratio_lanA']:.4f}\n"
+            f"Mean ratio task: {r['mean_ratio_task']:.4f}\n"
+            f"Diff: {r['obs_diff']:.4f}\n"
+            f"U: {r['U_stat']:.4f}\n"
+            f"p-val: {r['p_val']:.4f}\n"
+            f"p-val FDR: {r['p_val_fdr']:.4f}\n"
+            f"Significant: {r['reject_null']}\n\n"
+        )
 
+
+def run_group_ratio_summary(task, latent_var, MODEL_TYPE='linear', SCORE='determination', to_file=True):
+    """
+    Quick group level variance explained (corresponding values to the barplot)
+    """
+    # writer helper
+    def write(line):
+        if to_file:
+            out_path = os.path.join(output_dir, f"group_ratio_summary_{SCORE}.txt")
+            with open(out_path, "a") as f:
+                f.write(line)
+        else:
+            print(line, end="")
+
+    # compute ratio
+    def group_ratio(rec, expl):
+        return np.mean(rec) / np.mean(expl)
+
+    # load data
+    expl = np.load(os.path.join(
+        output_dir, f"{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle"
+    ), allow_pickle=True)
+
+    rec = np.load(os.path.join(
+        output_dir, f"{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle"
+    ), allow_pickle=True)
+
+    # compute ratio
+    ratio = group_ratio(rec, expl)
+
+    # output
+    write(f"{task} {latent_var}: {ratio * 100:.1f}%\n")
 
 
 
@@ -538,13 +505,23 @@ def plot_explained_variance_ratio(params, score="determination", comparison_late
 
 mf.set_publication_style(font_size=8)
 
-if PLOT_VAR_EXPLAINED:
-    fig, ax = plot_variance_explained(params)
-    mf.save_figure(fig, output_dir, f"barplot_explained_variance_mean_{SCORE}")
+if __name__ == "__main__":
+    if FROM_BETA:
+        run_from_beta(params, Paths, mf, output_dir)
 
-if PLOT_VAR_EXPLAINED_RATIO:
-    fig, ax = plot_explained_variance_ratio(params)
-    mf.save_figure(fig, output_dir, f"barplot_explained_variance_ratio_mean_{SCORE}")
+    if COMP_NULL:
+        run_comp_null(params, output_dir)
+
+    if COMPARE_EXPL_VAR_SUBJECT: 
+        run_compare_expl_var_subject(params,output_dir)
+
+    if PLOT_VAR_EXPLAINED:
+        fig, ax = plot_variance_explained(params)
+        mf.save_figure(fig, output_dir, f"barplot_explained_variance_mean_{SCORE}")
+
+    if PLOT_VAR_EXPLAINED_RATIO:
+        fig, ax = plot_explained_variance_ratio(params)
+        mf.save_figure(fig, output_dir, f"barplot_explained_variance_ratio_mean_{SCORE}")
 
 
 

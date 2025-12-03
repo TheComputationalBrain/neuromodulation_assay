@@ -37,14 +37,252 @@ from params_and_paths import Paths, Params, Receptors
 
 
 # --- Configuration ---
-MODEL_TYPE = 'linear'      # Options: 'linear', 'lin+quad', 'lin+interact', 'poly2'
 RUN_REGRESSION = True
 RUN_DOMINANCE = True
-NUM_WORKERS = 30           # Parallel dominance analysis workers
-START_AT = 0               # Resume point for dominance analysis
+
 
 # --- Initialize paths and parameters ---
 rec =Receptors(source = 'PET2')
+
+
+def run_dominance_analysis(params, paths, rec,
+                           model_type,
+                           start_at,
+                           num_workers=4):
+    """
+    Runs dominance analysis for all tasks and latent vars in params.
+    
+    Parameters
+    ----------
+    params : object
+    paths : object
+    rec : object
+    model_type : str
+        'linear' or 'lin+quad'
+    start_at : int
+        Skip subjects <= this number: in case the analysis was interrupted 
+    num_workers : int
+        Number of parallel workers
+    """
+
+    def process_subject(sub, latent_var, task):
+        print(f"--- Dominance analysis for {task} subject {sub} ----")
+
+        receptor_density = mf.load_receptor_array(params, paths, rec, on_surface=False)
+        beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+        out_dir = os.path.join(beta_dir, 'regressions', rec.source)
+        os.makedirs(out_dir, exist_ok=True)
+
+        y_data = mf.load_effect_map_array(sub, task, latent_var, params, paths)
+        non_nan_idx = ~np.isnan(y_data)
+
+        X = receptor_density[non_nan_idx, :]
+        y = y_data[non_nan_idx]
+
+        if model_type == 'lin+quad':
+            poly = PolynomialFeatures(degree=2, include_bias=False)
+            X = poly.fit_transform(X)
+            feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
+
+            # mask out interaction terms with spaces unless "^" present
+            mask = [(" " not in n) or ("^" in n) for n in feature_names]
+            X = X[:, mask]
+            filtered_names = feature_names[mask]
+
+            m = dominance_stats(X, y, feature_names=filtered_names)
+
+        elif model_type == 'linear':
+            m = dominance_stats(X, y)
+
+        else:
+            raise ValueError(f"Dominance analysis for '{model_type}' not supported!")
+
+        fname = f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}_{model_type}.pickle'
+        with open(os.path.join(out_dir, fname), 'wb') as f:
+            pickle.dump(m, f)
+
+        total_dom = m["total_dominance"]
+        return pd.DataFrame([total_dom], columns=rec.receptor_names)
+
+    for task in params.tasks:
+
+        fmri_dir = mf.get_fmri_dir(task, paths)
+        subjects = [s for s in mf.get_subjects(task, fmri_dir)
+                    if s not in params.ignore]
+
+        valid_subjects = [s for s in subjects if s > start_at]
+
+        for latent_var in params.latent_vars:
+            print(f"--- Dominance analysis for {latent_var} ----")
+
+            results_df = pd.DataFrame(columns=rec.receptor_names)
+
+            with ProcessPoolExecutor(max_workers=num_workers) as executor:
+                futures = [
+                    executor.submit(process_subject, s, latent_var, task)
+                    for s in valid_subjects
+                ]
+                for fut in futures:
+                    res = fut.result()
+                    results_df = pd.concat([results_df, res], ignore_index=True)
+
+            # Save combined results inside the regression folder of first subject
+            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+            out_dir = os.path.join(beta_dir, 'regressions', rec.source)
+
+            fname = f'{latent_var}_{params.mask}_dominance_allsubj_{model_type}.pickle'
+            results_df.to_pickle(os.path.join(out_dir, fname))
+
+def run_regression_analysis(
+    params,
+    Paths,
+    Params,
+    rec,
+    model_type = 'linear',
+):
+    """
+    Runs the full regression analysis for all tasks and latent variables.
+
+    Parameters
+    ----------
+    RUN_REGRESSION : bool
+        If False, the function exits immediately.
+    params : object
+        Must contain attributes: tasks, latent_vars, ignore, mask.
+    Paths : class
+        Used to construct path objects: Paths(task=...)
+    Params : class
+        Used to reinitialize parameter sets per task: Params(task=...)
+    rec : object
+        Receptor configuration; must contain receptor_names and source.
+    model_type : str
+        'linear', 'poly2', 'lin+quad', 'lin+interact'
+    """
+
+    for task in params.tasks:
+
+        paths_task = Paths(task=task)
+        params_task = Params(task=task)
+
+        # === Subject list ===
+        fmri_dir = mf.get_fmri_dir(task, paths)
+        subjects = [
+            s for s in mf.get_subjects(task, fmri_dir)
+            if s not in params_task.ignore
+        ]
+
+        # === Output directory ===
+        beta_dir, _ = mf.get_beta_dir_and_info(task, params_task, paths_task)
+        output_dir = os.path.join(beta_dir, 'regressions', rec.source)
+        os.makedirs(output_dir, exist_ok=True)
+
+        # === Load receptor density once per task ===
+        receptor_density = mf.load_receptor_array(
+            params_task, paths_task, rec, on_surface=False
+        )
+
+        # ==================================================================
+        # Determine regression feature names
+        # ==================================================================
+        if model_type == 'linear':
+            columns = rec.receptor_names + ["R2", "adjusted_R2"]
+
+        else:
+            # Construct polynomial names without transforming large matrices
+            poly = PolynomialFeatures(degree=2, include_bias=False)
+            dummy = np.zeros((1, receptor_density.shape[1]))
+            poly.fit_transform(dummy)
+            feature_names = poly.get_feature_names_out(rec.receptor_names)
+
+            if model_type == 'lin+quad':
+                # Keep linear + quadratic; drop pure interaction terms
+                mask = [(" " not in n) or ("^" in n) for n in feature_names]
+            elif model_type == 'lin+interact':
+                # Keep linear + interactions; drop squared terms
+                mask = ["^" not in n for n in feature_names]
+            elif model_type == 'poly2':
+                mask = [True] * len(feature_names)
+            else:
+                raise ValueError(f"Unsupported model_type: {model_type}")
+
+            feature_names = feature_names[mask]
+            columns = list(feature_names) + ["R2", "adjusted_R2"]
+
+        # ==================================================================
+        # MAIN LOOP: run regression for each latent variable
+        # ==================================================================
+        for latent_var in params_task.latent_vars:
+
+            results_df = pd.DataFrame(columns=columns)
+
+            for sub in subjects:
+
+                # Load effect map
+                y_data = mf.load_effect_map_array(
+                    sub, task, latent_var, params_task, paths
+                )
+                non_nan_idx = ~np.isnan(y_data)
+
+                X = receptor_density[non_nan_idx, :]
+                y = y_data[non_nan_idx]
+
+                # ----------------------------------------------------------
+                # Select regression model
+                # ----------------------------------------------------------
+                if model_type == 'linear':
+                    model = LinearRegression()
+
+                elif model_type == 'poly2':
+                    model = make_pipeline(
+                        PolynomialFeatures(degree=2, include_bias=False),
+                        LinearRegression()
+                    )
+
+                else:
+                    # Construct polynomial features, then filter them
+                    poly = PolynomialFeatures(degree=2, include_bias=False)
+                    X_poly = poly.fit_transform(X)
+                    feat_names = poly.get_feature_names_out(
+                        input_features=rec.receptor_names
+                    )
+
+                    if model_type == 'lin+quad':
+                        mask = [(" " not in n) or ("^" in n) for n in feat_names]
+                    elif model_type == 'lin+interact':
+                        mask = ["^" not in n for n in feat_names]
+
+                    X = X_poly[:, mask]
+                    model = LinearRegression()
+
+                # ----------------------------------------------------------
+                # Fit model
+                # ----------------------------------------------------------
+                model.fit(X, y)
+
+                if model_type == 'poly2':
+                    coefs = model.named_steps['linearregression'].coef_
+                else:
+                    coefs = model.coef_
+
+                # ----------------------------------------------------------
+                # Compute R² and adjusted R²
+                # ----------------------------------------------------------
+                yhat = model.predict(X)
+
+                ss_res = np.sum((y - yhat) ** 2)
+                ss_tot = np.sum((y - y.mean()) ** 2)
+
+                r2 = 1 - ss_res / ss_tot
+                adj_r2 = 1 - (1 - r2) * (len(y) - 1) / (len(y) - X.shape[1] - 1)
+
+                row = np.append(coefs, [r2, adj_r2])
+                results_df.loc[len(results_df)] = row
+
+            # ==================================================================
+            # Save results
+            # ==================================================================
+            fname = f"{latent_var}_{params_task.mask}_regression_weights_bysubject_all_{model_type}.csv"
+            results_df.to_csv(os.path.join(output_dir, fname), index=False)
 
 
 def plot_regression_coefficients(tasks, model_type='linear'):
@@ -54,7 +292,10 @@ def plot_regression_coefficients(tasks, model_type='linear'):
         paths = Paths(task=task)
         params = Params(task=task)
 
-        beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+        if paths.beta_dir = None
+            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+        else 
+            beta_dir = paths.beta_dir
         output_dir = os.path.join(beta_dir, 'regressions', rec.source)
         os.makedirs(output_dir, exist_ok=True)
 
@@ -63,7 +304,7 @@ def plot_regression_coefficients(tasks, model_type='linear'):
         plt.rcParams.update({'font.size': 18})
 
         for latent_var in params.latent_vars:
-            fname = f'{latent_var}_{params.mask}_regression_results_bysubject_all_{model_type}.csv'
+            fname = f'{latent_var}_{params.mask}__regression_weights__bysubject_all_{model_type}.csv'
             file_path = os.path.join(output_dir, fname)
             if not os.path.exists(file_path):
                 print(f"Skipping {latent_var} — no file found.")
@@ -472,154 +713,40 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
 
 if __name__ == "__main__":
     params = Params(task='all')
-    # Regression Analysis
+    paths = Paths(task='all')
+    mf.set_publication_style(font_size=8)
+
     if RUN_REGRESSION:
-        for task in params.tasks:
-            paths = Paths(task=task)
-            params = Params(task=task)
-            fmri_dir = mf.get_fmri_dir(task, paths)
-            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore]      
-            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
-            output_dir = os.path.join(beta_dir, 'regressions', rec.source)
-            os.makedirs(output_dir, exist_ok=True)
+        # Regression Analysis
+        run_regression_analysis(
+            RUN_REGRESSION=True,
+            params=params,
+            Paths=Paths,
+            Params=Params,
+            rec=rec,
+            MODEL_TYPE="linear"
+        )
 
-            receptor_density = mf.load_receptor_array(params, paths, rec, on_surface=False)
-
-            # Determine regression columns
-            if MODEL_TYPE == 'linear':
-                columns = rec.receptor_names + ["R2", "adjusted_R2"]
-            else:
-                poly = PolynomialFeatures(degree=2, include_bias=False)
-                dummy = np.zeros((1, receptor_density.shape[1]))
-                poly.fit_transform(dummy)
-                feature_names = poly.get_feature_names_out(rec.receptor_names)
-
-                if MODEL_TYPE == 'lin+quad':
-                    # Linear + quadratic only (exclude interaction terms)
-                    mask = [(" " not in n) or ("^" in n) for n in feature_names]
-                    feature_names = feature_names[mask]
-                elif MODEL_TYPE == 'lin+interact':
-                    # Linear + interactions only (exclude squared terms)
-                    mask = ["^" not in n for n in feature_names]
-                    feature_names = feature_names[mask]
-
-                columns = list(feature_names) + ["R2", "adjusted_R2",]
-
-            for latent_var in params.latent_vars:
-                results_df = pd.DataFrame(columns=columns)
-
-                for sub in subjects:
-                    y_data = mf.load_effect_map_array(sub, task, latent_var, params, paths)
-                    receptor_density_zm = receptor_density
-
-                    non_nan_idx = ~np.isnan(y_data)
-                    X = receptor_density_zm[non_nan_idx, :]
-                    y = y_data[non_nan_idx]
-
-                    # Model selection
-                    if MODEL_TYPE == 'linear':
-                        model = LinearRegression()
-                    elif MODEL_TYPE == 'poly2':
-                        model = make_pipeline(PolynomialFeatures(degree=2, include_bias=False),
-                                            LinearRegression())
-                    else:
-                        poly = PolynomialFeatures(degree=2, include_bias=False)
-                        X = poly.fit_transform(X)
-                        feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
-
-                        if MODEL_TYPE == 'lin+quad':
-                            mask = [(" " not in n) or ("^" in n) for n in feature_names]
-                        elif MODEL_TYPE == 'lin+interact':
-                            mask = ["^" not in n for n in feature_names]
-
-                        X = X[:, mask]
-                        filtered_feature_names = feature_names[mask]
-                        model = LinearRegression()
-
-                    # Fit model and compute metrics
-                    model.fit(X, y)
-                    coefs = (model.named_steps['linearregression'].coef_
-                            if MODEL_TYPE == 'poly2' else model.coef_)
-
-                    yhat = model.predict(X)
-                    ss_res = np.sum((y - yhat) ** 2)
-                    ss_tot = np.sum((y - np.mean(y)) ** 2)
-                    r2 = 1 - ss_res / ss_tot
-                    adj_r2 = 1 - (1 - r2) * (len(y) - 1) / (len(y) - X.shape[1] - 1)
-
-                    results = pd.DataFrame([np.append(coefs, [r2, adj_r2])],
-                                        columns=columns)
-                    results_df = pd.concat([results_df, results], ignore_index=True)
-
-                fname = f'{latent_var}_{params.mask}_regression_results_bysubject_all_{MODEL_TYPE}.csv'
-                results_df.to_csv(os.path.join(output_dir, fname), index=False)        
+    #individual regression plots
+    plot_regression_coefficients(params.tasks, model_type='linear')
+          
 
     # Dominance Analysis
     if RUN_DOMINANCE:
 
-        def process_subject(sub, latent_var, task):
-            """Run dominance analysis for a single subject."""
-            print(f"--- Dominance analysis for {task} subject {sub} ----")
-
-            receptor_density = mf.load_receptor_array(params, paths, rec, on_surface=False)
-
-            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
-            output_dir = os.path.join(beta_dir, 'regressions', rec.source)
-            os.makedirs(output_dir, exist_ok=True)
-
-            y_data = mf.load_effect_map_array(sub, task, latent_var, params, paths)
-            non_nan_idx = ~np.isnan(y_data)
-            X = receptor_density[non_nan_idx, :]
-            y = y_data[non_nan_idx]
-
-            if MODEL_TYPE == 'lin+quad':
-                poly = PolynomialFeatures(degree=2, include_bias=False)
-                X = poly.fit_transform(X)
-                feature_names = poly.get_feature_names_out(input_features=rec.receptor_names)
-                mask = [(" " not in n) or ("^" in n) for n in feature_names]
-                X = X[:, mask]
-                filtered_feature_names = feature_names[mask]
-                m = dominance_stats(X, y, feature_names=filtered_feature_names)
-            elif MODEL_TYPE == 'linear':
-                m = dominance_stats(X, y)
-            else:
-                raise ValueError(f"Dominance analysis for '{MODEL_TYPE}' not supported!")
-
-            fname = f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}_{MODEL_TYPE}.pickle'
-            with open(os.path.join(output_dir, fname), 'wb') as f:
-                pickle.dump(m, f)
-
-            total_dominance = m["total_dominance"]
-            return pd.DataFrame([total_dominance], columns=rec.receptor_names)
-
-        for task in params.tasks:
-            fmri_dir = mf.get_fmri_dir(task, paths)
-            subjects = [s for s in mf.get_subjects(task, fmri_dir) if s not in params.ignore]
-            for latent_var in params.latent_vars:
-                print(f"--- Dominance analysis for {latent_var} ----")
-                results_df = pd.DataFrame(columns=rec.receptor_names)
-                valid_subjects = [s for s in subjects if s > START_AT]
-
-                with ProcessPoolExecutor(max_workers=NUM_WORKERS) as executor:
-                    futures = [executor.submit(process_subject, s, latent_var, task)
-                            for s in valid_subjects]
-                    for future in futures:
-                        res = future.result()
-                        results_df = pd.concat([results_df, res], ignore_index=True)
-
-                # Save combined results
-                fname = f'{latent_var}_{params.mask}_dominance_allsubj_{MODEL_TYPE}.pickle'
-                results_df.to_pickle(os.path.join(output_dir, fname))
-
-    mf.set_publication_style(font_size=8)
-
-    #individual regression plots
-    plot_regression_coefficients(params.tasks, model_type=MODEL_TYPE)
+        run_dominance_analysis(
+            params=params,
+            paths=paths,
+            rec=rec,
+            model_type="linear",
+            START_AT=0,
+            NUM_WORKERS=4
+        )
 
     for latent_var in params.latent_vars:
 
         # Load all dominance results
-        results = load_dominance_data(params.tasks, latent_var, model_type=MODEL_TYPE)
+        results = load_dominance_data(params.tasks, latent_var, model_type='linear')
 
         plot_dir = os.path.join(paths.home_dir, "figures")
         # ---- Individual plots ----
@@ -647,7 +774,7 @@ if __name__ == "__main__":
         rec.receptor_groups,
         rec.receptor_label_formatted,
         cmap_pos,
-        model_type=MODEL_TYPE,
+        model_type='linear',
         params=params,
         paths=paths
     )
