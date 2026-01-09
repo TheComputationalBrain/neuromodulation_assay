@@ -26,13 +26,14 @@ import main_funcs as mf
 from params_and_paths import Paths, Params, Receptors
 
 #analysis
-FROM_BETA = False
-COMP_NULL = False
-COMPARE_LANG_LEARN = False
-COMPARE_EXPL_VAR_SUBJECT = False
+FROM_BETA = True
+COMP_NULL = True
+COMPARE_LANG_LEARN = True
+COMPARE_EXPL_VAR_GROUP = True
+COMPARE_EXPL_VAR_SUBJECT = True
 
 #plots
-PLOT_VAR_EXPLAINED = False
+PLOT_VAR_EXPLAINED = True
 PLOT_VAR_EXPLAINED_RATIO = True
 
 MODEL_TYPE = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
@@ -88,7 +89,7 @@ def run_from_beta(params, Paths, mf, output_dir, SCORE='determination', to_file=
                 else:
                     file = nib.load(os.path.join(
                         beta_dir,
-                        f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz'
+                        f'sub-{sub:02d}_{latent_var}_effect_size_map{add_info}.nii.gz'
                     ))
 
                 effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
@@ -187,6 +188,100 @@ def run_comp_null(params, output_dir, MODEL_TYPE='linear', SCORE='determination'
     df.to_csv(os.path.join(output_dir, f'fdr_corrected_pvalues_{SCORE}.csv'))
 
 
+def run_compare_expl_var_group(params, output_dir, MODEL_TYPE= 'linear', SCORE = 'determination', to_file=True):
+    n_perm = 10000
+    rng = np.random.default_rng(seed=123)
+
+    def write(lines):
+        if to_file:
+            with open(os.path.join(
+                output_dir, f'compare_explained_variance_cv_group_ratio_{SCORE}_permtest_fdr.txt'
+            ), 'a') as f:
+                f.write(lines)
+        else:
+            print(lines, end="")
+
+    # Function to compute group ratio
+    def group_ratio(rec_var, expl_var):
+        return np.mean(rec_var) / np.mean(expl_var)
+
+    # Load reference (lanA)
+    expl_var_lanA = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+    rec_var_lanA  = np.array(np.load(os.path.join(output_dir, f'lanA_S-N_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'), allow_pickle=True))
+    ratio_lanA = group_ratio(rec_var_lanA, expl_var_lanA)
+
+    # Store results for later FDR correction
+    results = []
+
+    for task in params.tasks:
+        for latent_var in params.latent_vars:
+            print(f"Running permutation for {task} / {latent_var}...")
+
+            # Load task data
+            expl_var_task = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'), allow_pickle=True))
+            rec_var_task  = np.array(np.load(os.path.join(output_dir, f'{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'), allow_pickle=True))
+
+            ratio_task = group_ratio(rec_var_task, expl_var_task)
+            obs_diff = ratio_lanA - ratio_task
+
+            # Permutation test
+            combined_rec = np.concatenate([rec_var_lanA, rec_var_task])
+            combined_expl = np.concatenate([expl_var_lanA, expl_var_task])
+            n_lanA = len(rec_var_lanA)
+
+            combined = np.column_stack([combined_rec, combined_expl])
+
+            perm_diffs = np.empty(n_perm)
+            for i in range(n_perm):
+                perm_indices = rng.permutation(len(combined_rec))
+                rec_perm_A = combined_rec[perm_indices[:n_lanA]]
+                rec_perm_B = combined_rec[perm_indices[n_lanA:]]
+                expl_perm_A = combined_expl[perm_indices[:n_lanA]]
+                expl_perm_B = combined_expl[perm_indices[n_lanA:]]
+                perm_indices = rng.permutation(len(combined))
+                perm_A = combined[perm_indices[:n_lanA]]
+                perm_B = combined[perm_indices[n_lanA:]]
+
+                rec_perm_A, expl_perm_A = perm_A[:, 0], perm_A[:, 1]
+                rec_perm_B, expl_perm_B = perm_B[:, 0], perm_B[:, 1]
+
+                perm_diffs[i] = group_ratio(rec_perm_A, expl_perm_A) - group_ratio(rec_perm_B, expl_perm_B)
+
+            # Two-sided p-value
+            p_val = np.mean(np.abs(perm_diffs) >= np.abs(obs_diff))
+            ci_lower, ci_upper = np.percentile(perm_diffs, [2.5, 97.5])
+
+            results.append({
+                "task": task,
+                "latent_var": latent_var,
+                "ratio_lanA": ratio_lanA,
+                "ratio_task": ratio_task,
+                "obs_diff": obs_diff,
+                "ci_lower": ci_lower,
+                "ci_upper": ci_upper,
+                "p_val": p_val
+            })
+
+    # FDR correction across all comparisons 
+    p_values = [r["p_val"] for r in results]
+    reject, pvals_fdr, _, _ = multipletests(p_values, alpha=0.05, method='fdr_bh')
+
+    # Assign corrected p-values
+    for i, r in enumerate(results):
+        r["p_val_fdr"] = pvals_fdr[i]
+
+    # Write output 
+    for r in results:
+        write(
+            f"{r['task']} and {r['latent_var']}:\n"
+            f'Group Ratio lanA: {r["ratio_lanA"]:.4f}\n'
+            f'Group Ratio {r["task"]}_{r["latent_var"]}: {r["ratio_task"]:.4f}\n'
+            f'Diff in Group Ratios (lanA - task): {r["obs_diff"]:.4f}\n'
+            f'95% Permutation CI: [{r["ci_lower"]:.4f}, {r["ci_upper"]:.4f}]\n'
+            f'Permutation p-value: {r["p_val"]:.4f}\n'
+            f'FDR-corrected p-value: {r["p_val_fdr"]:.4f}\n'
+        )
+
 def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE = 'determination', to_file=True):
 
     def write(lines):
@@ -257,13 +352,12 @@ def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE
             f"U: {r['U_stat']:.4f}\n"
             f"p-val: {r['p_val']:.4f}\n"
             f"p-val FDR: {r['p_val_fdr']:.4f}\n"
-            f"Significant: {r['reject_null']}\n\n"
         )
 
 
 def run_group_ratio_summary(task, latent_var, MODEL_TYPE='linear', SCORE='determination', to_file=True):
     """
-    Quick group level variance explained (corresponding values to the barplot)
+    group level variance explained (corresponding values to the barplot)
     """
     # writer helper
     def write(line):
@@ -511,6 +605,9 @@ if __name__ == "__main__":
 
     if COMP_NULL:
         run_comp_null(params, output_dir)
+    
+    if COMPARE_EXPL_VAR_GROUP:
+        run_compare_expl_var_group(params,output_dir)
 
     if COMPARE_EXPL_VAR_SUBJECT: 
         run_compare_expl_var_subject(params,output_dir)
