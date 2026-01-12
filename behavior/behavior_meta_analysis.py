@@ -56,8 +56,6 @@ if root_model not in sys.path:
     sys.path.append(root_model)
 
 from MarkovModel_Python import IdealObserver as IO
-from MarkovModel_Python import IdealObserver as IO
-from MarkovModel_Python import IdealObserver as IO
 from MarkovModel_Python import GenerateSequence as sg
 
 
@@ -234,7 +232,9 @@ all_subjects_info = pickle.load(file_info, encoding='bytes')
 list_subject = [f for f in os.listdir(behavior_path) if f.endswith(".pickle")]
 
 
-valid_tasks = ["EncodeProb2020", "NACONFfMRI", "PNAS2017"]
+#valid_tasks = ["EncodeProb2020", "NACONFfMRI", "PNAS2017"]
+valid_tasks = ["EncodeProb2020"]
+
 
 # Define the datasets to keep
 filtered_list_subject = [
@@ -337,7 +337,7 @@ for subject in filtered_list_subject:
     if 'PNAS' in subject:
         sub_pred = nan_array = np.nan * np.ones(n_questions) #MarkovGuess did not have a a probbaility report 
     else:
-        #! something is wrong here. There is a negative correlation between the subject prediction and IO, temporary fix below
+        #! prediction 1 is the onverse for NACONF, fix below
         sub_pred = np.hstack([session['prediction_1'].tolist() for session in sub])  #prediction_1 is the next item being 1
         if 'NACONF' in subject:
             sub_pred = 1 - sub_pred
@@ -368,6 +368,8 @@ for subject in filtered_list_subject:
     
     # concatenate dataframes 
     data = pd.concat([data, sub_data])    
+
+    print(io_conf)
 
 
 #  Compute within subject correlations and linear regressions

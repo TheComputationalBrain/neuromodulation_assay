@@ -17,15 +17,13 @@ from receptor_effect_map_relationship import load_dominance_data, aggregate_domi
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
-from params_and_paths import Paths, Params, Receptors
+from config.loader import load_config
 
 #default settings
-paths = Paths(task = 'all')
-params = Params(task = 'all')
-rec = Receptors(source = 'PET2')
+params, paths, rec = load_config('all', return_what='all')
 
 # folder for figures only
-OUTPUT_DIR = os.path.join(paths.home_dir, 'figures')
+OUTPUT_DIR = os.path.join(paths.home_dir, 'figures_quad')
 
 #invariance of functional activity: cluster overlap and colorbar
 mf.set_publication_style(font_size=7, layout="3-across")
@@ -47,8 +45,8 @@ mf.set_publication_style(font_size=7, layout="2-across")
 
 for latent_var in params.latent_vars:
     #dominance analysis and legend 
-    results = load_dominance_data(params.tasks, latent_var, model_type='linear')
-    combined, per_study_means = aggregate_dominance(results, exclude_explore=True)
+    results = load_dominance_data(params.tasks, latent_var, model_type='linear') # or 'lin+quad' for supplementary plot
+    combined, per_study_means = aggregate_dominance(results)
 
     fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted, title=latent_var)
     mf.save_figure(fig, OUTPUT_DIR, f"group_{latent_var}_dominance")
@@ -56,18 +54,6 @@ for latent_var in params.latent_vars:
     cmap_pos = mf.get_custom_colormap('pos')
     fig, ax = plot_dominance_heatmap(per_study_means, rec.receptor_groups, cmap_pos, rec.receptor_label_formatted, rename_tasks=True, params=params)
     mf.save_figure(fig, OUTPUT_DIR, f"heatmap_{latent_var}")
-
-paths = Paths(task = 'Explore')
-params = Params(task = 'Explore')
-
-fig, ax = plot_explore_dominance_heatmap(
-    params.latent_vars,
-    rec.receptor_groups,
-    rec.receptor_label_formatted,
-    cmap_pos,
-    params=params,
-    paths=paths)
-mf.save_figure(fig, OUTPUT_DIR, f"Explore_heatmap")
 
 fig, ax = plot_separate_colorbar(cmap=cmap_pos, vmin=0, vmax=0.18)
 mf.save_figure(fig, OUTPUT_DIR, f"colorbar_heatmap")

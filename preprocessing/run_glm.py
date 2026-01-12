@@ -68,16 +68,10 @@ fmri_arr_dir  = os.path.join(paths.home_dir,TASK,params.mask,'first_level',f'dat
 os.makedirs(fmri_arr_dir, exist_ok =True)
 
 if params.update:
-    if TASK == 'Explore':
-        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level', 'update_model', params.model)
-    else:
-        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level', 'update_model')
+    output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level', 'update_model')
     design_dir = os.path.join(output_dir, 'designmatrix_update')
 else:
-    if TASK == 'Explore':
-        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level',params.model)
-    else:
-        output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level') 
+    output_dir = os.path.join(paths.home_dir,TASK,params.mask,'first_level') 
 
     design_dir = os.path.join(output_dir, 'designmatrix_nilearn')
     
@@ -168,11 +162,11 @@ for sub in subjects:
     design_matrix.to_pickle(
         os.path.join(
             design_dir,
-            f'sub-{sub:02d}_design_matrix_' + TASK + f'{add_info}.pickle')) 
+            f'sub-{sub:02d}_design_matrix_{TASK}_{add_info}.pickle')) 
 
     # plot and save the design matrix
     if SAVE_DMTX_PLOT:
-        fig_fname = f'sub-{sub:02d}_design_matrix_' + TASK + f'{add_info}.png'
+        fig_fname = f'sub-{sub:02d}_design_matrix_{TASK}_{add_info}..png'
         fig_fpath = os.path.join(design_dir, fig_fname)
         if TASK == 'Explore':
             fig, ax = plt.subplots(figsize=[8, 12])

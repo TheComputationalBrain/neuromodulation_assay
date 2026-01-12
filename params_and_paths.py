@@ -72,8 +72,6 @@ class Params:
 
         self.hpf = 1/128 
         self.hrf = 'spm'
-
-        self.zscore_per_session = True 
         
         self.mask = mask
 

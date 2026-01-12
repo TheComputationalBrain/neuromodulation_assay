@@ -29,15 +29,14 @@ import cmcrameri.cm as cmc
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
-from params_and_paths import Paths, Params, Receptors
+from config.loader import load_config
 
 
 PLOT_RECEPTORS=False
 PLOT_RECEPTORS_INFLATED=False
-PLOT_CORR = True
+PLOT_CORR = False
 
-paths = Paths(task = 'all')
-params = Params(task='all')
+params, paths, rec = load_config('all', return_what='all')
 
 output_dir = os.path.join(paths.home_dir,'receptors', 'PET2')
 os.makedirs(output_dir, exist_ok = True)
@@ -55,36 +54,69 @@ else:
 
 masker.fit()
 
-receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
-                           "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
-                           "MOR", "NET", "NMDA", "VAChT", "A2"])
+if rec.source == "PET2":
 
-receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
-                 paths.receptor_path + '/5HT1b_p943_hc22_savli.nii',
-                 paths.receptor_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
-                 paths.receptor_path + '/5HT2a_cimbi_hc29_beliveau.nii',
-                 paths.receptor_path + '/5HT4_sb20_hc59_beliveau.nii',
-                 paths.receptor_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
-                 paths.receptor_path + '/5HTT_dasb_hc100_beliveau.nii',
-                 paths.receptor_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
-                 paths.receptor_path + '/CB1_omar_hc77_normandin.nii.gz',
-                 paths.receptor_path + '/D1_SCH23390_hc13_kaller.nii',
-                 paths.receptor_path + '/D2_flb457_hc37_smith.nii.gz',
-                 paths.receptor_path + '/D2_flb457_hc55_sandiego.nii.gz',
-                 paths.receptor_path + '/DAT_fpcit_hc174_dukart_spect.nii',
-                 paths.receptor_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
-                 paths.receptor_path + '/H3_cban_hc8_gallezot.nii.gz', 
-                 paths.receptor_path + '/M1_lsn_hc24_naganawa.nii.gz',
-                 paths.receptor_path + '/mGluR5_abp_hc22_rosaneto.nii',
-                 paths.receptor_path + '/mGluR5_abp_hc28_dubois.nii',
-                 paths.receptor_path + '/mGluR5_abp_hc73_smart.nii',
-                 paths.receptor_path + '/MU_carfentanil_hc204_kantonen.nii',
-                 paths.receptor_path + '/NAT_MRB_hc77_ding.nii.gz',
-                 paths.receptor_path + '/NMDA_ge179_hc29_galovic.nii.gz',
-                 paths.receptor_path + '/VAChT_feobv_hc4_tuominen.nii',
-                 paths.receptor_path + '/VAChT_feobv_hc5_bedard_sum.nii',
-                 paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
-                 paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
+    receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
+                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
+                            "MOR", "NET", "NMDA", "VAChT", "A2"])
+
+    receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
+                    paths.receptor_path + '/5HT1b_p943_hc22_savli.nii',
+                    paths.receptor_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
+                    paths.receptor_path + '/5HT2a_cimbi_hc29_beliveau.nii',
+                    paths.receptor_path + '/5HT4_sb20_hc59_beliveau.nii',
+                    paths.receptor_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
+                    paths.receptor_path + '/5HTT_dasb_hc100_beliveau.nii',
+                    paths.receptor_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
+                    paths.receptor_path + '/CB1_omar_hc77_normandin.nii.gz',
+                    paths.receptor_path + '/D1_SCH23390_hc13_kaller.nii',
+                    paths.receptor_path + '/D2_flb457_hc37_smith.nii.gz',
+                    paths.receptor_path + '/D2_flb457_hc55_sandiego.nii.gz',
+                    paths.receptor_path + '/DAT_fpcit_hc174_dukart_spect.nii',
+                    paths.receptor_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
+                    paths.receptor_path + '/H3_cban_hc8_gallezot.nii.gz', 
+                    paths.receptor_path + '/M1_lsn_hc24_naganawa.nii.gz',
+                    paths.receptor_path + '/mGluR5_abp_hc22_rosaneto.nii',
+                    paths.receptor_path + '/mGluR5_abp_hc28_dubois.nii',
+                    paths.receptor_path + '/mGluR5_abp_hc73_smart.nii',
+                    paths.receptor_path + '/MU_carfentanil_hc204_kantonen.nii',
+                    paths.receptor_path + '/NAT_MRB_hc77_ding.nii.gz',
+                    paths.receptor_path + '/NMDA_ge179_hc29_galovic.nii.gz',
+                    paths.receptor_path + '/VAChT_feobv_hc4_tuominen.nii',
+                    paths.receptor_path + '/VAChT_feobv_hc5_bedard_sum.nii',
+                    paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
+                    paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
+    
+else:
+    receptor_names = np.array(["5HT1a", "5HT1b", "5HT2a", "5HT4", "5HT6", "5HTT", "A4B2",
+                            "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
+                            "MOR", "NET", "NMDA", "VAChT"])
+
+    receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
+                    paths.receptor_path + '/5HT1b_p943_hc22_savli.nii',
+                    paths.receptor_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
+                    paths.receptor_path + '/5HT2a_cimbi_hc29_beliveau.nii',
+                    paths.receptor_path + '/5HT4_sb20_hc59_beliveau.nii',
+                    paths.receptor_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
+                    paths.receptor_path + '/5HTT_dasb_hc100_beliveau.nii',
+                    paths.receptor_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
+                    paths.receptor_path + '/CB1_omar_hc77_normandin.nii.gz',
+                    paths.receptor_path + '/D1_SCH23390_hc13_kaller.nii',
+                    paths.receptor_path + '/D2_flb457_hc37_smith.nii.gz',
+                    paths.receptor_path + '/D2_flb457_hc55_sandiego.nii.gz',
+                    paths.receptor_path + '/DAT_fpcit_hc174_dukart_spect.nii',
+                    paths.receptor_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
+                    paths.receptor_path + '/H3_cban_hc8_gallezot.nii.gz', 
+                    paths.receptor_path + '/M1_lsn_hc24_naganawa.nii.gz',
+                    paths.receptor_path + '/mGluR5_abp_hc22_rosaneto.nii',
+                    paths.receptor_path + '/mGluR5_abp_hc28_dubois.nii',
+                    paths.receptor_path + '/mGluR5_abp_hc73_smart.nii',
+                    paths.receptor_path + '/MU_carfentanil_hc204_kantonen.nii',
+                    paths.receptor_path + '/NAT_MRB_hc77_ding.nii.gz',
+                    paths.receptor_path + '/NMDA_ge179_hc29_galovic.nii.gz',
+                    paths.receptor_path + '/VAChT_feobv_hc4_tuominen.nii',
+                    paths.receptor_path + '/VAChT_feobv_hc5_bedard_sum.nii',
+                    paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii']
 
 for proj in ['vol', 'surf']:  
     masked = []
@@ -111,7 +143,9 @@ for proj in ['vol', 'surf']:
     receptor_data[:, 2:9] = r[:, 3:10]
     receptor_data[:, 10:14] = r[:, 12:16]
     receptor_data[:, 15:18] = r[:, 19:22]
-    receptor_data[:, 19] = r[:, 25]
+
+    if rec.source == 'PET2':
+        receptor_data[:, 19] = r[:, 25]
 
     # weighted average of 5HT1B p943
     receptor_data[:, 1] = (zscore(r[:, 1])*22 + zscore(r[:, 2])*65) / (22+65)
@@ -133,17 +167,20 @@ for proj in ['vol', 'surf']:
                     pickle.dump(receptor_data, f)
         else:
             with open(os.path.join(output_dir, 
-                                f'receptor_density_{params.mask}.pickle'), 'wb') as f:
+                                f'receptor_density.pickle'), 'wb') as f:
                     pickle.dump(receptor_data, f)
     else:
-         with open(os.path.join(output_dir, 
-                                f'receptor_density_{params.mask}_surf.pickle'), 'wb') as f:
+        if params.parcelated:
+            with open(os.path.join(output_dir, 
+                            f'receptor_density_{params.mask}_{params.mask_details}_surf.pickle'), 'wb') as f:
+                    pickle.dump(receptor_data, f)
+        else:
+            with open(os.path.join(output_dir, 
+                                f'receptor_density_surf.pickle'), 'wb') as f:
                     pickle.dump(receptor_data, f)
 
 
 #### plotting   
-cmap = np.genfromtxt('/home/ah278717/hansen_receptors/data/colourmap.csv', delimiter=',')
-cmap_div = ListedColormap(cmap)
 
 #plot surface maps 
 if PLOT_RECEPTORS:
@@ -202,7 +239,7 @@ if PLOT_CORR:
     cannabinnoid = ["CB1"]
     receptor_groups = [serotonin, acetylcholine, noradrenaline, opioid, glutamate, histamine, gaba, dopamine, cannabinnoid]
 
-    cmap = mf.get_custom_colormap()
+    cmap = mf.get_custom_colormap(map_type='diverging')
 
     ordered_receptors = [receptor for group in receptor_groups for receptor in group]
     df = pd.DataFrame(receptor_data, columns=receptor_names)
@@ -210,7 +247,7 @@ if PLOT_CORR:
     df = df[ordered_receptors]
     corr_matrix = df.corr()
     plt.figure(figsize=(10, 8))
-    sns.heatmap(corr_matrix, annot=False, cmap=cmap_div, vmin=-1, vmax=1, linewidths=0.6, square=True)
+    sns.heatmap(corr_matrix, annot=False, cmap=cmap, vmin=-1, vmax=1, linewidths=0.6, square=True)
     current_pos = 0
     for group in receptor_groups:
         group_size = len(group)

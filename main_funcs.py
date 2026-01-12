@@ -13,13 +13,14 @@ import pickle
 import numpy as np
 import pandas as pd
 import os.path as op
-import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import seaborn as sns
 import nibabel as nib
 from neuromaps import transforms
 from scipy.stats import zscore
+from nilearn import image, datasets, masking
+
 
 def set_publication_style(
     font_size=7,
@@ -256,12 +257,8 @@ def get_subjects(db, data_dir):
     return sorted(subjects)
 
 def get_beta_dir_and_info(task, params, paths):
-    if task == 'Explore':
-        beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level', 'noEntropy_noER')
-    elif task == 'lanA':
-        beta_dir = os.path.join(paths.home_dir, paths.fmri_dir['lanA'])
-    else:
-        beta_dir  = os.path.join(paths.home_dir,task,params.mask,'first_level') 
+
+    beta_dir  = os.path.join(paths.home_dir,task,'first_level') 
 
     if task == 'NAConf':
         add_info = '_firstTrialsRemoved'
@@ -275,15 +272,15 @@ def get_beta_dir_and_info(task, params, paths):
 def load_effect_map_array(sub, task, latent_var, params, paths):
     beta_dir, add_info = get_beta_dir_and_info(task, params, paths)
 
-    map = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_{params.mask}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
+    map = np.load(os.path.join(beta_dir,f'sub-{sub:02d}_{latent_var}_effect_size{add_info}.pickle'), allow_pickle=True).flatten()
 
     return map
 
 def load_receptor_array(params, paths, rec, on_surface):
     if on_surface:
-        receptor_data =zscore(np.load(os.path.join(paths.home_dir,'receptors', rec.source,f'receptor_density_{params.mask}_surf.pickle'), allow_pickle=True))
+        receptor_data =zscore(np.load(os.path.join(paths.home_dir,'receptors', rec.source,f'receptor_density_surf.pickle'), allow_pickle=True))
     else:
-        receptor_data = zscore(np.load(os.path.join(paths.home_dir,'receptors', rec.source,f'receptor_density_{params.mask}.pickle'), allow_pickle=True))
+        receptor_data = zscore(np.load(os.path.join(paths.home_dir,'receptors', rec.source,f'receptor_density.pickle'), allow_pickle=True))
 
     return receptor_data
 
@@ -297,7 +294,7 @@ def load_surface_effect_maps_for_cv(subjects, task, latent_var, params, paths):
             pattern = os.path.join(beta_dir, 'subjects', subj_id, 'SPM', 'spmT_*.nii')
             fmri_files.extend(glob.glob(pattern))
     else:
-        fmri_files_all = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}_{params.mask}_effect_size_map{add_info}.nii.gz')))
+        fmri_files_all = sorted(glob.glob(os.path.join(beta_dir,f'sub-*_{latent_var}__effect_size_map{add_info}.nii.gz')))
         fmri_files = []
         for file in fmri_files_all:
             basename = os.path.basename(file)
@@ -320,5 +317,55 @@ def load_surface_effect_maps_for_cv(subjects, task, latent_var, params, paths):
     return fmri_activity
 
 
+def nii_to_cortical_voxel_array(
+    nii_path,
+    output_dir,
+    schaefer_n_rois=100,
+    save=True
+):
+    """
+    Convert a .nii.gz effect map into a voxel-wise cortical array
+
+    Parameters
+    ----------
+    nii_path : str
+        Path to the .nii.gz effect map.
+    output_dir : str
+        Directory to save the output array.
+    save : bool
+        Whether to save the array as .npy.
+
+    Returns
+    -------
+    voxel_array : np.ndarray
+        1D array of cortical voxel values.
+    """
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Load effect map
+    effect_img = image.load_img(nii_path)
+
+    # Load Schaefer atlas
+    schaefer = datasets.fetch_atlas_schaefer_2018(
+        n_rois=schaefer_n_rois,
+        resolution_mm=2
+    )
+
+    atlas_img = image.load_img(schaefer.maps)
+
+    # Create a binary cortical mask (all parcels > 0)
+    cortical_mask = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
+
+    # Resample effect map to mask if needed: this is the size of the receptor data provided
+    cortical_mask = image.resample_to_img(
+        effect_img, cortical_mask, interpolation="nearest"
+    )
+
+    # Apply mask → 1D voxel array
+    voxel_array = masking.apply_mask(effect_img, cortical_mask)
+
+
+    return voxel_array, cortical_mask
 
 

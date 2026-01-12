@@ -21,59 +21,6 @@ parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 from main_funcs import *
 
-def get_masker(data_dir=None,tr=None,smoothing_fwhm=None, params=None, paths=None):
-    
-    if params.mask == 'harvard_oxford_cortical':
-        atlas = fetch_atlas_harvard_oxford('cort-maxprob-thr25-2mm')
-    elif params.mask == 'schaefer':
-        atlas = fetch_atlas_schaefer_2018(n_rois=int(params.mask_details), resolution_mm=2)
-        atlas.labels = np.insert(atlas.labels, 0, "Background")
-    elif params.mask == 'desikan':
-        atlas = abagen.fetch_desikan_killiany() 
-    else:
-        raise ValueError("Unknown atlas!")
-    
-    if params.mask not in ['desikan', 'spm_noCereb']:
-        atlas_img = image.load_img(atlas.maps)
-        mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
-    elif params.mask == 'desikan':
-        atlas_img = image.load_img(atlas['image'])
-        mask = ~np.isin(image.get_data(atlas_img), [0,35,36,37,38,39,40,41,76,77,78,79,80,81,82,83])
-        mask_img = image.new_img_like(atlas_img, mask) #only cortical structures 
-
-    if tr==None:
-        masker = NiftiMasker(mask_img=mask_img)
-    else:
-        # resample the mask to NAConf resolution, as NAConf can't be resampled with the nans
-        #get example dataset from NAConf
-        nii_files = sorted(glob.glob(op.join(paths.root_dir, '/MeynielMazancieux_NACONF_prob_2021/derivatives/sub-01', 'wtrasub*.nii')))
-        ref_epi = nib.load(nii_files[0])
-        mask_resampled = image.resample_img(mask_img,
-                                        target_affine=ref_epi.affine, target_shape=ref_epi.shape[0:3],
-                                            interpolation='nearest')
-        if params.zscore_per_session:
-            masker = MultiNiftiMasker(
-                mask_img=mask_resampled,
-                detrend=True,  # Improves the SNR by removing linear trends
-                high_pass=params.hpf,  # kept small to keep sensitivity,
-                standardize=True,
-                smoothing_fwhm=smoothing_fwhm,
-                t_r=tr,
-            )
-        else:
-            masker = MultiNiftiMasker(
-                mask_img=mask_resampled,
-                detrend=True,  # Improves the SNR by removing linear trends
-                high_pass=params.hpf,  # kept small to keep sensitivity,
-                standardize=False,
-                smoothing_fwhm=smoothing_fwhm,
-                t_r=tr,
-            )
-    
-    masker.fit()
-    
-    return masker
-
 def get_tr(db, sub, sess, data_dir):
     """This function fetches and returns the repetition time featured in an
     experimental run in the MRI scanner for a given subject and run."""
@@ -166,6 +113,49 @@ def get_ppssing(sub, db_name, paths):
                             f'MRI_data/raw_data/subj{sub:02d}/fMRI')
         
     return ppssing, fmri_path
+
+def get_masker(tr=None,smoothing_fwhm=None, params=None, paths=None):
+    
+
+    atlas = fetch_atlas_schaefer_2018(n_rois=100, resolution_mm=2)
+    atlas.labels = np.insert(atlas.labels, 0, "Background")
+    
+    atlas_img = image.load_img(atlas.maps)
+    mask_img = image.new_img_like(atlas_img, image.get_data(atlas_img) != 0) #mask background
+
+
+    if tr==None:
+        masker = NiftiMasker(mask_img=mask_img)
+    else:
+        # resample the mask to NAConf resolution, as NAConf can't be resampled with the nans
+        #get example dataset from NAConf
+        nii_files = sorted(glob.glob(op.join(paths.root_dir, '/MeynielMazancieux_NACONF_prob_2021/derivatives/sub-01', 'wtrasub*.nii')))
+        ref_epi = nib.load(nii_files[0])
+        mask_resampled = image.resample_img(mask_img,
+                                        target_affine=ref_epi.affine, target_shape=ref_epi.shape[0:3],
+                                            interpolation='nearest')
+        if params.zscore_per_session:
+            masker = MultiNiftiMasker(
+                mask_img=mask_resampled,
+                detrend=True,  # Improves the SNR by removing linear trends
+                high_pass=params.hpf,  # kept small to keep sensitivity,
+                standardize=True,
+                smoothing_fwhm=smoothing_fwhm,
+                t_r=tr,
+            )
+        else:
+            masker = MultiNiftiMasker(
+                mask_img=mask_resampled,
+                detrend=True,  # Improves the SNR by removing linear trends
+                high_pass=params.hpf,  # kept small to keep sensitivity,
+                standardize=False,
+                smoothing_fwhm=smoothing_fwhm,
+                t_r=tr,
+            )
+    
+    masker.fit()
+    
+    return masker
 
 def get_nii_files(ppssing, fmri_path, db_name):
     

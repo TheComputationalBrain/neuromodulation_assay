@@ -13,7 +13,7 @@ from neuromaps import transforms
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
-from params_and_paths import Paths, Params
+from config.loader import load_config
 
 
 # --- Global configuration ---
@@ -30,8 +30,7 @@ def plot_individual_clusters(tasks, contrasts, output_dir):
     for contrast in contrasts:
         cmap = 'Blues' if '_neg' in contrast else 'Reds'
         for task in tasks:
-            params = Params(task=task)
-            paths = Paths(task=task)
+            params, paths, _ = load_config(task, return_what='all')
             _, add_info = mf.get_beta_dir_and_info(task, params, paths)
             group_dir = (
                 os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
@@ -74,8 +73,7 @@ def plot_cluster_overlap_all(tasks, contrasts, output_dir):
         for hemi in ['right', 'left']:
             task_masks = []
             for task in tasks:
-                params = Params(task=task)
-                paths = Paths(task=task)
+                params, paths, _ = load_config(task, return_what='all')
                 _, add_info = mf.get_beta_dir_and_info(task, params, paths)
                 group_dir = (
                     os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
@@ -127,8 +125,7 @@ def plot_colorbar_overlap():
 def run_correlations(tasks, output_dir):
     data_list = []
     for task in tasks:
-        params = Params(task=task)
-        paths = Paths(task=task)
+        params, paths, _ = load_config(task, return_what='all')
         _, add_info = mf.get_beta_dir_and_info(task, params, paths)
         base_dir = (
             os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
@@ -163,7 +160,7 @@ def run_correlations(tasks, output_dir):
 
 
 # Group-level correlation analysis (modular)
-def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", output_dir=""):
+def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", paths = None, output_dir=""):
     """
     Generate correlation plots between second-level maps across tasks and contrasts.
 
@@ -177,8 +174,6 @@ def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", output_dir=""):
         - "lower_triangles": masked lower-triangle plots for publication-style visuals
     """
     # --- get results ---
-    params = Params(task="all")
-    paths = Paths(task="all")
     corr_df = pd.read_csv(os.path.join(paths.home_dir, 'domain_general', 'correlation_df.csv'), index_col = [0])
     labels = corr_df.index
 
@@ -327,10 +322,9 @@ def run_analysis(
     if run_correlations:
         run_correlations(tasks,OUTPUT_DIR)
         cmap_div = mf.get_custom_colormap('diverging')
-        plot_correlations(["cross","lower_triangles"], cmap_div, OUTPUT_DIR)
+        plot_correlations(["cross","lower_triangles"], cmap_div, paths, OUTPUT_DIR)
 
 if __name__ == "__main__":
-    params = Params(task='all')
-    paths = Paths(task='all')
+    params, paths, _ = load_config('all', return_what='all')
 
     run_analysis(run_individual=True, run_overlap=True ,run_colorbar=True, run_correlations=True, params=params, paths=paths)

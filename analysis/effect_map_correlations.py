@@ -12,7 +12,9 @@ from statsmodels.stats.multitest import multipletests
 # Load local debugged version of neuromaps
 sys.path.insert(0, os.path.abspath("."))
 from neuromaps import nulls, transforms, stats
-from params_and_paths import Paths
+
+from config.loader import load_config
+
 
 # Data loading and preprocessing
 def load_group_surface_map(task, contrast, paths, explore_model="noEntropy_noER"):
@@ -47,7 +49,6 @@ def run_spin_test_within(tasks, contrasts, paths, explore_model="noEntropy_noER"
 
         # Prepare surface maps and nulls
         for task in tasks:
-            paths = Paths(task=task)
             surf_map = load_group_surface_map(task, contrast, paths, explore_model)
             surf_maps[task] = surf_map
             null_models[task] = generate_null_model(surf_map, n_perm, seed)
@@ -78,7 +79,6 @@ def run_spin_test_across(tasks, contrasts, paths, explore_model="noEntropy_noER"
 
     # Load all maps and generate nulls
     for task in tasks:
-        paths = Paths(task=task)
         for contrast in contrasts:
             surf_map = load_group_surface_map(task, contrast, paths, explore_model)
             key = f"{task}_{contrast}"
@@ -141,7 +141,7 @@ def run_all_spin_tests(
 
 
 if __name__ == "__main__":
-    paths = Paths(task='all')
+    paths = load_config('all', return_what='paths')
     # Run within-contrast correlations (surprise-surprise, confidence-confidence)
     run_all_spin_tests(within=True, paths=paths)
 

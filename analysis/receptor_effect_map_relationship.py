@@ -33,7 +33,7 @@ from dominance_funcs import dominance_stats
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
-from params_and_paths import Paths, Params, Receptors
+from config.loader import load_config
 
 
 # --- Configuration ---
@@ -42,8 +42,6 @@ RUN_DOMINANCE = True
 
 
 # --- Initialize paths and parameters ---
-rec =Receptors(source = 'PET2')
-
 
 def run_dominance_analysis(params, paths, rec,
                            model_type,
@@ -97,7 +95,7 @@ def run_dominance_analysis(params, paths, rec,
         else:
             raise ValueError(f"Dominance analysis for '{model_type}' not supported!")
 
-        fname = f'{latent_var}_{params.mask}_dominance_sub-{sub:02d}_{model_type}.pickle'
+        fname = f'{latent_var}_dominance_sub-{sub:02d}_{model_type}.pickle'
         with open(os.path.join(out_dir, fname), 'wb') as f:
             pickle.dump(m, f)
 
@@ -130,7 +128,7 @@ def run_dominance_analysis(params, paths, rec,
             beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
             out_dir = os.path.join(beta_dir, 'regressions', rec.source)
 
-            fname = f'{latent_var}_{params.mask}_dominance_allsubj_{model_type}.pickle'
+            fname = f'{latent_var}_dominance_allsubj_{model_type}.pickle'
             results_df.to_pickle(os.path.join(out_dir, fname))
 
 def run_regression_analysis(
@@ -141,14 +139,14 @@ def run_regression_analysis(
     model_type = 'linear',
 ):
     """
-    Runs the full regression analysis for all tasks and latent variables.
+    Runs the full regression analysis for all tasks and latent variables to inspect or plot their weights
 
     Parameters
     ----------
     RUN_REGRESSION : bool
         If False, the function exits immediately.
     params : object
-        Must contain attributes: tasks, latent_vars, ignore, mask.
+        Must contain attributes: tasks, latent_vars, ignore
     Paths : class
         Used to construct path objects: Paths(task=...)
     Params : class
@@ -281,31 +279,35 @@ def run_regression_analysis(
             # ==================================================================
             # Save results
             # ==================================================================
-            fname = f"{latent_var}_{params_task.mask}_regression_weights_bysubject_all_{model_type}.csv"
+            fname = f"{latent_var}_regression_weights_bysubject_all_{model_type}.csv"
             results_df.to_csv(os.path.join(output_dir, fname), index=False)
 
 
 def plot_regression_coefficients(tasks, model_type='linear'):
-    """Plot regression coefficients across subjects with FDR-corrected significance."""
+    """Plot regression coefficients across subjects and save mean coefficients table."""
     
-    for task in tasks:
-        paths = Paths(task=task)
-        params = Params(task=task)
+    # ----container for mean coefficients ----
+    mean_coeffs_all_studies = []
 
-        if paths.beta_dir = None
-            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
-        else 
+    for task in tasks:
+        params, paths, rec = load_config(task, return_what='all')
+
+        if 'beta_dir' in paths:
             beta_dir = paths.beta_dir
-        output_dir = os.path.join(beta_dir, 'regressions', rec.source)
+        else: 
+            beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
+
+        data_dir = os.path.join(beta_dir, 'regressions', rec.source)
+
+        output_dir = os.path.join(paths.out_dir, 'regressions', rec.source)
         os.makedirs(output_dir, exist_ok=True)
 
-
-        base_colors = sns.color_palette('husl', len(params.receptor_groups))
+        base_colors = sns.color_palette('husl', len(rec.receptor_groups))
         plt.rcParams.update({'font.size': 18})
 
         for latent_var in params.latent_vars:
-            fname = f'{latent_var}_{params.mask}__regression_weights__bysubject_all_{model_type}.csv'
-            file_path = os.path.join(output_dir, fname)
+            fname = f'{latent_var}_regression_results_bysubject_all_{model_type}.csv'
+            file_path = os.path.join(data_dir, fname)
             if not os.path.exists(file_path):
                 print(f"Skipping {latent_var} — no file found.")
                 continue
@@ -313,6 +315,11 @@ def plot_regression_coefficients(tasks, model_type='linear'):
             results_df = pd.read_csv(file_path)
             if 'a2' in results_df.columns:
                 results_df.rename(columns={'a2': 'A2'}, inplace=True)
+
+            # ---- NEW: compute mean coefficients for this study ----
+            mean_coeffs = results_df[rec.receptor_names].mean()
+            mean_coeffs.name = task  # row label = study
+            mean_coeffs_all_studies.append(mean_coeffs)
 
             # --- T-tests per receptor ---
             t_values, p_values = [], []
@@ -326,17 +333,17 @@ def plot_regression_coefficients(tasks, model_type='linear'):
             sig_signs = [np.sign(t) for t, pc in zip(t_values, p_corr) if pc < 0.05]
 
             # --- Group color logic ---
-            receptor_to_group = {r: i for i, grp in enumerate(params.receptor_groups) for r in grp}
-            receptor_to_class = {r: i for i, grp in enumerate(params.receptor_class) for r in grp}
-            ordered = [r for grp in params.receptor_groups for r in grp]
+            receptor_to_group = {r: i for i, grp in enumerate(rec.receptor_groups) for r in grp}
+            receptor_to_class = {r: i for i, grp in enumerate(rec.receptor_class) for r in grp}
+            ordered = [r for grp in rec.receptor_groups for r in grp]
 
             colors = []
             for receptor in ordered:
                 g = receptor_to_group.get(receptor, -1)
                 c = receptor_to_class.get(receptor, -1)
-                if c == 0:  # Excitatory
+                if c == 0:
                     col = sns.dark_palette(base_colors[g], n_colors=3)[1]
-                elif c == 1:  # Inhibitory
+                elif c == 1:
                     col = sns.light_palette(base_colors[g], n_colors=3)[1]
                 else:
                     col = sns.light_palette(base_colors[g], n_colors=3)[0]
@@ -351,7 +358,7 @@ def plot_regression_coefficients(tasks, model_type='linear'):
                     color = '#C96868' if sig_signs[idx] > 0 else '#7EACB5'
                     ax.scatter(i, results_df[receptor].median(), color=color, zorder=5)
 
-            ax.set_xticklabels(params.receptor_label_formatted, rotation=90)
+            ax.set_xticklabels(rec.receptor_label_formatted, rotation=90)
             ax.set_xlabel('Receptor')
             ax.set_ylabel('Coefficient')
             ax.set_title(f'{latent_var} regression coefficients ({rec.source})')
@@ -361,6 +368,13 @@ def plot_regression_coefficients(tasks, model_type='linear'):
             os.makedirs(fig_dir, exist_ok=True)
             plt.savefig(os.path.join(fig_dir, f'{latent_var}_coefficients_{model_type}.png'), dpi=300)
             plt.close()
+
+    # ---- save combined table ----
+    mean_coeffs_df = pd.DataFrame(mean_coeffs_all_studies)
+    mean_coeffs_df.index.name = 'study'
+
+    csv_path = os.path.join(output_dir, f'mean_regression_coefficients_{model_type}.csv')
+    mean_coeffs_df.to_csv(csv_path)
 
 # ---------- Data loading ----------
 def load_dominance_data(tasks, latent_var, model_type="linear"):
@@ -372,21 +386,21 @@ def load_dominance_data(tasks, latent_var, model_type="linear"):
     model_suffix = "" if model_type == "linear" else "_lin+quad"
 
     for task in tasks:
-        paths = Paths(task=tasks)
-        params = Params(task=task)
+        params, paths, rec = load_config(task, return_what='all')
         beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
         input_dir = os.path.join(beta_dir, "regressions", "PET2")
-        fname = f"{latent_var}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
+        fname = f"{latent_var}_dominance_allsubj{model_suffix}.pickle"
         df = pd.read_pickle(os.path.join(input_dir, fname))
         if "a2" in df.columns:
             df.rename(columns={"a2": "A2"}, inplace=True)
         standardized_df = df.div(df.sum(axis=1), axis=0)
         results[task] = standardized_df
+
     return results
 
 
 # ---------- Aggregation ----------
-def aggregate_dominance(results_dict, exclude_explore=True):
+def aggregate_dominance(results_dict, exclude_explore=False):
     """
     Aggregates dominance data across experiments.
     Returns a combined DataFrame (concatenated subjects across studies)
@@ -565,7 +579,7 @@ def plot_explore_dominance_heatmap(
         beta_dir, _ = mf.get_beta_dir_and_info(task, params, paths)
         input_dir = os.path.join(beta_dir, "regressions", "PET2")
 
-        fname = f"{latent_var}_{params.mask}_dominance_allsubj{model_suffix}.pickle"
+        fname = f"{latent_var}_dominance_allsubj{model_suffix}.pickle"
         df = pd.read_pickle(os.path.join(input_dir, fname))
 
         if "a2" in df.columns:
@@ -665,31 +679,6 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
     hatch_example = mpatches.Patch(facecolor='white', edgecolor='black', hatch='//', label='transporter')
     legend_elements.append(hatch_example)
     legend_labels.append("transporter")
-
-    # Significance markers
-    red_dot = mlines.Line2D(
-        [], [], 
-        color='black', 
-        marker='+', 
-        markersize=6,          # make it clearly visible
-        markeredgewidth=1.5,    # thicker lines for visibility
-        linestyle='None',
-        label="sig. estimate in full model: positive"
-    )
-    blue_dot = mlines.Line2D(
-        [], [], 
-        color='black', 
-        marker='_', 
-        markersize=8,          # slightly larger for underscore visibility
-        markeredgewidth=2, 
-        linestyle='None',
-        label="sig. estimate in full model: negative"
-    )
-    legend_elements.extend([red_dot, blue_dot])
-    legend_labels.extend([
-        "pos. sig. in full reg. model",
-        "neg. sig. in full reg. model"
-    ])
     
     # --- Plot legend only ---
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
@@ -712,8 +701,7 @@ def plot_legend_dominance_bars(rec, ncol=None, fig_width=8, fig_height=1.2):
 
 
 if __name__ == "__main__":
-    params = Params(task='all')
-    paths = Paths(task='all')
+    params, paths, rec = load_config('all', return_what='all')
     mf.set_publication_style(font_size=8)
 
     if RUN_REGRESSION:
@@ -721,8 +709,8 @@ if __name__ == "__main__":
         run_regression_analysis(
             RUN_REGRESSION=True,
             params=params,
-            Paths=Paths,
-            Params=Params,
+            Paths=paths,
+            Params=params,
             rec=rec,
             MODEL_TYPE="linear"
         )
@@ -756,8 +744,8 @@ if __name__ == "__main__":
                                 title=title)
             mf.save_figure(fig, plot_dir, f"{exp}_{latent_var}_dominance")
 
-        # ---- Group-level mean (exclude Explore) ----
-        combined, per_study_means = aggregate_dominance(results, exclude_explore=True)
+        # ---- Group-level mean  ----
+        combined, per_study_means = aggregate_dominance(results)
         fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted)
         mf.save_figure(fig, plot_dir, f"group_{latent_var}_dominance")
 
@@ -766,19 +754,6 @@ if __name__ == "__main__":
         fig, ax = plot_dominance_heatmap(per_study_means, rec.receptor_groups, cmap_pos, rec.receptor_label_formatted, rename_tasks=True, params=params, paths=paths)
         mf.save_figure(fig, plot_dir, f"heatmap_{latent_var}")
 
-    # ---- Explore-only heatmap ----
-    paths = Paths(task='Explore')
-    params = Params(task='Explore')
-    fig, ax = plot_explore_dominance_heatmap(
-        params.latent_vars,
-        rec.receptor_groups,
-        rec.receptor_label_formatted,
-        cmap_pos,
-        model_type='linear',
-        params=params,
-        paths=paths
-    )
-    mf.save_figure(fig, plot_dir, "heatmap_explore")
 
     # ---- Legend for dominance barplot ----
     fig = plot_legend_dominance_bars(rec)

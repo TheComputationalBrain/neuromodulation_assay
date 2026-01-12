@@ -23,7 +23,7 @@ from scipy.stats import mannwhitneyu
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
 import main_funcs as mf
-from params_and_paths import Paths, Params, Receptors
+from config.loader import load_config
 
 #analysis
 FROM_BETA = True
@@ -36,25 +36,9 @@ COMPARE_EXPL_VAR_SUBJECT = True
 PLOT_VAR_EXPLAINED = True
 PLOT_VAR_EXPLAINED_RATIO = True
 
-MODEL_TYPE = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
-
-SCORE = 'determination'
-
-suffix = ''
-
-params = Params(task='all', cv_true=True)
-paths = Paths(task='all')
-rec = Receptors(source = 'PET2')
-
-output_dir = os.path.join(paths.home_dir, 'variance_explained')
-os.makedirs(output_dir, exist_ok=True) 
-
-comparison_latent = 'language'
-comparison_task = 'lanA'
-
 fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
 
-def run_from_beta(params, Paths, mf, output_dir, SCORE='determination', to_file=True):
+def run_from_beta(params, output_dir, SCORE='determination', to_file=True):
 
     def write(text):
         if to_file:
@@ -65,8 +49,7 @@ def run_from_beta(params, Paths, mf, output_dir, SCORE='determination', to_file=
 
     for task in params.tasks:
 
-        paths = Paths(task=task)
-        params = Params(task=task, cv_true=True)   # unchanged
+        params, paths, _ = load_config(task, cv=True, return_what='all')
 
         beta_dir, add_info = mf.get_beta_dir_and_info(task, params, paths)
         fmri_dir = mf.get_fmri_dir(task, paths)
@@ -355,7 +338,7 @@ def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE
         )
 
 
-def run_group_ratio_summary(task, latent_var, MODEL_TYPE='linear', SCORE='determination', to_file=True):
+def run_group_ratio_summary(MODEL_TYPE='linear', SCORE='determination', to_file=True):
     """
     group level variance explained (corresponding values to the barplot)
     """
@@ -374,22 +357,22 @@ def run_group_ratio_summary(task, latent_var, MODEL_TYPE='linear', SCORE='determ
 
     # load data
     expl = np.load(os.path.join(
-        output_dir, f"{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle"
+        output_dir, f"{params.task}_{lparams.atent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle"
     ), allow_pickle=True)
 
     rec = np.load(os.path.join(
-        output_dir, f"{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle"
+        output_dir, f"{params.task}_{params.latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle"
     ), allow_pickle=True)
 
     # compute ratio
     ratio = group_ratio(rec, expl)
 
     # output
-    write(f"{task} {latent_var}: {ratio * 100:.1f}%\n")
+    write(f"{params.task} {params.latent_var}: {ratio * 100:.1f}%\n")
 
 
 
-def plot_variance_explained(params, model_type="linear", score="determination", comparison_latent="S-N", legend=True):
+def plot_variance_explained(params, score="determination", comparison_latent="S-N", legend=True):
     """
     Plot variance explained and null model for each latent variable and task.
     """
@@ -600,8 +583,20 @@ def plot_explained_variance_ratio(params, score="determination", comparison_late
 mf.set_publication_style(font_size=8)
 
 if __name__ == "__main__":
+
+    MODEL_TYPE = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
+    SCORE = 'determination'
+
+    params, paths, _ = load_config('all', return_what='all')
+
+    output_dir = os.path.join(paths.home_dir, 'variance_explained')
+    os.makedirs(output_dir, exist_ok=True) 
+
+    comparison_latent = 'language'
+    comparison_task = 'lanA'
+
     if FROM_BETA:
-        run_from_beta(params, Paths, mf, output_dir)
+        run_from_beta(params, output_dir)
 
     if COMP_NULL:
         run_comp_null(params, output_dir)
