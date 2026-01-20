@@ -15,21 +15,13 @@ import re
 import types
 import numpy as np 
 import matplotlib.pyplot as plt
-import glob
 import os
 import pandas as pd
-import math
 import sys
-import matplotlib
 import seaborn as sns
-from scipy.stats import sem, ttest_1samp
-from scipy.stats import bootstrap
-from scipy.stats import linregress 
+from pathlib import Path
+from scipy.stats import  ttest_1samp
 from sklearn.linear_model import LinearRegression
-from statistics import mean
-import statsmodels.api as sm
-import scipy 
-from scipy.stats import bootstrap
 
 # --- Patch deprecated NumPy aliases ---
 if not hasattr(np, 'float'):
@@ -47,16 +39,11 @@ fake_numeric.Int64Index = type(pd.Index([1, 2, 3]))
 fake_numeric.RangeIndex = type(pd.RangeIndex(3))
 sys.modules['pandas.core.indexes.numeric'] = fake_numeric
 
-'''import tools from the toolbox'''
-# Append the path of the main directory in the search paths for modules
-root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-root_model = os.path.join(root, "TransitionProbModel")
 
-if root_model not in sys.path:
-    sys.path.append(root_model)
-
-from MarkovModel_Python import IdealObserver as IO
-from MarkovModel_Python import GenerateSequence as sg
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+from TransitionProbModel.MarkovModel_Python import IdealObserver as IO
+from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
 
 #Compute some useful functions :
@@ -232,9 +219,7 @@ all_subjects_info = pickle.load(file_info, encoding='bytes')
 list_subject = [f for f in os.listdir(behavior_path) if f.endswith(".pickle")]
 
 
-#valid_tasks = ["EncodeProb2020", "NACONFfMRI", "PNAS2017"]
-valid_tasks = ["EncodeProb2020"]
-
+valid_tasks = ["EncodeProb2020", "NACONFfMRI", "PNAS2017"]
 
 # Define the datasets to keep
 filtered_list_subject = [
@@ -337,7 +322,6 @@ for subject in filtered_list_subject:
     if 'PNAS' in subject:
         sub_pred = nan_array = np.nan * np.ones(n_questions) #MarkovGuess did not have a a probbaility report 
     else:
-        #! prediction 1 is the onverse for NACONF, fix below
         sub_pred = np.hstack([session['prediction_1'].tolist() for session in sub])  #prediction_1 is the next item being 1
         if 'NACONF' in subject:
             sub_pred = 1 - sub_pred
@@ -408,34 +392,6 @@ for subject in filtered_list_subject:
             # store R²
             r2 = reg.score(X, Y)
             subj_correlations.loc[subject, "_".join([y, x, var, 'r2'])] = r2
-
-# compute correlations between different variables
-# subj_correlations_tmp = pd.DataFrame(
-#     index=list_subject,
-#     columns=['sub_conf_io_surp', 'sub_conf_io_surp_int', 'sub_conf_io_surp_slope',
-#              'sub_conf_io_entropy', 'sub_conf_io_entropy_int', 'sub_conf_io_entropy_slope'
-#              ])
-
-# for subject in list_subject:
-#     sub_data = data[data['subject'] == subject]
-#     for (x, y, var_x, var_y) in zip(['io', 'io'],
-#                                     ['sub', 'sub'],
-#                                     ['surp', 'entropy'],
-#                                     ['conf', 'conf']):
-
-#         # correlation
-#         subj_correlations_tmp.loc[subject]["_".join([y, var_y, x, var_x])] = \
-#             np.corrcoef(sub_data["_".join([x, var_x])], sub_data["_".join([y, var_y])])[0, 1]
-
-#         # linear regression
-#         reg = LinearRegression().fit(sub_data["_".join([x, var_x])].to_numpy()[:, np.newaxis],
-#                                      sub_data["_".join([y, var_y])])
-#         subj_correlations_tmp.loc[subject]["_".join([y, var_y, x, var_x, 'int'])] = reg.intercept_
-#         subj_correlations_tmp.loc[subject]["_".join([y, var_y, x, var_x, 'slope'])] = reg.coef_[0]
-
-# subj_correlations = pd.concat([subj_correlations, subj_correlations_tmp], axis=1)
-
-# subj_correlations = subj_correlations.astype('float') 
 
 
 #### group level output ######
