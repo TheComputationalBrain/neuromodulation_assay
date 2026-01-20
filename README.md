@@ -3,7 +3,7 @@
 This repository contains the code and data associated with the manuscript  
 **“Neuromodulatory systems partially account for the topography of cortical networks of learning under uncertainty.”**
 
-All code was written in **Python 3.10.12**.
+All code was written in **Python 3.10.12**. Versions of the used packages can be found in **`requirements.txt`**
 
 To explore neuromodulation and receptor/transporter contributions in *user-provided* fMRI data, see the notebook **`analysis_demo.ipynb`**. This notebook demonstrates how to apply the analysis pipeline described in the manuscript to new fMRI effect maps.
 
@@ -28,6 +28,12 @@ This folder contains all code specific to preprocessing and analyzing the probab
 
 - **`second_level_analysis.py`**  
   Runs group-level analyses of fMRI effect maps.
+
+---
+
+### `behavior/`
+
+**`behavior_meta_analysis.py`**  runs the behavioral analysis reported in the manuscript 
 
 ---
 
