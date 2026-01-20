@@ -33,7 +33,9 @@ This folder contains all code specific to preprocessing and analyzing the probab
 
 ### `behavior/`
 
-**`behavior_meta_analysis.py`**  runs the behavioral analysis reported in the manuscript 
+**`behavior_meta_analysis.py`**  
+Runs the behavioral analysis reported in the manuscript.
+ *Corresponds to Figure 1 in the manuscript.*
 
 ---
 
