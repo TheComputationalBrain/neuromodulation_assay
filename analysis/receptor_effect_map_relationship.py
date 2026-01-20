@@ -11,6 +11,12 @@ and total dominance values.
 """
 
 import os
+#specify the number of threads to limit the amount of ressources that are taken up by numpy.
+os.environ["OMP_NUM_THREADS"] = "1" 
+os.environ["OPENBLAS_NUM_THREADS"] = "1"  
+os.environ["MKL_NUM_THREADS"] = "1" 
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1" 
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import sys
 import glob
 import numpy as np
@@ -41,7 +47,8 @@ RUN_REGRESSION = True
 RUN_DOMINANCE = True
 
 
-def process_subject(sub, latent_var, task, model_type, output_dir):
+def process_subject(sub, latent_var, task, model_type, output_dir,
+                    params, paths, rec):
     print(f"--- Dominance analysis for {task} subject {sub} ----")
 
     receptor_density = mf.load_receptor_array(paths, rec, on_surface=False)
@@ -110,7 +117,8 @@ def run_task(task, params, paths, rec, model_type, start_at, num_workers, output
             futures = [
                 executor.submit(
                     process_subject,
-                    s, latent_var, task, model_type, task_output_dir
+                    s, latent_var, task, model_type, task_output_dir,
+                    params, paths, rec
                 )
                 for s in valid_subjects
             ]
@@ -467,7 +475,7 @@ def aggregate_dominance(results_dict, exclude_explore=False):
 # ---------- Plotting ----------
 def plot_dominance_bars(
     df, receptor_groups, receptor_class, receptor_label_formatted,
-    title=None, show_errorbars=True, ylim=(0, 0.16)
+    title=None, show_errorbars=True, ylim=None
 ):
     """
     Generic barplot function for dominance data.
@@ -528,7 +536,8 @@ def plot_dominance_bars(
 
     ax.set_ylabel("% Contribution")
     ax.yaxis.set_major_formatter(FormatStrFormatter("%.2f"))
-    ax.set_ylim(ylim)
+    if ylim is not None:
+        ax.set_ylim(ylim)
     if title:
         ax.set_title(title)
 
@@ -723,7 +732,7 @@ if __name__ == "__main__":
         # ---- Group-level mean  ----
         combined, per_study_means = aggregate_dominance(results)
 
-        fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted)
+        fig, ax = plot_dominance_bars(combined, rec.receptor_groups, rec.receptor_class, rec.receptor_label_formatted, ylim=(0, 0.16))
         mf.save_figure(fig, plot_dir, f"group_{latent_var}_dominance")
 
         # ---- Heatmaps ----

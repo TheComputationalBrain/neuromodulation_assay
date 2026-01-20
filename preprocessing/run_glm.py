@@ -12,14 +12,13 @@ The output corresponds to the labels and estimates of the GLM.
 
 import os
 import sys
-#specify the number of threads before importing numpy to limit the amount of ressources that are taken up by numpy.
+#specify the number of threads to limit the amount of ressources that are taken up by numpy.
 os.environ["OMP_NUM_THREADS"] = "1" 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"  
 os.environ["MKL_NUM_THREADS"] = "1" 
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1" 
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
 import glob
-import matplotlib
 import matplotlib.pyplot as plt
 from pathlib import Path
 import numpy as np
@@ -33,12 +32,12 @@ from nilearn.input_data import NiftiLabelsMasker
 from nilearn.datasets import fetch_atlas_schaefer_2018
 from scipy.stats import zscore
 from functions_design_matrices import create_design_matrix, zscore_regressors
-import fmri_funcs as fun
-import io_funcs as iof
+import utils.main_funcs as mf
+import utils.fmri_funcs as fun
+import utils.io_funcs as iof
+from config.loader import load_config
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
-import main_funcs as mf
-from params_and_paths import Params, Paths
 from TransitionProbModel.MarkovModel_Python import GenerateSequence as sg
 
 
@@ -46,8 +45,7 @@ TASK = 'EncodeProb'
 SAVE_DMTX_PLOT = True
 REDO_MASK = False
 
-paths = Paths(task=TASK)
-params = Params(task=TASK)
+params, paths, _ = load_config(TASK, return_what='all')
 
 # Init paths
 beh_dir  = mf.get_beh_dir(TASK, paths)

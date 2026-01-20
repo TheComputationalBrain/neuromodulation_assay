@@ -12,11 +12,11 @@ from pathlib import Path
 
 from invariance_effect_maps import plot_cluster_overlap_all, plot_colorbar_overlap, plot_correlations
 from variance_explained import plot_variance_explained, plot_explained_variance_ratio
-from receptor_effect_map_relationship import load_dominance_data, aggregate_dominance, plot_dominance_bars, plot_dominance_heatmap, plot_explore_dominance_heatmap, plot_legend_dominance_bars, plot_separate_colorbar
+from receptor_effect_map_relationship import load_dominance_data, aggregate_dominance, plot_dominance_bars, plot_dominance_heatmap, plot_legend_dominance_bars, plot_separate_colorbar
 
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
-import main_funcs as mf
+import utils.main_funcs as mf
 from config.loader import load_config
 
 #default settings

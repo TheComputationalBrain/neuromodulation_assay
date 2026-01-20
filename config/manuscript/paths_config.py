@@ -1,19 +1,22 @@
-from config.utils import AttrDict
+import os
 
-def load_paths(task = None):
+def load_paths(task=None):
 
     base = {
         "home_dir": "/home_local/alice_hodapp/NeuroModAssay",
         "root_dir": "/neurospin/unicog/protocols/IRMf",
-        "receptor_path": "/home/ah278717/hansen_receptors/data/PET_nifti_images/",
+        "pet_path": "/home/ah278717/hansen_receptors/data/PET_nifti_images/",
         "alpha_path": "/home/ah278717/alpha2_receptor/",
-        "out_dir": "/home_local/alice_hodapp/NeuroModAssay/results"
+        "out_dir": "/home_local/alice_hodapp/NeuroModAssay/results",
     }
 
+    # NEW: receptor path
+    base["receptor_dir"] = os.path.join(base["home_dir"], "regressor")
+
     # If "all" → return *only* base settings
-    if task == "all":
+    if task == "all" or task is None:
         return base
-    
+
     task_dirs = {
         "NAConf": {
             "data_dir": "MeynielMazancieux_NACONF_prob_2021",
@@ -33,5 +36,18 @@ def load_paths(task = None):
         }
     }
 
+    if task not in task_dirs:
+        raise ValueError(f"Unknown task '{task}'. Valid tasks: {list(task_dirs)}")
 
-    return {**base, **task_dirs[task]}
+    # Combine base + task-specific paths
+    paths = base.copy()
+    paths["data_dir"] = os.path.join(
+        base["root_dir"],
+        task_dirs[task]["data_dir"]
+    )
+    paths["mov_dir"] = os.path.join(
+        paths["data_dir"],
+        task_dirs[task]["mov_dir"]
+    )
+
+    return paths

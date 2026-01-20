@@ -1,10 +1,15 @@
-def load_paths(task= None):
+from pathlib import Path
+
+def load_paths():
+
+    BASE_DIR = Path(__file__).resolve().parent.parent.parent  # adjust if needed
+
     paths = {
-    "beta_dir": "../data/beta_dir/study_1", #beta directory contains the beta maps as nifiti files (volume + voxel level)
-    "results_dir": "../results/study_1", #path at which to save all of the results
-    "receptor_dir": "../data/receptors" #path at which the receptor densitie dataframes are stored
+        "beta_dir": BASE_DIR / "data" / "beta_dir" / "study_1",
+        "results_dir": BASE_DIR / "results" / "study_1",
+        "receptor_dir": BASE_DIR / "data" / "receptors",
     }
-    return paths
+    return {k: str(v) for k, v in paths.items()}
 
 
 

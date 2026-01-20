@@ -1,6 +1,7 @@
 
 import os
 import sys
+import glob
 #specify the number of threads before importing numpy to limit the amount of ressources that are taken up by numpy.
 os.environ["OMP_NUM_THREADS"] = "1" 
 os.environ["OPENBLAS_NUM_THREADS"] = "1"  
@@ -12,7 +13,7 @@ from pathlib import Path
 from scipy.stats import zscore
 import concurrent.futures
 from sklearn.linear_model import LinearRegression
-from neuromaps import nulls, transforms
+from neuromaps import nulls
 from sklearn.metrics import r2_score
 from scipy.stats import zscore
 from sklearn.preprocessing import PolynomialFeatures
@@ -20,13 +21,11 @@ from sklearn.pipeline import make_pipeline
 import pickle
 import pandas as pd
 from scipy.stats import pearsonr
-parent_dir = Path(__file__).resolve().parent.parent
-sys.path.append(str(parent_dir))
-import main_funcs as mf
+import utils.main_funcs as mf
 from config.loader import load_config
 
 
-def prepare_spins(params, paths, rec, n_spins=1000):
+def prepare_spins(paths, rec, n_spins=1000):
     """
     Compute spatial spin permutations for surface-based null models.
 
@@ -44,7 +43,7 @@ def prepare_spins(params, paths, rec, n_spins=1000):
     spins : ndarray, shape (n_vertices, n_permutations)
         Spin index permutations.
     """
-    receptor_array = mf.load_receptor_array(params, paths, rec, on_surface=True)
+    receptor_array = mf.load_receptor_array(paths, rec, on_surface=True)
     index_array = np.arange(receptor_array.shape[0])
     spins = nulls.alexander_bloch(
         index_array,
@@ -55,11 +54,11 @@ def prepare_spins(params, paths, rec, n_spins=1000):
     return spins
 
 
-def compute_loocv_r2_by_subject_mask(
+def compute_loocv_r2(
     receptor_map_full,
     fmri_activity,
-    score='determination',
-    MODEL_TYPE='linear',
+    score,
+    model_type,
     receptor_names=None
 ):
     """
@@ -73,7 +72,7 @@ def compute_loocv_r2_by_subject_mask(
         List of subject-specific surface activity maps (n_vertices,).
     score : {'determination', 'corr'}, optional
         Scoring metric to use.
-    MODEL_TYPE : {'linear', 'lin+quad', 'lin+interact', 'poly2'}, optional
+    model_type : {'linear', 'lin+quad', 'lin+interact', 'poly2'}, optional
         Regression model specification.
     receptor_names : list of str, optional
         Feature names corresponding to receptors.
@@ -96,9 +95,9 @@ def compute_loocv_r2_by_subject_mask(
     poly.fit_transform(dummy)
     feature_names = poly.get_feature_names_out(receptor_names)
 
-    if MODEL_TYPE == 'lin+quad':
+    if model_type == 'lin+quad':
         mask = [(" " not in n) or ("^" in n) for n in feature_names]
-    elif MODEL_TYPE == 'lin+interact':
+    elif model_type == 'lin+interact':
         mask = ["^" not in n for n in feature_names]
     else:
         mask = np.ones(len(feature_names), dtype=bool)
@@ -121,9 +120,9 @@ def compute_loocv_r2_by_subject_mask(
         X_test = zscore(receptor_map_full[mask_i, :])
         y_test = zscore(fmri_activity[i].flatten()[mask_i])
 
-        if MODEL_TYPE == 'linear':
+        if model_type == 'linear':
             model = LinearRegression()
-        elif MODEL_TYPE == 'poly2':
+        elif model_type == 'poly2':
             model = make_pipeline(
                 PolynomialFeatures(degree=2, include_bias=False),
                 LinearRegression()
@@ -149,7 +148,7 @@ def compute_loocv_r2_by_subject_mask(
     return r2_scores
 
 
-def process_task(task, params, paths, spins):
+def process_task(task, params, paths, rec, spins, output_dir, score, model_type, run_spin):
     """
     Run empirical and spin-based regression CV for a single task.
 
@@ -175,57 +174,66 @@ def process_task(task, params, paths, spins):
     results_null = {}
 
     for latent_var in params.latent_vars:
-        fmri_dir = mf.get_fmri_dir(task, paths)
+        if "beta_dir" not in paths:
+            beta_dir, add_info = mf.get_beta_dir_and_info(task, params, paths)
+        else:
+            beta_dir = paths.beta_dir
+            add_info = ""
 
-        subject_paths = paths.home_dir if task == "lanA" else paths.root_dir
-        subjects = mf.get_subjects(task, os.path.join(subject_paths, fmri_dir))
+        files = glob.glob(os.path.join(beta_dir ,f"sub-*_{latent_var}_effect_size_map{add_info}.nii.gz"))
+        subjects = sorted({
+            Path(f).name.split("_")[0].replace("sub-", "")
+            for f in files
+        })
+        subjects = [int(s) for s in subjects]
         subjects = [s for s in subjects if s not in params.ignore]
 
         fmri_activity = mf.load_surface_effect_maps_for_cv(
-            subjects, task, latent_var, params, paths
+            subjects, task, latent_var, beta_dir, add_info
         )
-        receptor_array = mf.load_receptor_array(params, paths, rec, on_surface=True)
+        receptor_array = mf.load_receptor_array(paths, rec, on_surface=True)
 
         print(f"--- CV for {task} and {latent_var} ---")
-        r2_scores = compute_loocv_r2_by_subject_mask(
-            receptor_array, fmri_activity, score=SCORE
+        r2_scores = compute_loocv_r2(
+            receptor_array, fmri_activity, score=score, model_type=model_type
         )
 
         with open(
             os.path.join(
-                output_dir,
-                f'{task}_{latent_var}_all_regression_cv_r_2_{SCORE}_{MODEL_TYPE}.pickle'
+                output_dir, 
+                f'{task}_{latent_var}_all_regression_cv_r2_{model_type}_{score}.pickle'
             ),
             "wb"
         ) as fp:
             pickle.dump(r2_scores, fp)
 
-        results_emp[(task, latent_var)] = np.mean(r2_scores)
+        results_emp[(task, latent_var)] = np.nanmean(r2_scores)
 
-        if RUN_SPIN and MODEL_TYPE == 'linear':
+        if run_spin and model_type == 'linear':
             print(f"--- Spin test for {task} and {latent_var} ---")
             all_null = []
             for s in range(spins.shape[1]):
+                print(f"--- spin {s} out of {spins.shape[1]} ---")
                 receptor_spin = receptor_array[spins[:, s], :]
-                r2_scores = compute_loocv_r2_by_subject_mask(
-                    receptor_spin, fmri_activity, score=SCORE
+                r2_scores = compute_loocv_r2(
+                    receptor_spin, fmri_activity, score=score, model_type=model_type
                 )
                 all_null.append(r2_scores)
 
             with open(
                 os.path.join(
-                    output_dir,
-                    f'{task}_{latent_var}_all_regression_null_cv_r2_{SCORE}.pickle'
+                    output_dir, 
+                    f'{task}_{latent_var}_all_regression_null_cv_r2_{score}.pickle'
                 ),
                 "wb"
             ) as fp:
                 pickle.dump(all_null, fp)
 
-            results_null[(task, latent_var)] = np.mean(
-                [np.mean(r2) for r2 in all_null]
+            results_null[(task, latent_var)] = np.nanmean(
+                [np.nanmean(r2) for r2 in all_null]
             )
 
-        elif RUN_SPIN and MODEL_TYPE != 'linear':
+        elif run_spin and model_type != 'linear':
             raise NotImplementedError(
                 "Spin test not implemented for non-linear models."
             )
@@ -233,7 +241,7 @@ def process_task(task, params, paths, spins):
     return results_emp, results_null
 
 
-def run_reg_cv_with_spin(params, paths, spins, output_dir, score='determination', run_spin=True):
+def run_reg_cv_with_spin(params, paths, rec, spins=None, output_dir='', score='determination', model_type = 'linear', run_spin=True):
     """
     Run regression CV (and optional spin tests) across all tasks.
 
@@ -248,9 +256,11 @@ def run_reg_cv_with_spin(params, paths, spins, output_dir, score='determination'
     """
     all_emp, all_null = {}, {}
 
+    os.makedirs(output_dir, exist_ok=True)
+
     with concurrent.futures.ProcessPoolExecutor() as executor:
         futures = [
-            executor.submit(process_task, task, params, paths, spins)
+            executor.submit(process_task, task, params, paths, rec, spins, output_dir, score, model_type, run_spin)
             for task in params.tasks
         ]
         for f in futures:
@@ -289,7 +299,7 @@ if __name__ == "__main__":
     output_dir = os.path.join(paths.home_dir, 'variance_explained')
     os.makedirs(output_dir, exist_ok=True)
 
-    spins = prepare_spins(params, paths, rec, n_spins=N_SPINS)
+    spins = prepare_spins(paths, rec, n_spins=N_SPINS)
 
-    run_reg_cv_with_spin(params, paths, spins, output_dir, score='determination', model_type='linear', run_spin = RUN_SPIN)
+    run_reg_cv_with_spin(params, paths, spins, output_dir, score=SCORE, model_type=MODEL_TYPE, run_spin = RUN_SPIN)
 

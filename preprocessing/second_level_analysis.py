@@ -20,12 +20,10 @@ from pathlib import Path
 from nilearn.glm.second_level import SecondLevelModel, non_parametric_inference
 from nilearn import plotting
 from nilearn import datasets
-import fmri_funcs as fun
+import utils.fmri_funcs as fun
 import nibabel as nib
-parent_dir = Path(__file__).resolve().parent.parent
-sys.path.append(str(parent_dir))
-import main_funcs as mf
-from params_and_paths import Paths, Params, Receptors
+import utils.main_funcs as mf
+from config.loader import load_config
 
 
 TASK = 'Explore'
@@ -33,9 +31,8 @@ TASK = 'Explore'
 RUN_PERMUTATION = False
 RESOLUTION = 'fsaverage'
 
-paths = Paths(task=TASK)
-params = Params(task=TASK)
-rec = Receptors(source = 'PET2')
+params, paths, rec = load_config(TASK, return_what='all')
+
 
 #for cluster permutation:
 N_PERM = 100000

@@ -1,29 +1,88 @@
-# neuromodulation_assay
+# Neuromodulatory systems partially account for the topography of cortical networks of learning under uncertainty
 
-This repository contains code for an investigation into the associations between neurotransmitter systems and computational variables of learning under uncertainty. 
+This repository contains the code and data associated with the manuscript  
+**“Neuromodulatory systems partially account for the topography of cortical networks of learning under uncertainty.”**
 
-## params
+All code was written in **Python 3.10.12**.
 
-`DB_NAME` is the name of the dataset to be (re-)analized
-- we are currently reanalizing 4 datasets from our group: 3 probability learning tasks and one reward learning task
-- the datasets differ in their filestructure, however, the analysis is the same across datasets
+To explore neuromodulation and receptor/transporter contributions in *user-provided* fMRI data, see the notebook **`analysis_demo.ipynb`**. This notebook demonstrates how to apply the analysis pipeline described in the manuscript to new fMRI effect maps.
 
-`MASK_NAME` is the name of the mask used
-- we currently only analyze cortical data
+Below, the repository structure is described in an order that mirrors the organization of the manuscript.
 
-`PARCELATED` determines whether the analysis should return by-region results. If set to true, a corresponding atlas as to be assigned to MASK_NAME
+---
 
-`RECEPTOR_SOURCE` determines which dataset is used to as an estimate of receptor density
-- PET2 is the PET dataset published in Hansen, J. Y., Shafiei, G., Markello, R. D., Smart, K., Cox, S. M., Nørgaard, M., ... & Misic, B. (2022). Mapping neurotransmitter systems to the structural and functional organization of the human neocortex. Nature neuroscience, 25(11), 1569-1581. (see also the corresponding [github](https://github.com/netneurolab/hansen_receptors)) and an α2 map provided by the authors of Laurencin, C., Lancelot, S., Merida, I., Costes, N., Redouté, J., Le Bars, D., ... & Ballanger, B. (2023). Distribution of α2-adrenergic receptors in the living human brain using [11C] yohimbine PET. Biomolecules, 13(5), 843. This is the dataset we ended up using in the final poster.
-- autorad_zilles44 cortical receptor densities originally published in Zilles & Palomero-Gallagher (2017), made available here: https://github.com/AlGoulas/receptor_principles
-- AHBA is the Allen human brain atlas microarray dataset
+## Repository Structure
 
-`UPDATE_REG` can be set to true to use update as a computational latent variable of interest. Otherwise suprise and confidence are used.
+### `preprocessing/`
 
-## code
+This folder contains all code specific to preprocessing and analyzing the probabilistic learning–related datasets used in the paper.
 
-- [receptor_density_PET.py](receptor_density_PET.py) calculates a weighted average of PET maps that used the same tracer and returns a voxel-by-receptor matrix. It also plots the receptor densities and their correlations.
-- [run_glm.py](run_glm.py) creates the design matrix, runs the glm and save the contrasts
-- [receptor_regression.py](receptor_regression.py) runs a multiple regression and dominance analysis with recptor density as a predictor
-- [plot_reg.py](plot_reg.py) plots the final domiance plots found on the poster as well as the full model regression weigths
+- **`receptor_density_PET.py`**  
+  Processes PET receptor/transporter density maps from Hansen et al. (2020) (see original GitHub repository).  
+  The resulting receptor/transporter dataframe is used in downstream analyses.
 
+- **`run_glm.py`**  
+  Fits a GLM to the fMRI data to obtain the effect maps analyzed in the manuscript.  
+  Regressors are derived from an ideal observer model specified in `TransitionProbModel`.  
+  Design matrix details are implemented in `functions_design_matrices.py`.
+
+- **`second_level_analysis.py`**  
+  Runs group-level analyses of fMRI effect maps.
+
+---
+
+### `analysis/`
+
+This folder contains scripts for all main statistical analyses and figures.
+
+- **`effect_map_correlations.py`**  
+  Performs spatial permutation (“spin”) tests to assess the significance of correlations between fMRI maps.
+
+- **`invariance_effect_maps.py`**  
+  Tests and visualizes the invariance of fMRI effect map topographies.  
+  Statistical significance is determined using results from `effect_map_correlations.py`.  
+  *Corresponds to Figure 2 in the manuscript.*
+
+- **`regression_cv_with_spin_test.py`**  
+  Runs cross-validated multiple regression models along with a spatial null model (spin test).
+
+- **`variance_explained.py`**  
+  Summarizes and compares explained variance from the regression analyses.  
+  *Corresponds to Figure 3 in the manuscript.*
+
+- **`receptor_effect_map_relationship.py`**  
+  Examines relationships between fMRI effect maps and individual receptor/transporter densities.  
+  *Corresponds to Figure 4 in the manuscript.*
+
+- **`plots_analysis_paper.py`**  
+  High-level script that reproduces all figures reported in the manuscript.
+
+---
+
+### `config/`
+
+- **`config/manuscript/`**  
+  Contains configuration loaders specifying parameters, paths, and receptor-specific information for each task used in the manuscript.
+
+- **`config/demo/`**  
+  Simplified configuration loader for running receptor/transporter analyses on new datasets.  
+  Modify this loader when applying the pipeline to user-provided data.
+
+---
+
+### `data/`
+
+- **`data/beta_dir/`**  
+  Contains fMRI effect maps for all studies included in the manuscript, organized by study (Study 1–Study 4).  
+  To analyze a new dataset, add correctly named and preprocessed effect maps in a new subfolder.  
+  See `analysis_demo.ipynb` for details.
+
+- **`data/receptor_dir/`**  
+  Receptor/transporter density maps in both volumetric and surface formats.
+
+---
+
+### `results/`
+
+Contains precomputed regression results, maximum variance explained, and dominance analysis outputs.  
+All results can be fully reproduced by running the provided analysis scripts and notebooks.

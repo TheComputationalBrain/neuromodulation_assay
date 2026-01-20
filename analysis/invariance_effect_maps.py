@@ -12,7 +12,7 @@ from scipy.stats import pearsonr
 from neuromaps import transforms
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
-import main_funcs as mf
+import utils.main_funcs as mf
 from config.loader import load_config
 
 

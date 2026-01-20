@@ -1,6 +1,5 @@
 import os
 import glob
-import sys
 import numpy as np
 import pandas as pd
 import pickle
@@ -19,10 +18,9 @@ from nilearn import datasets
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import pearsonr
 from scipy.stats import mannwhitneyu
-
-parent_dir = Path(__file__).resolve().parent.parent
-sys.path.append(str(parent_dir))
-import main_funcs as mf
+# parent_dir = Path(__file__).resolve().parent.parent
+# sys.path.append(str(parent_dir))
+import utils.main_funcs as mf
 from config.loader import load_config
 
 #analysis
@@ -38,7 +36,15 @@ PLOT_VAR_EXPLAINED_RATIO = True
 
 fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
 
-def run_from_beta(params, output_dir, SCORE='determination', to_file=True):
+def run_predict_from_beta(task, params, paths, output_dir, SCORE='determination', to_file=True):
+
+    if isinstance(task, list):
+        if len(task) == 1:
+            task = task[0]
+        else:
+            raise ValueError(
+                f"Expected a single task, but got {len(task)} tasks: {task}. Consider looping through your tasks instead."
+            )
 
     def write(text):
         if to_file:
@@ -47,78 +53,81 @@ def run_from_beta(params, output_dir, SCORE='determination', to_file=True):
         else:
             print(text, end="")
 
-    for task in params.tasks:
-
-        params, paths, _ = load_config(task, cv=True, return_what='all')
-
+    if "beta_dir" not in paths:
         beta_dir, add_info = mf.get_beta_dir_and_info(task, params, paths)
-        fmri_dir = mf.get_fmri_dir(task, paths)
+    else:
+        beta_dir = paths.beta_dir
+        add_info = ""
 
-        subject_paths = paths.home_dir if task == "lanA" else paths.root_dir
-        subjects = mf.get_subjects(task, os.path.join(subject_paths, fmri_dir))
+    write(f"{task}: maximum variance explained in analysis\n\n")
+
+    for latent_var in params.latent_vars:
+        all_data = []
+
+        files = glob.glob(os.path.join(beta_dir ,f"sub-*_{latent_var}_effect_size_map{add_info}.nii.gz"))
+        subjects = sorted({
+            Path(f).name.split("_")[0].replace("sub-", "")
+            for f in files
+        })
+        subjects = [int(s) for s in subjects]
         subjects = [s for s in subjects if s not in params.ignore]
 
-        write(f"{task}: variance explained in analysis:\n\n")
+        # Load beta data
+        for sub in subjects:
+            if task == 'lanA':
+                file = nib.load(os.path.join(
+                    beta_dir, 'subjects', f'{sub:03d}', 'SPM', 'spmT_S-N.nii'
+                ))
+            else:
+                file = nib.load(os.path.join(
+                    beta_dir,
+                    f'sub-{sub:02d}_{latent_var}_effect_size_map{add_info}.nii.gz'
+                ))
 
-        for latent_var in params.latent_vars:
-            all_data = []
+            effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
+            hemi_arrays = [np.asarray(img.agg_data()).T for img in effect_data]
+            all_data.append(np.hstack(hemi_arrays))
 
-            # Load beta data
-            for sub in subjects:
-                if task == 'lanA':
-                    file = nib.load(os.path.join(
-                        beta_dir, 'subjects', f'{sub:03d}', 'SPM', 'spmT_S-N.nii'
-                    ))
-                else:
-                    file = nib.load(os.path.join(
-                        beta_dir,
-                        f'sub-{sub:02d}_{latent_var}_effect_size_map{add_info}.nii.gz'
-                    ))
+        # Cross-validated R² or corr²
+        all_rsquared = []
 
-                effect_data = transforms.mni152_to_fsaverage(file, fsavg_density='41k')
-                hemi_arrays = [np.asarray(img.agg_data()).T for img in effect_data]
-                all_data.append(np.hstack(hemi_arrays))
+        for i in range(len(all_data)):
+            sub_data = all_data[i]
+            other_data = np.stack([arr for j, arr in enumerate(all_data) if j != i])
+            mean_data = np.nanmean(other_data, axis=0)
 
-            # Cross-validated R² or corr²
-            all_rsquared = []
+            mask_valid = ~np.isnan(sub_data)
+            X = mean_data[mask_valid].reshape(-1, 1)
+            y = sub_data[mask_valid]
 
-            for i in range(len(all_data)):
-                sub_data = all_data[i]
-                other_data = np.stack([arr for j, arr in enumerate(all_data) if j != i])
-                mean_data = np.nanmean(other_data, axis=0)
+            model = LinearRegression().fit(X, y)
+            y_pred = model.predict(X)
 
-                mask_valid = ~np.isnan(sub_data)
-                X = mean_data[mask_valid].reshape(-1, 1)
-                y = sub_data[mask_valid]
+            if SCORE == 'determination':
+                all_rsquared.append(r2_score(y, y_pred))
+            else:
+                r, _ = pearsonr(y, y_pred)
+                all_rsquared.append(r * r)
 
-                model = LinearRegression().fit(X, y)
-                y_pred = model.predict(X)
+        # Save pickle
+        outpath = os.path.join(
+            output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'
+        )
+        with open(outpath, 'wb') as fp:
+            pickle.dump(all_rsquared, fp)
 
-                if SCORE == 'determination':
-                    all_rsquared.append(r2_score(y, y_pred))
-                else:
-                    r, _ = pearsonr(y, y_pred)
-                    all_rsquared.append(r * r)
+        # Print/write results
+        mean_r2 = np.mean(all_rsquared)
+        sem_r2 = sem(all_rsquared)
+        write(f"{latent_var}: {mean_r2}, sem: {sem_r2}\n")
 
-            # Save pickle
-            outpath = os.path.join(
-                output_dir, f'{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle'
-            )
-            with open(outpath, 'wb') as fp:
-                pickle.dump(all_rsquared, fp)
+    write("\n\n")
 
-            # Print/write results
-            mean_r2 = np.mean(all_rsquared)
-            sem_r2 = sem(all_rsquared)
-            write(f"{latent_var}: {mean_r2}, sem: {sem_r2}\n")
-
-        write("\n\n")
-
-def run_comp_null(params, output_dir, MODEL_TYPE='linear', SCORE='determination', to_file=True):
+def run_comp_null(params, data_dir='', MODEL_TYPE='linear', SCORE='determination', to_file=True):
 
     def write(text):
         if to_file:
-            with open(os.path.join(output_dir, f'compare_emp_null_cv_{SCORE}.txt'), 'a') as f:
+            with open(os.path.join(data_dir, f'compare_emp_null_cv_{SCORE}.txt'), 'a') as f:
                 f.write(text)
         else:
             print(text, end="")
@@ -131,12 +140,12 @@ def run_comp_null(params, output_dir, MODEL_TYPE='linear', SCORE='determination'
         for latent_var in params.latent_vars:
 
             emp = np.load(os.path.join(
-                output_dir,
+                data_dir,
                 f'{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle'
             ), allow_pickle=True)
 
             null = np.load(os.path.join(
-                output_dir,
+                data_dir,
                 f'{task}_{latent_var}_all_regression_null_cv_r2_{SCORE}.pickle'
             ), allow_pickle=True)
 
@@ -156,7 +165,6 @@ def run_comp_null(params, output_dir, MODEL_TYPE='linear', SCORE='determination'
     reject, pvals_corrected, _, _ = multipletests(p_values, method='fdr_bh')
     for i, r in enumerate(results):
         r['p_value_fdr'] = pvals_corrected[i]
-        r['significant_fdr'] = reject[i]
         df.loc[r['task'], r['latent_var']] = r['p_value_fdr']
 
     # Print results
@@ -165,10 +173,10 @@ def run_comp_null(params, output_dir, MODEL_TYPE='linear', SCORE='determination'
         write(f"t-value: {r['t_value']}\n")
         write(f"p-value: {r['p_value']}\n")
         write(f"FDR-corrected p-value: {r['p_value_fdr']}\n")
-        write(f"Significant (FDR<0.05): {r['significant_fdr']}\n")
         write(f"df: {r['df']}\n\n")
 
-    df.to_csv(os.path.join(output_dir, f'fdr_corrected_pvalues_{SCORE}.csv'))
+    if to_file:
+        df.to_csv(os.path.join(data_dir, f'fdr_corrected_pvalues_{MODEL_TYPE}_{SCORE}.csv'))
 
 
 def run_compare_expl_var_group(params, output_dir, MODEL_TYPE= 'linear', SCORE = 'determination', to_file=True):
@@ -338,7 +346,7 @@ def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE
         )
 
 
-def run_group_ratio_summary(MODEL_TYPE='linear', SCORE='determination', to_file=True):
+def run_group_ratio_summary(params, data_dir = '', MODEL_TYPE='linear', SCORE='determination', to_file=True):
     """
     group level variance explained (corresponding values to the barplot)
     """
@@ -354,21 +362,22 @@ def run_group_ratio_summary(MODEL_TYPE='linear', SCORE='determination', to_file=
     # compute ratio
     def group_ratio(rec, expl):
         return np.mean(rec) / np.mean(expl)
+    for task in params.tasks:
+        for latent_var in params.latent_vars:
+            # load data
+            expl = np.load(os.path.join(
+                data_dir, "max_variance", f"{task}_{latent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle"
+            ), allow_pickle=True)
 
-    # load data
-    expl = np.load(os.path.join(
-        output_dir, f"{params.task}_{lparams.atent_var}_all_predict_from_beta_cv_r2_{SCORE}.pickle"
-    ), allow_pickle=True)
+            rec = np.load(os.path.join(
+                data_dir, "regressions", f"{task}_{latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle"
+            ), allow_pickle=True)
 
-    rec = np.load(os.path.join(
-        output_dir, f"{params.task}_{params.latent_var}_all_regression_cv_r2_{MODEL_TYPE}_{SCORE}.pickle"
-    ), allow_pickle=True)
+            # compute ratio
+            ratio = group_ratio(rec, expl)
 
-    # compute ratio
-    ratio = group_ratio(rec, expl)
-
-    # output
-    write(f"{params.task} {params.latent_var}: {ratio * 100:.1f}%\n")
+            # output
+            write(f"{task} {latent_var}: {ratio * 100:.1f}%\n")
 
 
 
@@ -587,7 +596,7 @@ if __name__ == "__main__":
     MODEL_TYPE = 'linear'# 'linear', 'poly2', 'lin+quad', 'lin+interact'
     SCORE = 'determination'
 
-    params, paths, _ = load_config('all', return_what='all')
+    params, paths, _ = load_config('all', return_what='all', cv=True)
 
     output_dir = os.path.join(paths.home_dir, 'variance_explained')
     os.makedirs(output_dir, exist_ok=True) 
@@ -596,7 +605,9 @@ if __name__ == "__main__":
     comparison_task = 'lanA'
 
     if FROM_BETA:
-        run_from_beta(params, output_dir)
+        for task in params.tasks:
+            params, paths, _ = load_config(task, return_what='all', cv=True)
+            run_predict_from_beta(task, params, output_dir)
 
     if COMP_NULL:
         run_comp_null(params, output_dir)

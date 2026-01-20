@@ -16,7 +16,7 @@ import pandas as pd
 import nilearn.signal
 from nilearn.glm.first_level import make_first_level_design_matrix
 from scipy.stats import zscore
-import main_funcs as mf
+import utils.main_funcs as mf
 
 # Define functions
 

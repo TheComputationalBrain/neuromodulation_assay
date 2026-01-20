@@ -14,21 +14,16 @@ import nibabel as nib
 from scipy.stats import zscore
 import pickle 
 import os
-import sys
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
 from matplotlib.patches import Rectangle
 from pathlib import Path
 import seaborn as sns
-import fmri_funcs as fun
+import utils.fmri_funcs as fun
 from nilearn.input_data import NiftiLabelsMasker
 from nilearn.datasets import fetch_atlas_schaefer_2018
-from nilearn import image, plotting, datasets, surface
+from nilearn import image, plotting
 from neuromaps import transforms
-import cmcrameri.cm as cmc
-parent_dir = Path(__file__).resolve().parent.parent
-sys.path.append(str(parent_dir))
-import main_funcs as mf
+import utils.main_funcs as mf
 from config.loader import load_config
 
 
@@ -36,9 +31,9 @@ PLOT_RECEPTORS=False
 PLOT_RECEPTORS_INFLATED=False
 PLOT_CORR = False
 
-params, paths, rec = load_config('all', return_what='all')
+params, paths, rec = load_config('all', return_what='all', source='PET2')
 
-output_dir = os.path.join(paths.home_dir,'receptors', 'PET2')
+output_dir = os.path.join(paths.home_dir,'receptors', rec.source)
 os.makedirs(output_dir, exist_ok = True)
 
 if params.parcelated == False:
@@ -60,31 +55,31 @@ if rec.source == "PET2":
                             "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                             "MOR", "NET", "NMDA", "VAChT", "A2"])
 
-    receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
-                    paths.receptor_path + '/5HT1b_p943_hc22_savli.nii',
-                    paths.receptor_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
-                    paths.receptor_path + '/5HT2a_cimbi_hc29_beliveau.nii',
-                    paths.receptor_path + '/5HT4_sb20_hc59_beliveau.nii',
-                    paths.receptor_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
-                    paths.receptor_path + '/5HTT_dasb_hc100_beliveau.nii',
-                    paths.receptor_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
-                    paths.receptor_path + '/CB1_omar_hc77_normandin.nii.gz',
-                    paths.receptor_path + '/D1_SCH23390_hc13_kaller.nii',
-                    paths.receptor_path + '/D2_flb457_hc37_smith.nii.gz',
-                    paths.receptor_path + '/D2_flb457_hc55_sandiego.nii.gz',
-                    paths.receptor_path + '/DAT_fpcit_hc174_dukart_spect.nii',
-                    paths.receptor_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
-                    paths.receptor_path + '/H3_cban_hc8_gallezot.nii.gz', 
-                    paths.receptor_path + '/M1_lsn_hc24_naganawa.nii.gz',
-                    paths.receptor_path + '/mGluR5_abp_hc22_rosaneto.nii',
-                    paths.receptor_path + '/mGluR5_abp_hc28_dubois.nii',
-                    paths.receptor_path + '/mGluR5_abp_hc73_smart.nii',
-                    paths.receptor_path + '/MU_carfentanil_hc204_kantonen.nii',
-                    paths.receptor_path + '/NAT_MRB_hc77_ding.nii.gz',
-                    paths.receptor_path + '/NMDA_ge179_hc29_galovic.nii.gz',
-                    paths.receptor_path + '/VAChT_feobv_hc4_tuominen.nii',
-                    paths.receptor_path + '/VAChT_feobv_hc5_bedard_sum.nii',
-                    paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
+    receptors_nii = [paths.pet_path + '/5HT1a_way_hc36_savli.nii',
+                    paths.pet_path + '/5HT1b_p943_hc22_savli.nii',
+                    paths.pet_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
+                    paths.pet_path + '/5HT2a_cimbi_hc29_beliveau.nii',
+                    paths.pet_path + '/5HT4_sb20_hc59_beliveau.nii',
+                    paths.pet_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
+                    paths.pet_path + '/5HTT_dasb_hc100_beliveau.nii',
+                    paths.pet_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
+                    paths.pet_path + '/CB1_omar_hc77_normandin.nii.gz',
+                    paths.pet_path + '/D1_SCH23390_hc13_kaller.nii',
+                    paths.pet_path + '/D2_flb457_hc37_smith.nii.gz',
+                    paths.pet_path + '/D2_flb457_hc55_sandiego.nii.gz',
+                    paths.pet_path + '/DAT_fpcit_hc174_dukart_spect.nii',
+                    paths.pet_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
+                    paths.pet_path + '/H3_cban_hc8_gallezot.nii.gz', 
+                    paths.pet_path + '/M1_lsn_hc24_naganawa.nii.gz',
+                    paths.pet_path + '/mGluR5_abp_hc22_rosaneto.nii',
+                    paths.pet_path + '/mGluR5_abp_hc28_dubois.nii',
+                    paths.pet_path + '/mGluR5_abp_hc73_smart.nii',
+                    paths.pet_path + '/MU_carfentanil_hc204_kantonen.nii',
+                    paths.pet_path + '/NAT_MRB_hc77_ding.nii.gz',
+                    paths.pet_path + '/NMDA_ge179_hc29_galovic.nii.gz',
+                    paths.pet_path + '/VAChT_feobv_hc4_tuominen.nii',
+                    paths.pet_path + '/VAChT_feobv_hc5_bedard_sum.nii',
+                    paths.pet_path + '/VAChT_feobv_hc18_aghourian_sum.nii',
                     paths.alpha_path + '/Mean_Yohimbine_HC2050.nii']
     
 else:
@@ -92,31 +87,31 @@ else:
                             "CB1", "D1", "D2", "DAT", "GABAa", "H3", "M1", "mGluR5",
                             "MOR", "NET", "NMDA", "VAChT"])
 
-    receptors_nii = [paths.receptor_path + '/5HT1a_way_hc36_savli.nii',
-                    paths.receptor_path + '/5HT1b_p943_hc22_savli.nii',
-                    paths.receptor_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
-                    paths.receptor_path + '/5HT2a_cimbi_hc29_beliveau.nii',
-                    paths.receptor_path + '/5HT4_sb20_hc59_beliveau.nii',
-                    paths.receptor_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
-                    paths.receptor_path + '/5HTT_dasb_hc100_beliveau.nii',
-                    paths.receptor_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
-                    paths.receptor_path + '/CB1_omar_hc77_normandin.nii.gz',
-                    paths.receptor_path + '/D1_SCH23390_hc13_kaller.nii',
-                    paths.receptor_path + '/D2_flb457_hc37_smith.nii.gz',
-                    paths.receptor_path + '/D2_flb457_hc55_sandiego.nii.gz',
-                    paths.receptor_path + '/DAT_fpcit_hc174_dukart_spect.nii',
-                    paths.receptor_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
-                    paths.receptor_path + '/H3_cban_hc8_gallezot.nii.gz', 
-                    paths.receptor_path + '/M1_lsn_hc24_naganawa.nii.gz',
-                    paths.receptor_path + '/mGluR5_abp_hc22_rosaneto.nii',
-                    paths.receptor_path + '/mGluR5_abp_hc28_dubois.nii',
-                    paths.receptor_path + '/mGluR5_abp_hc73_smart.nii',
-                    paths.receptor_path + '/MU_carfentanil_hc204_kantonen.nii',
-                    paths.receptor_path + '/NAT_MRB_hc77_ding.nii.gz',
-                    paths.receptor_path + '/NMDA_ge179_hc29_galovic.nii.gz',
-                    paths.receptor_path + '/VAChT_feobv_hc4_tuominen.nii',
-                    paths.receptor_path + '/VAChT_feobv_hc5_bedard_sum.nii',
-                    paths.receptor_path + '/VAChT_feobv_hc18_aghourian_sum.nii']
+    receptors_nii = [paths.pet_path + '/5HT1a_way_hc36_savli.nii',
+                    paths.pet_path + '/5HT1b_p943_hc22_savli.nii',
+                    paths.pet_path + '/5HT1b_p943_hc65_gallezot.nii.gz',
+                    paths.pet_path + '/5HT2a_cimbi_hc29_beliveau.nii',
+                    paths.pet_path + '/5HT4_sb20_hc59_beliveau.nii',
+                    paths.pet_path + '/5HT6_gsk_hc30_radhakrishnan.nii.gz',
+                    paths.pet_path + '/5HTT_dasb_hc100_beliveau.nii',
+                    paths.pet_path + '/A4B2_flubatine_hc30_hillmer.nii.gz',
+                    paths.pet_path + '/CB1_omar_hc77_normandin.nii.gz',
+                    paths.pet_path + '/D1_SCH23390_hc13_kaller.nii',
+                    paths.pet_path + '/D2_flb457_hc37_smith.nii.gz',
+                    paths.pet_path + '/D2_flb457_hc55_sandiego.nii.gz',
+                    paths.pet_path + '/DAT_fpcit_hc174_dukart_spect.nii',
+                    paths.pet_path + '/GABAa-bz_flumazenil_hc16_norgaard.nii',
+                    paths.pet_path + '/H3_cban_hc8_gallezot.nii.gz', 
+                    paths.pet_path + '/M1_lsn_hc24_naganawa.nii.gz',
+                    paths.pet_path + '/mGluR5_abp_hc22_rosaneto.nii',
+                    paths.pet_path + '/mGluR5_abp_hc28_dubois.nii',
+                    paths.pet_path + '/mGluR5_abp_hc73_smart.nii',
+                    paths.pet_path + '/MU_carfentanil_hc204_kantonen.nii',
+                    paths.pet_path + '/NAT_MRB_hc77_ding.nii.gz',
+                    paths.pet_path + '/NMDA_ge179_hc29_galovic.nii.gz',
+                    paths.pet_path + '/VAChT_feobv_hc4_tuominen.nii',
+                    paths.pet_path + '/VAChT_feobv_hc5_bedard_sum.nii',
+                    paths.pet_path + '/VAChT_feobv_hc18_aghourian_sum.nii']
 
 for proj in ['vol', 'surf']:  
     masked = []
