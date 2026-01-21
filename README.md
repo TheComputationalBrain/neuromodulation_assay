@@ -90,6 +90,7 @@ The original analysis scripts assume a specific folder structure and namining co
   Receptor/transporter densities (voxel x receptor) in both volumetric and surface formats.
 
   For the original PET data please see the following publication and the associated [GitHub](https://github.com/netneurolab/hansen_receptors) 
+  
   Hansen et al. (2022). Mapping neurotransmitter systems to the structural and functional organization of the human neocortex. Nature neuroscience, 25(11), 1569-1581.
 
 
