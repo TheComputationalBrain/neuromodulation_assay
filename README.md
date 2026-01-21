@@ -41,7 +41,8 @@ Runs the behavioral analysis reported in the manuscript.
 
 ### `analysis/`
 
-This folder contains scripts for all main statistical analyses and figures.
+This folder contains scripts for all main statistical analyses and figures. 
+The original analysis scripts assume a specific folder structure and namining convention, do apply code to new fMRI effect maps please use the notebook provided which has simplified these dependencies. 
 
 - **`effect_map_correlations.py`**  
   Performs spatial permutation (“spin”) tests to assess the significance of correlations between fMRI maps.
@@ -86,11 +87,15 @@ This folder contains scripts for all main statistical analyses and figures.
   See `analysis_demo.ipynb` for details.
 
 - **`data/receptor_dir/`**  
-  Receptor/transporter density maps in both volumetric and surface formats.
+  Receptor/transporter densities (voxel x receptor) in both volumetric and surface formats.
+
+  For the original PET data please see the following publication and the associated [GitHub](https://github.com/netneurolab/hansen_receptors) 
+  Hansen et al. (2022). Mapping neurotransmitter systems to the structural and functional organization of the human neocortex. Nature neuroscience, 25(11), 1569-1581.
+
 
 ---
 
 ### `results/`
 
 Contains precomputed regression results, maximum variance explained, and dominance analysis outputs.  
-All results can be fully reproduced by running the provided analysis scripts and notebooks.
+All results can be reproduced by running the provided notebook.
