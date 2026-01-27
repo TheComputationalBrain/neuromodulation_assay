@@ -43,8 +43,8 @@ mf.save_figure(fig, OUTPUT_DIR, f"barplot_explained_variance_ratio")
 
 mf.set_publication_style(font_size=7, layout="2-across")
 
+#dominance analysis and legend 
 for latent_var in params.latent_vars:
-    #dominance analysis and legend 
     results = load_dominance_data(params.tasks, latent_var, model_type='linear') # or 'lin+quad' for supplementary plot
     combined, per_study_means = aggregate_dominance(results)
 

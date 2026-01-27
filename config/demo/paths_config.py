@@ -1,6 +1,6 @@
 from pathlib import Path
 
-def load_paths():
+def load_paths(task= None):
 
     BASE_DIR = Path(__file__).resolve().parent.parent.parent  # adjust if needed
 

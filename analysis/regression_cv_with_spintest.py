@@ -1,3 +1,7 @@
+"""
+This script runs the cross-validated regressions for the receptor/transporter and effect map relationship. 
+If specified, it runs the same cross/validation on a null model ('spin test') 
+"""
 
 import os
 import sys

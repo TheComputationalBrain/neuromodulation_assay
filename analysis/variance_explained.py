@@ -1,3 +1,7 @@
+"""
+This script explores the results of the script regression_cv_with_spintest across all datasets. 
+"""
+
 import os
 import glob
 import numpy as np
@@ -18,8 +22,6 @@ from nilearn import datasets
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import pearsonr
 from scipy.stats import mannwhitneyu
-# parent_dir = Path(__file__).resolve().parent.parent
-# sys.path.append(str(parent_dir))
 import utils.main_funcs as mf
 from config.loader import load_config
 
@@ -36,7 +38,12 @@ PLOT_VAR_EXPLAINED_RATIO = True
 
 fsavg = datasets.fetch_surf_fsaverage(mesh='fsaverage5')
 
+
+#max. explainable variance
 def run_predict_from_beta(task, params, paths, output_dir, SCORE='determination', to_file=True):
+    """
+    Get an estimate of the explainable variance by predicting a subjects beta map from the mean of the other beta maps. 
+    """
 
     if isinstance(task, list):
         if len(task) == 1:
@@ -123,6 +130,8 @@ def run_predict_from_beta(task, params, paths, output_dir, SCORE='determination'
 
     write("\n\n")
 
+
+# compare variance explained: true model v. null model
 def run_comp_null(params, data_dir='', MODEL_TYPE='linear', SCORE='determination', to_file=True):
 
     def write(text):
@@ -179,6 +188,7 @@ def run_comp_null(params, data_dir='', MODEL_TYPE='linear', SCORE='determination
         df.to_csv(os.path.join(data_dir, f'fdr_corrected_pvalues_{MODEL_TYPE}_{SCORE}.csv'))
 
 
+# compare variance explained: true model/max. explainable variance on the group level
 def run_compare_expl_var_group(params, output_dir, MODEL_TYPE= 'linear', SCORE = 'determination', to_file=True):
     n_perm = 10000
     rng = np.random.default_rng(seed=123)
@@ -273,6 +283,8 @@ def run_compare_expl_var_group(params, output_dir, MODEL_TYPE= 'linear', SCORE =
             f'FDR-corrected p-value: {r["p_val_fdr"]:.4f}\n'
         )
 
+
+# compare variance explained: true model/max. explainable variance on the subject level
 def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE = 'determination', to_file=True):
 
     def write(lines):
@@ -345,7 +357,7 @@ def run_compare_expl_var_subject(params, output_dir, MODEL_TYPE= 'linear', SCORE
             f"p-val FDR: {r['p_val_fdr']:.4f}\n"
         )
 
-
+# summerize variance explained
 def run_group_ratio_summary(params, data_dir = '', MODEL_TYPE='linear', SCORE='determination', to_file=True):
     """
     group level variance explained (corresponding values to the barplot)
@@ -378,7 +390,6 @@ def run_group_ratio_summary(params, data_dir = '', MODEL_TYPE='linear', SCORE='d
 
             # output
             write(f"{task} {latent_var}: {ratio * 100:.1f}%\n")
-
 
 
 def plot_variance_explained(params, score="determination", comparison_latent="S-N", legend=True):

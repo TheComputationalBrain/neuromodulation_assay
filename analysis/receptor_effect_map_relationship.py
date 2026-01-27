@@ -1,13 +1,7 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Tue May 28 10:25:09 2024
-@author: Alice Hodapp
-
 This script retrieves receptor density data and GLM output to run multiple regression
 and/or dominance analysis separately for each subject and latent variable
-(surprise, confidence, predictability). Outputs include regression coefficients
-and total dominance values.
+(surprise, confidence). 
 """
 
 import os
@@ -47,6 +41,7 @@ RUN_REGRESSION = True
 RUN_DOMINANCE = True
 
 
+#run dominance analysis for a single subject
 def process_subject(sub, latent_var, task, model_type, output_dir,
                     params, paths, rec):
     print(f"--- Dominance analysis for {task} subject {sub} ----")
@@ -84,6 +79,7 @@ def process_subject(sub, latent_var, task, model_type, output_dir,
     total_dom = m["total_dominance"]
     return pd.DataFrame([total_dom], columns=rec.receptor_names)
 
+#start analysis of a dataset
 def run_task(task, params, paths, rec, model_type, start_at, num_workers, output_dir):
     if "beta_dir" not in paths:
         beta_dir, add_info = mf.get_beta_dir_and_info(task, params, paths)
@@ -128,7 +124,7 @@ def run_task(task, params, paths, rec, model_type, start_at, num_workers, output
         fname = f'{latent_var}_dominance_allsubj_{model_type}.pickle'
         results_df.to_pickle(os.path.join(task_output_dir, fname))
 
-
+#wrapper fro dominance analysis
 def run_dominance_analysis(params, paths, rec,
                            model_type,
                            start_at,
@@ -152,7 +148,7 @@ def run_dominance_analysis(params, paths, rec,
 
     tasks = params.tasks
 
-    # CASE 1: multiple tasks → parallelize over tasks
+    # case 1: multiple tasks → parallelize over tasks
     if len(tasks) > 1:
         print("Running tasks in parallel")
 
@@ -170,7 +166,7 @@ def run_dominance_analysis(params, paths, rec,
             for fut in futures:
                 fut.result()
 
-    # CASE 2: single task → parallelize over subjects (inside run_task)
+    # case 2: single task → parallelize over subjects (inside run_task)
     else:
         print("Running subjects in parallel")
         run_task(
@@ -180,6 +176,7 @@ def run_dominance_analysis(params, paths, rec,
             output_dir
         )
 
+#multiple regression
 def run_regression_analysis(
     params,
     Paths,
@@ -420,7 +417,7 @@ def plot_regression_coefficients(tasks, model_type='linear'):
     mean_coeffs_df.to_csv(csv_path)
 
 
-# ---------- Data loading ----------
+# load dominance data for plotting
 def load_dominance_data(params, paths, latent_var, model_type="linear"):
     """
     Loads and standardizes dominance results for given experiments.
@@ -456,8 +453,7 @@ def load_dominance_data(params, paths, latent_var, model_type="linear"):
 
     return results
 
-
-# ---------- Aggregation ----------
+# aggregate dominance data for plotting
 def aggregate_dominance(results_dict, exclude_explore=False):
     """
     Aggregates dominance data across experiments.
@@ -472,7 +468,7 @@ def aggregate_dominance(results_dict, exclude_explore=False):
     return combined, pd.DataFrame(per_study_means).T
 
 
-# ---------- Plotting ----------
+#plot the dominance results across all datasets
 def plot_dominance_bars(
     df, receptor_groups, receptor_class, receptor_label_formatted,
     title=None, show_errorbars=True, ylim=None
@@ -510,8 +506,6 @@ def plot_dominance_bars(
     mean_vals = df[ordered_receptors].mean()
     sem_vals = df[ordered_receptors].sem()
 
-
-    # --- PLOT ---
     fig, ax = plt.subplots() 
 
     bars = ax.bar(
@@ -527,7 +521,6 @@ def plot_dominance_bars(
         if receptor not in receptor_class[0] and receptor not in receptor_class[1]:
             bars[i].set_hatch("//")
 
-    # --- Formatting ---
     ax.set_xticks(np.arange(len(ordered_receptors)))
     ax.set_xticklabels(receptor_label_formatted, rotation=90)
     for label, receptor in zip(ax.get_xticklabels(), ordered_receptors):
@@ -545,6 +538,7 @@ def plot_dominance_bars(
 
     return fig, ax
 
+#heatmap thta summerizes the results per dataset
 def plot_dominance_heatmap(
     all_means,
     receptor_groups,
@@ -605,7 +599,6 @@ def plot_dominance_heatmap(
     plt.tight_layout()
 
     return fig, ax
-
 
 
 def plot_separate_colorbar(cmap, vmin=0, vmax=0.18, label="Contribution (%)", orientation="vertical"):

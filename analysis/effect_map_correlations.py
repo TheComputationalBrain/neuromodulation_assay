@@ -1,3 +1,7 @@
+"""
+This script contains all functions to explore the correlations between group level effect maps to explore the invariance of confidence and suprise representations across datasets.
+"""
+
 import os
 import sys
 import itertools
@@ -16,14 +20,12 @@ from neuromaps import nulls, transforms, stats
 from config.loader import load_config
 
 
-# Data loading and preprocessing
+# Data loading 
 def load_group_surface_map(task, contrast, paths, explore_model="noEntropy_noER"):
     """Load a group-level NIfTI map and project it onto fsaverage surface."""
     add_info = "_firstTrialsRemoved" if task == "NAConf" else ""
-    if task == "Explore":
-        group_dir = os.path.join(paths.home_dir, task, "schaefer", "second_level", explore_model)
-    else:
-        group_dir = os.path.join(paths.home_dir, task, "schaefer", "second_level")
+
+    group_dir = os.path.join(paths.home_dir, task, "schaefer", "second_level")
 
     img_path = os.path.join(group_dir, f"{contrast}_schaefer_effect_map{add_info}.nii.gz")
     img = nib.load(img_path)
@@ -72,7 +74,7 @@ def run_spin_test_within(tasks, contrasts, paths, explore_model="noEntropy_noER"
     results_df["pval_fdr"] = pvals_fdr
     return results_df
 
-# 4. Cross-contrast spin tests (confidence-surprise and vice versa)
+# Cross-contrast spin tests (confidence-surprise and vice versa)
 def run_spin_test_across(tasks, contrasts, paths, explore_model="noEntropy_noER", n_perm=1000, seed=1234):
     """Run spin tests between confidence and surprise maps across all tasks."""
     surf_maps, null_models = {}, {}
@@ -107,7 +109,6 @@ def run_spin_test_across(tasks, contrasts, paths, explore_model="noEntropy_noER"
     return results_df
 
 
-# Main controller
 def run_all_spin_tests(
     within=True,
     paths = None,

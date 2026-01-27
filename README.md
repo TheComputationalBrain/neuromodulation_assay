@@ -56,7 +56,7 @@ The original analysis scripts assume a specific folder structure and namining co
   Runs cross-validated multiple regression models along with a spatial null model (spin test).
 
 - **`variance_explained.py`**  
-  Summarizes and compares explained variance from the regression analyses.  
+  Summarizes and compares explained variance from the regression analyses in `regression_cv_with_spin_test.py`.  
   *Corresponds to Figure 3 in the manuscript.*
 
 - **`receptor_effect_map_relationship.py`**  
@@ -90,9 +90,14 @@ The original analysis scripts assume a specific folder structure and namining co
   Receptor/transporter densities (voxel x receptor) in both volumetric and surface formats.
 
   For the original PET data please see the following publication and the associated [GitHub](https://github.com/netneurolab/hansen_receptors) 
-  
+
   Hansen et al. (2022). Mapping neurotransmitter systems to the structural and functional organization of the human neocortex. Nature neuroscience, 25(11), 1569-1581.
 
+  Note that in the manuscript we addtionaly used a a2 densitity map from:
+
+  Laurencin et al. (2023). Distribution of α2-adrenergic receptors in the living human brain using [11C] yohimbine PET. Biomolecules, 13(5), 843.
+
+  Please contact the authors directly to optain the map. 
 
 ---
 

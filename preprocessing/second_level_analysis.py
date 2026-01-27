@@ -1,22 +1,14 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-@author: Alice Hodapp 
-
 This script computes group level estimates based on first-level
 contrasts and plots the results. First-level contrasts have been parformed seperatly. 
 
+This script is run for each dataset individually.
 """
 
 import os
-import sys
 import pickle
 import pandas as pd
-import numpy as np
-import matplotlib
 import matplotlib.pyplot as plt
-import seaborn as sns
-from pathlib import Path
 from nilearn.glm.second_level import SecondLevelModel, non_parametric_inference
 from nilearn import plotting
 from nilearn import datasets
@@ -27,12 +19,10 @@ from config.loader import load_config
 
 
 TASK = 'Explore'
-
 RUN_PERMUTATION = False
 RESOLUTION = 'fsaverage'
 
 params, paths, rec = load_config(TASK, return_what='all')
-
 
 #for cluster permutation:
 N_PERM = 100000

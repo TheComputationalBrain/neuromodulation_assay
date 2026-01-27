@@ -1,3 +1,7 @@
+"""
+This script explores the pverlap of significant clusters to explore the invariance of confidence and suprise effects across datasets
+"""
+
 import os
 import sys
 import numpy as np
@@ -18,7 +22,6 @@ from config.loader import load_config
 
 # --- Global configuration ---
 RESOLUTION = 'fsaverage'
-EXPLORE_MODEL = 'noEntropy_noER'
 FWHM = 5
 TRESH = -np.log10(0.05)
 VMAX = -np.log10(1 / 100000)
@@ -32,11 +35,7 @@ def plot_individual_clusters(tasks, contrasts, output_dir):
         for task in tasks:
             params, paths, _ = load_config(task, return_what='all')
             _, add_info = mf.get_beta_dir_and_info(task, params, paths)
-            group_dir = (
-                os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
-                if task == 'Explore'
-                else os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
-            )
+            group_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
 
             img_path = os.path.join(group_dir, f'{contrast}_logp_max_mass{add_info}_{FWHM}.nii.gz')
             img = nib.load(img_path)
@@ -75,11 +74,7 @@ def plot_cluster_overlap_all(tasks, contrasts, output_dir):
             for task in tasks:
                 params, paths, _ = load_config(task, return_what='all')
                 _, add_info = mf.get_beta_dir_and_info(task, params, paths)
-                group_dir = (
-                    os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
-                    if task == 'Explore'
-                    else os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
-                )
+                group_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
                 img_path = os.path.join(group_dir, f'{contrast}_logp_max_mass{add_info}_{FWHM}.nii.gz')
                 img = nib.load(img_path)
                 texture = surface.vol_to_surf(img, getattr(fsaverage, f'pial_{hemi}'))
@@ -122,16 +117,13 @@ def plot_colorbar_overlap():
 
     return fig, ax
 
+#correalte effect maps 
 def run_correlations(tasks, output_dir):
     data_list = []
     for task in tasks:
         params, paths, _ = load_config(task, return_what='all')
         _, add_info = mf.get_beta_dir_and_info(task, params, paths)
-        base_dir = (
-            os.path.join(paths.home_dir, task, 'schaefer', 'second_level', EXPLORE_MODEL)
-            if task == 'Explore'
-            else os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
-        )
+        base_dir = os.path.join(paths.home_dir, task, 'schaefer', 'second_level')
         for fname in os.listdir(base_dir):
             for contrast in ['confidence', 'surprise']:
                 if fname.endswith(f"{contrast}_schaefer_effect_map{add_info}.nii.gz"):
@@ -277,7 +269,7 @@ def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", paths = None, ou
         cross_df = corr_df.loc[conf_labels, surpr_labels]
         save_heatmap(cross_df, 'correlation_conf_surprise_cross', None, mask = None, rename_tasks=True)
 
-    # --- 6. Lower-triangle versions (cleaner visuals) ---
+    # --- 6. Lower-triangle versions ---
     if "lower_triangles" in plots_to_generate:
         conf_labels = [l for l in labels if "confidence" in l]
         surpr_labels = [l for l in labels if "surprise" in l]
@@ -291,7 +283,6 @@ def plot_correlations(plots_to_generate=["all"], cmap="RdYlBu", paths = None, ou
         save_heatmap(surpr_df, 'correlation_surprise_lower_triangle', None, mask=mask_surpr, rename_tasks=True)
 
 
-# Main controller 
 def run_analysis(
     run_individual=False,
     run_overlap=False,

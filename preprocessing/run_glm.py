@@ -1,13 +1,12 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Mon Apr 15 16:05:09 2024
-
-@author: Alice Hodapp
+script to optain the fMRI effect m,aps used in the analysis. 
 
 This gets all the necessary information and estimates a general linear model (GLM) that include
-surprise, confidence, predictability and predictions as parametric modulation of stimuli onsets in regressors.
+surprise, confidence, predictability and predictions as parametric modulation of stimuli onsets in regressors. These estimates are optained from an ideal observer model.
+
 The output corresponds to the labels and estimates of the GLM.
+
+This script is run for each dataset individually.
 """
 
 import os

@@ -1,10 +1,9 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Mon Jun 17 11:32:01 2024
+This creates a receptors density matrix from the PET data made avaiable by Hansen et al (2022).
 
-This creates a receptors density matrix from the PET data made avaiable by Hansen et al (2022). 
-As suggested, this script only takes the tracer with the best binding potential (if multiple tracers are available for a receptor)
+If specified in the config file, this is combined with an alpha2 map from Laurencoin et al (2023);
+
+As suggested by hansen et al. , this script only takes the tracer with the best binding potential (if multiple tracers are available for a receptor)
 and creates a weighted average if there are multiple datasets with the same tracer. 
 """
 

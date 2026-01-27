@@ -1,15 +1,8 @@
-# -*- coding: utf-8 -*-
 """
-Created on Mon Jun 27 12:02:11 2022
+This script analysis the beahvior of pareticipants in realtion to ideal oberver estimates such as predcition and confidence. 
 
-@author: Saeyeon, Alice
-
-This script is self contained, as it load already existing meta analysis data and is supposed to also run independendly of this project
+This script is self contained, as it load already existing meta analysis data and is supposed to also run independendly of this project.
 """
-
-# Import useful packages 
-
-'''import packages from python'''
 import pickle
 import re
 import types

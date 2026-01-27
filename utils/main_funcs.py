@@ -320,6 +320,19 @@ def load_surface_effect_maps_for_cv(subjects, task, latent_var, beta_dir, add_in
 
     return fmri_activity
 
+def load_group_surface_map(task, contrast, paths):
+    add_info = "_firstTrialsRemoved" if task == "NAConf" else ""
+
+    group_dir = os.path.join(paths.home_dir, task, "schaefer", "second_level")
+
+    img_path = os.path.join(group_dir, f"{contrast}_schaefer_effect_map{add_info}.nii.gz")
+    img = nib.load(img_path)
+
+    surf_data = transforms.mni152_to_fsaverage(img, fsavg_density="41k")
+    data_gii = [surf_img.agg_data().T for surf_img in surf_data]
+    surf_map = np.hstack(data_gii)
+    return surf_map
+
 
 def nii_to_cortical_voxel_array(
     nii_path,

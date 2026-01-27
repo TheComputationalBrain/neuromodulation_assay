@@ -1,12 +1,5 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
-Created on Mon Apr 15 16:05:09 2024
-
-@author: Alice Hodapp
-
-This script contrains functions to create design matrices for the probability
-learning tasks
+This script contrains functions to create design matrices for the fMRI analysis
 """
 
 # Import useful libraries
